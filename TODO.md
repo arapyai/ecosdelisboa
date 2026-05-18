@@ -28,16 +28,16 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 
 ### Frontend
 
-- [ ] criar estrutura dos workspaces `mobile/`, `webapp/` e `admin/`
-- [ ] inicializar app mobile com Expo
-- [ ] inicializar web publica com React + Vite
-- [ ] inicializar admin com React + Vite + TanStack Query
-- [ ] configurar camada compartilhada de cliente HTTP e tipos basicos
-- [ ] implementar shells vazios para:
-  - [ ] mapa/lista publica
-  - [ ] detalhe de ponto
-  - [ ] login admin
-  - [ ] dashboard admin
+- [x] criar estrutura dos workspaces `mobile/`, `webapp/` e `admin/`
+- [x] inicializar app mobile com Expo
+- [x] inicializar web publica com React + Vite
+- [x] inicializar admin com React + Vite + TanStack Query
+- [x] configurar camada compartilhada de cliente HTTP e tipos basicos
+- [x] implementar shells vazios para:
+  - [x] mapa/lista publica
+  - [x] detalhe de ponto
+  - [x] login admin
+  - [x] dashboard admin
 
 ### Infra
 

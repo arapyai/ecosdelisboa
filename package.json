@@ -1,0 +1,17 @@
+{
+  "name": "ecosdelisboa",
+  "private": true,
+  "workspaces": [
+    "admin",
+    "mobile",
+    "webapp",
+    "shared"
+  ],
+  "scripts": {
+    "webapp:dev": "npm --workspace @ecosdelisboa/webapp run dev",
+    "webapp:build": "npm --workspace @ecosdelisboa/webapp run build",
+    "admin:dev": "npm --workspace @ecosdelisboa/admin run dev",
+    "admin:build": "npm --workspace @ecosdelisboa/admin run build",
+    "mobile:start": "npm --workspace @ecosdelisboa/mobile run start"
+  }
+}

@@ -7,6 +7,10 @@ Monorepo do projeto Lisboa por Outros. A raiz organiza os workspaces por area de
 Hoje o repositorio contem:
 
 - `backend/`: workspace do servidor, com codigo, configuracao, lockfiles, testes e artefatos locais de desenvolvimento.
+- `mobile/`: shell inicial do app publico em Expo.
+- `webapp/`: PWA publico em React/Vite.
+- `admin/`: shell inicial do painel interno em React/Vite/TanStack Query.
+- `shared/`: tipos basicos e cliente HTTP compartilhavel entre frontend.
 - `docs/`: documentacao geral do produto, arquitetura e referencias compartilhadas entre workspaces.
 
 Essa estrutura prepara o repositorio para crescer com `mobile/`, `webapp/` e `admin/` quando esses workspaces forem adicionados, sem misturar implementacao de servicos com documentacao global.
@@ -26,6 +30,10 @@ Essa estrutura prepara o repositorio para crescer com `mobile/`, `webapp/` e `ad
 │   ├── pyproject.toml
 │   ├── flake.nix
 │   └── README.md
+├── mobile/
+├── webapp/
+├── admin/
+├── shared/
 └── docs/
     ├── arquitetura.md
     ├── README.md

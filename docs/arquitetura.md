@@ -30,9 +30,13 @@ Segundo a especificacao geral, o monorepo deve evoluir para workspaces separados
 Neste momento o repositorio contem:
 
 - `backend/`: implementacao completa do servidor e seus artefatos locais
+- `mobile/`: shell inicial do app publico mobile
+- `webapp/`: web PWA publica
+- `admin/`: shell inicial do painel administrativo
+- `shared/`: tipos basicos e cliente HTTP compartilhavel entre superficies frontend
 - `docs/`: especificacao geral e documentacao transversal
 
-Isso mantem a base pronta para receber os demais workspaces sem nova reorganizacao da raiz.
+Isso deixa as principais superficies da Semana 1 separadas por workspace, com a web publica mais avancada e os demais shells prontos para evoluir.
 
 ## Backend no monorepo
 
