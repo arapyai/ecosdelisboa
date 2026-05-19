@@ -41,12 +41,12 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 
 ### Infra
 
-- [ ] criar base de CI para lint e testes
-- [ ] definir variaveis de ambiente por workspace
-- [ ] provisionar Railway para API e PostgreSQL
-- [ ] validar conexao do backend com banco gerido
-- [ ] definir estrategia de deploy por branch
-- [ ] documentar setup minimo operacional
+- [x] criar base de CI para lint e testes
+- [x] definir variaveis de ambiente por workspace
+- [x] provisionar Railway para API e PostgreSQL
+- [x] validar conexao do backend com banco gerido
+- [x] definir estrategia de deploy por branch
+- [x] documentar setup minimo operacional
 
 ## Semana 2
 
