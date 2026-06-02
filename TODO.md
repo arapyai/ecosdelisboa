@@ -82,7 +82,7 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 
 ### Infra
 
-- [ ] configurar secrets no Railway e ambientes locais
+- [x] configurar secrets no Railway e ambientes locais
 - [ ] configurar pipeline de PR com testes backend
 - [ ] configurar dominio interno ou staging, se aplicavel
 - [ ] definir politica de logs e retencao
