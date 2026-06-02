@@ -15,11 +15,30 @@ import './styles.css';
 type Resource = 'authors' | 'points' | 'texts' | 'routes';
 type ResourceItem = AdminAuthor | AdminPoint | AdminText | AdminRoute;
 type Draft = Record<string, string | number | boolean | null>;
+type FieldOption = { value: string; label: string };
+type FieldConfig = {
+  name: string;
+  label: string;
+  type: 'text' | 'textarea' | 'checkbox' | 'number' | 'url' | 'select';
+  options?: FieldOption[];
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  step?: number | 'any';
+};
+type FieldContext = {
+  authors: AdminAuthor[];
+  points: AdminPoint[];
+};
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 const client = new ApiClient(API_BASE);
 const queryClient = new QueryClient();
 const TOKEN_KEY = 'ecosdelisboa.admin.token';
+const autoSyncQueryOptions = {
+  refetchOnWindowFocus: true,
+  refetchOnReconnect: true
+};
 
 const mockAuthors: AdminAuthor[] = [
   { id: 'author-pessoa', name: 'Fernando Pessoa', bio_pt: 'Poeta', birth_year: 1888, death_year: 1935 },
@@ -90,7 +109,7 @@ function emptyDraft(resource: Resource): Draft {
   }
   if (resource === 'points') {
     return {
-      author_id: mockAuthors[0]?.id ?? '',
+      author_id: '',
       title_pt: '',
       address: '',
       neighborhood: '',
@@ -100,7 +119,7 @@ function emptyDraft(resource: Resource): Draft {
   }
   if (resource === 'texts') {
     return {
-      point_id: mockPoints[0]?.id ?? '',
+      point_id: '',
       content_pt: '',
       source_work: '',
       source_year: '',
@@ -121,28 +140,25 @@ function emptyDraft(resource: Resource): Draft {
 
 function AdminApp() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? '');
-  const [mockMode, setMockMode] = useState(token === 'demo-token');
 
-  function onLogin(nextToken: string, isMock: boolean) {
+  function onLogin(nextToken: string) {
     localStorage.setItem(TOKEN_KEY, nextToken);
     setToken(nextToken);
-    setMockMode(isMock);
   }
 
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
     setToken('');
-    setMockMode(false);
   }
 
   return token ? (
-    <Dashboard token={token} mockMode={mockMode} onLogout={logout} />
+    <Dashboard token={token} onLogout={logout} />
   ) : (
     <Login onLogin={onLogin} />
   );
 }
 
-function Login({ onLogin }: { onLogin: (token: string, isMock: boolean) => void }) {
+function Login({ onLogin }: { onLogin: (token: string) => void }) {
   const [email, setEmail] = useState('admin@example.com');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -152,8 +168,8 @@ function Login({ onLogin }: { onLogin: (token: string, isMock: boolean) => void 
         email,
         password
       }),
-    onSuccess: (data) => onLogin(data.access_token, false),
-    onError: () => setError('Login indisponivel. Pode entrar em modo demo para rever as telas.')
+    onSuccess: (data) => onLogin(data.access_token),
+    onError: () => setError('Login indisponivel. Verifique se o backend esta rodando e se as credenciais estao corretas.')
   });
 
   function submit(event: FormEvent) {
@@ -180,21 +196,18 @@ function Login({ onLogin }: { onLogin: (token: string, isMock: boolean) => void 
           <button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? 'A entrar...' : 'Entrar'}
           </button>
-          <button type="button" className="secondary-action" onClick={() => onLogin('demo-token', true)}>
-            Modo demo
-          </button>
         </form>
       </section>
     </main>
   );
 }
 
-function Dashboard({ token, mockMode, onLogout }: { token: string; mockMode: boolean; onLogout: () => void }) {
+function Dashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
   const [resource, setResource] = useState<Resource>('authors');
   const me = useQuery({
     queryKey: ['me', token],
     queryFn: () => client.get<AdminUser>('/api/v1/admin/auth/me', token),
-    enabled: Boolean(token) && !mockMode,
+    enabled: Boolean(token),
     retry: false
   });
 
@@ -203,7 +216,7 @@ function Dashboard({ token, mockMode, onLogout }: { token: string; mockMode: boo
       <aside className="sidebar">
         <span>Admin</span>
         <h1>Lisboa por Outros</h1>
-        <p>{mockMode ? 'Modo demo com mocks locais' : me.data?.email ?? 'Sessao autenticada'}</p>
+        <p>{me.data?.email ?? 'Sessao autenticada'}</p>
         <nav>
           {(Object.keys(resourceLabels) as Resource[]).map((key) => (
             <button key={key} className={resource === key ? 'active' : ''} type="button" onClick={() => setResource(key)}>
@@ -215,21 +228,20 @@ function Dashboard({ token, mockMode, onLogout }: { token: string; mockMode: boo
           Sair
         </button>
       </aside>
-      <ResourcePanel token={token} resource={resource} mockMode={mockMode} />
+      <ResourcePanel token={token} resource={resource} />
     </main>
   );
 }
 
-function ResourcePanel({ token, resource, mockMode }: { token: string; resource: Resource; mockMode: boolean }) {
+function ResourcePanel({ token, resource }: { token: string; resource: Resource }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<ResourceItem | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft(resource));
-  const [isLocal, setIsLocal] = useState(mockMode);
+  const [isLocal, setIsLocal] = useState(false);
 
   const query = useQuery({
-    queryKey: ['admin-resource', resource, token, mockMode],
+    queryKey: ['admin-resource', resource, token],
     queryFn: async () => {
-      if (mockMode) return fallbackFor(resource);
       try {
         setIsLocal(false);
         return await client.get<ResourceItem[]>(`/api/v1/admin/${resource}`, token);
@@ -237,27 +249,61 @@ function ResourcePanel({ token, resource, mockMode }: { token: string; resource:
         setIsLocal(true);
         return fallbackFor(resource);
       }
-    }
+    },
+    ...autoSyncQueryOptions
+  });
+
+  const authorsQuery = useQuery({
+    queryKey: ['admin-options', 'authors', token],
+    queryFn: async () => {
+      try {
+        return await client.get<AdminAuthor[]>('/api/v1/admin/authors', token);
+      } catch {
+        return mockAuthors;
+      }
+    },
+    ...autoSyncQueryOptions
+  });
+
+  const pointsQuery = useQuery({
+    queryKey: ['admin-options', 'points', token],
+    queryFn: async () => {
+      try {
+        return await client.get<AdminPoint[]>('/api/v1/admin/points', token);
+      } catch {
+        return mockPoints;
+      }
+    },
+    ...autoSyncQueryOptions
   });
 
   const items = query.data ?? fallbackFor(resource);
   const metrics = useMemo(() => items.length, [items.length]);
+  const fieldContext = useMemo<FieldContext>(
+    () => ({
+      authors: authorsQuery.data ?? mockAuthors,
+      points: pointsQuery.data ?? mockPoints
+    }),
+    [authorsQuery.data, pointsQuery.data]
+  );
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = serializeDraft(resource, draft);
-      if (isLocal || mockMode) return payload as ResourceItem;
+      if (isLocal) return payload as ResourceItem;
       if (editing) {
         return client.put<ResourceItem>(`/api/v1/admin/${resource}/${editing.id}`, payload, token);
       }
       return client.post<ResourceItem>(`/api/v1/admin/${resource}`, payload, token);
     },
     onSuccess: (saved) => {
-      queryClient.setQueryData<ResourceItem[]>(['admin-resource', resource, token, mockMode], (current) => {
+      queryClient.setQueryData<ResourceItem[]>(['admin-resource', resource, token], (current) => {
         const list = current ?? fallbackFor(resource);
         if (editing) return list.map((item) => (item.id === editing.id ? { ...item, ...saved, id: editing.id } : item));
         return [{ ...saved, id: `local-${Date.now()}` }, ...list];
       });
+      syncRelationshipOptions(saved);
+      invalidateRelatedQueries();
       setEditing(null);
       setDraft(emptyDraft(resource));
     }
@@ -265,15 +311,46 @@ function ResourcePanel({ token, resource, mockMode }: { token: string; resource:
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      if (!isLocal && !mockMode) await client.delete<{ deleted: boolean }>(`/api/v1/admin/${resource}/${id}`, token);
+      if (!isLocal) await client.delete<{ deleted: boolean }>(`/api/v1/admin/${resource}/${id}`, token);
       return id;
     },
     onSuccess: (id) => {
-      queryClient.setQueryData<ResourceItem[]>(['admin-resource', resource, token, mockMode], (current) =>
+      queryClient.setQueryData<ResourceItem[]>(['admin-resource', resource, token], (current) =>
         (current ?? fallbackFor(resource)).filter((item) => item.id !== id)
       );
+      removeRelationshipOption(id);
+      invalidateRelatedQueries();
     }
   });
+
+  function syncRelationshipOptions(saved: ResourceItem) {
+    if (resource !== 'authors' && resource !== 'points') return;
+    queryClient.setQueryData<ResourceItem[]>(['admin-options', resource, token], (current) => {
+      const list = current ?? fallbackFor(resource);
+      if (editing) return list.map((item) => (item.id === editing.id ? { ...item, ...saved, id: editing.id } : item));
+      return [{ ...saved, id: saved.id ?? `local-${Date.now()}` }, ...list];
+    });
+  }
+
+  function removeRelationshipOption(id: string) {
+    if (resource !== 'authors' && resource !== 'points') return;
+    queryClient.setQueryData<ResourceItem[]>(['admin-options', resource, token], (current) =>
+      (current ?? fallbackFor(resource)).filter((item) => item.id !== id)
+    );
+  }
+
+  function invalidateRelatedQueries() {
+    queryClient.invalidateQueries({ queryKey: ['admin-resource', resource, token] });
+    if (resource === 'authors') {
+      queryClient.invalidateQueries({ queryKey: ['admin-options', 'authors', token] });
+      queryClient.invalidateQueries({ queryKey: ['admin-resource', 'points', token] });
+    }
+    if (resource === 'points') {
+      queryClient.invalidateQueries({ queryKey: ['admin-options', 'points', token] });
+      queryClient.invalidateQueries({ queryKey: ['admin-resource', 'texts', token] });
+      queryClient.invalidateQueries({ queryKey: ['admin-resource', 'routes', token] });
+    }
+  }
 
   function edit(item: ResourceItem) {
     setEditing(item);
@@ -293,14 +370,11 @@ function ResourcePanel({ token, resource, mockMode }: { token: string; resource:
           <h2>{metrics} registos</h2>
           {isLocal ? <p>Usando mocks locais enquanto o endpoint admin nao responde.</p> : null}
         </div>
-        <button type="button" onClick={() => query.refetch()}>
-          Atualizar
-        </button>
       </div>
 
       <form className="editor" onSubmit={submit}>
         <h3>{editing ? 'Editar' : 'Criar'} {resourceLabels[resource].toLowerCase()}</h3>
-        <ResourceFields resource={resource} draft={draft} onDraft={setDraft} />
+        <ResourceFields resource={resource} draft={draft} context={fieldContext} onDraft={setDraft} />
         <div className="form-actions">
           <button type="submit">{editing ? 'Guardar' : 'Criar'}</button>
           <button
@@ -354,32 +428,60 @@ function ResourcePanel({ token, resource, mockMode }: { token: string; resource:
 function ResourceFields({
   resource,
   draft,
+  context,
   onDraft
 }: {
   resource: Resource;
   draft: Draft;
+  context: FieldContext;
   onDraft: (draft: Draft) => void;
 }) {
-  const fields = fieldsFor(resource);
+  const fields = fieldsFor(resource, context);
   return (
     <div className="field-grid">
       {fields.map((field) => (
-        <label key={field.name}>
-          {field.label}
-          {field.type === 'textarea' ? (
-            <textarea value={String(draft[field.name] ?? '')} onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })} />
-          ) : field.type === 'checkbox' ? (
-            <input
-              checked={Boolean(draft[field.name])}
-              onChange={(event) => onDraft({ ...draft, [field.name]: event.target.checked })}
-              type="checkbox"
-            />
+        <label key={field.name} className={fieldClassName(field)}>
+          {field.type === 'checkbox' ? (
+            <>
+              <input
+                checked={Boolean(draft[field.name])}
+                onChange={(event) => onDraft({ ...draft, [field.name]: event.target.checked })}
+                type="checkbox"
+              />
+              <span>{field.label}</span>
+            </>
           ) : (
-            <input
-              value={String(draft[field.name] ?? '')}
-              onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })}
-              type={field.type}
-            />
+            <>
+              <span>{field.label}</span>
+              {field.type === 'textarea' ? (
+                <textarea
+                  value={String(draft[field.name] ?? '')}
+                  placeholder={field.placeholder}
+                  onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })}
+                />
+              ) : field.type === 'select' ? (
+                <select
+                  value={String(draft[field.name] ?? '')}
+                  onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })}
+                >
+                  {selectOptions(field, draft).map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={String(draft[field.name] ?? '')}
+                  onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })}
+                  type={field.type}
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                  placeholder={field.placeholder}
+                />
+              )}
+            </>
           )}
         </label>
       ))}
@@ -387,45 +489,82 @@ function ResourceFields({
   );
 }
 
-function fieldsFor(resource: Resource) {
+function fieldsFor(resource: Resource, context: FieldContext): FieldConfig[] {
   if (resource === 'authors') {
     return [
       { name: 'name', label: 'Nome', type: 'text' },
-      { name: 'bio_pt', label: 'Bio PT', type: 'textarea' },
-      { name: 'birth_year', label: 'Nascimento', type: 'number' },
-      { name: 'death_year', label: 'Morte', type: 'number' },
+      { name: 'bio_pt', label: 'Bio PT', type: 'textarea', placeholder: 'Resumo biografico em portugues' },
+      { name: 'birth_year', label: 'Ano de nascimento', type: 'number', min: 0, max: 2100, step: 1 },
+      { name: 'death_year', label: 'Ano de morte', type: 'number', min: 0, max: 2100, step: 1 },
       { name: 'photo_url', label: 'Foto URL', type: 'url' },
-      { name: 'elevenlabs_voice_id', label: 'Voz ElevenLabs', type: 'text' }
+      { name: 'elevenlabs_voice_id', label: 'Voz ElevenLabs', type: 'text', placeholder: 'ID da voz no ElevenLabs' }
     ];
   }
   if (resource === 'points') {
     return [
-      { name: 'author_id', label: 'Autor ID', type: 'text' },
+      { name: 'author_id', label: 'Autor', type: 'select', options: relationOptions(context.authors, 'Selecione um autor') },
       { name: 'title_pt', label: 'Titulo PT', type: 'text' },
       { name: 'address', label: 'Morada', type: 'text' },
       { name: 'neighborhood', label: 'Bairro', type: 'text' },
-      { name: 'lat', label: 'Latitude', type: 'number' },
-      { name: 'lng', label: 'Longitude', type: 'number' }
+      { name: 'lat', label: 'Latitude', type: 'number', min: -90, max: 90, step: 'any' },
+      { name: 'lng', label: 'Longitude', type: 'number', min: -180, max: 180, step: 'any' }
     ];
   }
   if (resource === 'texts') {
     return [
-      { name: 'point_id', label: 'Ponto ID', type: 'text' },
-      { name: 'content_pt', label: 'Conteudo PT', type: 'textarea' },
-      { name: 'source_work', label: 'Obra', type: 'text' },
-      { name: 'source_year', label: 'Ano', type: 'number' },
-      { name: 'content_type', label: 'Tipo', type: 'text' }
+      { name: 'point_id', label: 'Ponto', type: 'select', options: relationOptions(context.points, 'Selecione um ponto') },
+      { name: 'content_pt', label: 'Conteudo PT', type: 'textarea', placeholder: 'Texto original em portugues' },
+      { name: 'source_work', label: 'Obra', type: 'text', placeholder: 'Nome da obra ou fonte' },
+      { name: 'source_year', label: 'Ano da obra', type: 'number', min: 0, max: 2100, step: 1 },
+      { name: 'content_type', label: 'Tipo', type: 'select', options: contentTypeOptions }
     ];
   }
   return [
     { name: 'title_pt', label: 'Titulo PT', type: 'text' },
-    { name: 'description_pt', label: 'Descricao PT', type: 'textarea' },
-    { name: 'difficulty', label: 'Dificuldade', type: 'text' },
+    { name: 'description_pt', label: 'Descricao PT', type: 'textarea', placeholder: 'Resumo curto do percurso' },
+    { name: 'cover_image_url', label: 'Imagem de capa URL', type: 'url' },
+    { name: 'difficulty', label: 'Dificuldade', type: 'select', options: difficultyOptions },
     { name: 'is_published', label: 'Publicado', type: 'checkbox' },
-    { name: 'estimated_distance_m', label: 'Distancia m', type: 'number' },
-    { name: 'estimated_duration_s', label: 'Duracao s', type: 'number' },
-    { name: 'items', label: 'Items JSON', type: 'textarea' }
+    { name: 'estimated_distance_m', label: 'Distancia m', type: 'number', min: 0, step: 1 },
+    { name: 'estimated_duration_s', label: 'Duracao s', type: 'number', min: 0, step: 1 },
+    { name: 'items', label: 'Items JSON', type: 'textarea', placeholder: 'Sequencia de pontos do percurso em JSON' }
   ];
+}
+
+function fieldClassName(field: FieldConfig) {
+  if (field.type === 'checkbox') return 'checkbox-field';
+  if (field.type === 'textarea') return 'textarea-field';
+  return undefined;
+}
+
+const contentTypeOptions: FieldOption[] = [
+  { value: 'prose', label: 'Prosa' },
+  { value: 'poetry', label: 'Poesia' },
+  { value: 'lyrics', label: 'Letra de musica' }
+];
+
+const difficultyOptions: FieldOption[] = [
+  { value: '', label: 'Sem dificuldade definida' },
+  { value: 'easy', label: 'Facil' },
+  { value: 'medium', label: 'Media' },
+  { value: 'hard', label: 'Dificil' }
+];
+
+function relationOptions(items: Array<{ id: string; name?: string; title_pt?: string }>, emptyLabel: string): FieldOption[] {
+  return [
+    { value: '', label: emptyLabel },
+    ...items.map((item) => ({
+      value: item.id,
+      label: item.name ?? item.title_pt ?? item.id
+    }))
+  ];
+}
+
+function selectOptions(field: FieldConfig, draft: Draft): FieldOption[] {
+  const options = field.options ?? [];
+  const current = String(draft[field.name] ?? '');
+  if (!current || options.some((option) => option.value === current)) return options;
+  return [{ value: current, label: `Valor atual: ${current}` }, ...options];
 }
 
 function columnsFor(resource: Resource) {
