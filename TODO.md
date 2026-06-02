@@ -69,16 +69,16 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 
 ### Frontend
 
-- [ ] integrar consumo da API publica no mobile e web
-- [ ] implementar listagem de pontos e autores
-- [ ] implementar tela de detalhe de ponto com dados textuais
-- [ ] implementar fluxo de login admin
-- [ ] implementar listagens CRUD no admin para:
-  - [ ] autores
-  - [ ] pontos
-  - [ ] textos
-  - [ ] percursos
-- [ ] trabalhar com mocks onde faltar detalhe de backend
+- [x] integrar consumo da API publica no mobile e web
+- [x] implementar listagem de pontos e autores
+- [x] implementar tela de detalhe de ponto com dados textuais
+- [x] implementar fluxo de login admin
+- [x] implementar listagens CRUD no admin para:
+  - [x] autores
+  - [x] pontos
+  - [x] textos
+  - [x] percursos
+- [x] trabalhar com mocks onde faltar detalhe de backend
 
 ### Infra
 

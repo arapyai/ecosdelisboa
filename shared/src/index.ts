@@ -97,12 +97,96 @@ export interface PublicDefaultVoice {
   preview_url?: string | null;
 }
 
+export interface AdminUser {
+  id: string;
+  email: string;
+  is_active: boolean;
+}
+
+export interface AdminLoginResponse {
+  access_token: string;
+  token_type: 'bearer';
+}
+
+export interface AdminAuthor {
+  id: string;
+  name: string;
+  bio_pt?: string | null;
+  birth_year?: number | null;
+  death_year?: number | null;
+  photo_url?: string | null;
+  elevenlabs_voice_id?: string | null;
+}
+
+export interface AdminPoint {
+  id: string;
+  author_id: string;
+  title_pt: string;
+  address?: string | null;
+  neighborhood?: string | null;
+  lat: number;
+  lng: number;
+}
+
+export interface AdminText {
+  id: string;
+  point_id: string;
+  content_pt: string;
+  source_work?: string | null;
+  source_year?: number | null;
+  content_type: ContentType;
+}
+
+export interface AdminRouteItem {
+  id?: string;
+  position: number;
+  point_id?: string | null;
+  waypoint_lat?: number | null;
+  waypoint_lng?: number | null;
+  transition_text_pt?: string | null;
+}
+
+export interface AdminRoute {
+  id: string;
+  title_pt: string;
+  description_pt?: string | null;
+  cover_image_url?: string | null;
+  difficulty?: string | null;
+  is_published?: boolean;
+  estimated_distance_m?: number | null;
+  estimated_duration_s?: number | null;
+  items?: AdminRouteItem[];
+}
+
+type RequestBody = Record<string, unknown> | Array<unknown>;
+
 export class ApiClient {
   constructor(private readonly baseUrl = '') {}
 
-  async get<T>(path: string): Promise<T> {
+  async get<T>(path: string, token?: string): Promise<T> {
+    return this.request<T>(path, { method: 'GET' }, token);
+  }
+
+  async post<T>(path: string, body: RequestBody, token?: string): Promise<T> {
+    return this.request<T>(path, { method: 'POST', body: JSON.stringify(body) }, token);
+  }
+
+  async put<T>(path: string, body: RequestBody, token?: string): Promise<T> {
+    return this.request<T>(path, { method: 'PUT', body: JSON.stringify(body) }, token);
+  }
+
+  async delete<T>(path: string, token?: string): Promise<T> {
+    return this.request<T>(path, { method: 'DELETE' }, token);
+  }
+
+  private async request<T>(path: string, init: RequestInit, token?: string): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
-      headers: { Accept: 'application/json' }
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
     });
 
     if (!response.ok) {

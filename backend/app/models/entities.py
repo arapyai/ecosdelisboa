@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum as PythonEnum
 from uuid import UUID
 
 from sqlalchemy import (
@@ -28,6 +29,14 @@ from app.models.enums import (
     TranslationStatus,
 )
 from app.models.sqltypes import GeometryPoint4326
+
+
+def value_enum(enum_class: type[PythonEnum], name: str) -> Enum:
+    return Enum(
+        enum_class,
+        name=name,
+        values_callable=lambda enum_items: [item.value for item in enum_items],
+    )
 
 
 class AdminUser(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
@@ -92,7 +101,9 @@ class Text(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     content_pt: Mapped[str] = mapped_column(SAText, nullable=False)
     source_work: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    content_type: Mapped[ContentType] = mapped_column(Enum(ContentType), nullable=False)
+    content_type: Mapped[ContentType] = mapped_column(
+        value_enum(ContentType, "content_type"), nullable=False
+    )
 
     point: Mapped[Point] = relationship(back_populates="texts")
     translations: Mapped[list[Translation]] = relationship(
@@ -110,10 +121,14 @@ class Translation(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         ForeignKey("texts.id", ondelete="CASCADE"),
         nullable=False,
     )
-    lang: Mapped[SupportedLanguage] = mapped_column(Enum(SupportedLanguage), nullable=False)
+    lang: Mapped[SupportedLanguage] = mapped_column(
+        value_enum(SupportedLanguage, "language"), nullable=False
+    )
     content: Mapped[str] = mapped_column(SAText, nullable=False)
     status: Mapped[TranslationStatus] = mapped_column(
-        Enum(TranslationStatus), default=TranslationStatus.PENDING, nullable=False
+        value_enum(TranslationStatus, "translation_status"),
+        default=TranslationStatus.PENDING,
+        nullable=False,
     )
     auto_translated: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     reviewed_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
@@ -134,7 +149,9 @@ class AudioFile(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         ForeignKey("texts.id", ondelete="CASCADE"),
         nullable=False,
     )
-    lang: Mapped[SupportedLanguage] = mapped_column(Enum(SupportedLanguage), nullable=False)
+    lang: Mapped[SupportedLanguage] = mapped_column(
+        value_enum(SupportedLanguage, "language"), nullable=False
+    )
     r2_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     public_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -194,7 +211,9 @@ class AudioGenerationJob(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "audio_generation_jobs"
 
     status: Mapped[AudioJobStatus] = mapped_column(
-        Enum(AudioJobStatus), default=AudioJobStatus.PENDING, nullable=False
+        value_enum(AudioJobStatus, "audio_job_status"),
+        default=AudioJobStatus.PENDING,
+        nullable=False,
     )
     requested_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
     total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -220,9 +239,13 @@ class AudioGenerationJobItem(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         ForeignKey("texts.id", ondelete="CASCADE"),
         nullable=False,
     )
-    lang: Mapped[SupportedLanguage] = mapped_column(Enum(SupportedLanguage), nullable=False)
+    lang: Mapped[SupportedLanguage] = mapped_column(
+        value_enum(SupportedLanguage, "language"), nullable=False
+    )
     status: Mapped[AudioJobItemStatus] = mapped_column(
-        Enum(AudioJobItemStatus), default=AudioJobItemStatus.PENDING, nullable=False
+        value_enum(AudioJobItemStatus, "audio_job_item_status"),
+        default=AudioJobItemStatus.PENDING,
+        nullable=False,
     )
     error_message: Mapped[str | None] = mapped_column(SAText, nullable=True)
 

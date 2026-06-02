@@ -60,6 +60,38 @@ uv run ruff check .
 uv run alembic upgrade head
 ```
 
+### Banco local e seed de desenvolvimento
+
+O backend esta configurado por padrao para PostgreSQL/PostGIS em `backend/.env`:
+
+```env
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/lisboa_por_outros
+```
+
+Crie o banco `lisboa_por_outros` no seu PostgreSQL local, garanta que PostGIS esta instalado, e rode:
+
+```bash
+uv run alembic upgrade head
+uv run python -m app.scripts.seed_dev
+```
+
+O seed e idempotente e cria dados minimos para desenvolvimento:
+
+- admin inicial
+- voz padrao
+- autores
+- pontos
+- textos
+- traducoes EN aprovadas
+- percurso publicado
+
+Login admin local:
+
+```text
+admin@example.com
+secret
+```
+
 ## Estrutura
 ```text
 app/

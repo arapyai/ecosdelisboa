@@ -8,6 +8,7 @@ Create Date: 2026-04-16 00:00:01
 from __future__ import annotations
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 from app.models.sqltypes import GeometryPoint4326
@@ -18,14 +19,25 @@ branch_labels = None
 depends_on = None
 
 
-content_type_enum = sa.Enum("prose", "poetry", "lyrics", name="content_type")
-translation_status_enum = sa.Enum("pending", "approved", "rejected", name="translation_status")
-language_enum = sa.Enum("pt", "en", "es", "fr", "de", "zh", name="language")
-audio_job_status_enum = sa.Enum(
-    "pending", "running", "completed", "failed", name="audio_job_status"
+content_type_enum = postgresql.ENUM(
+    "prose", "poetry", "lyrics", name="content_type", create_type=False
 )
-audio_job_item_status_enum = sa.Enum(
-    "pending", "running", "completed", "failed", name="audio_job_item_status"
+translation_status_enum = postgresql.ENUM(
+    "pending", "approved", "rejected", name="translation_status", create_type=False
+)
+language_enum = postgresql.ENUM(
+    "pt", "en", "es", "fr", "de", "zh", name="language", create_type=False
+)
+audio_job_status_enum = postgresql.ENUM(
+    "pending", "running", "completed", "failed", name="audio_job_status", create_type=False
+)
+audio_job_item_status_enum = postgresql.ENUM(
+    "pending",
+    "running",
+    "completed",
+    "failed",
+    name="audio_job_item_status",
+    create_type=False,
 )
 
 
