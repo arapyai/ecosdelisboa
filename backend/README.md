@@ -163,3 +163,5 @@ tests/
 ## Notas
 - A especificacao geral do projeto fica em `../docs/lisboa_spec_geral.md`.
 - As integracoes externas atuais estao encapsuladas em services testaveis e prontas para substituicao por clientes reais.
+
+- 
