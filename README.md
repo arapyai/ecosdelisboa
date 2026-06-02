@@ -70,3 +70,4 @@ uv run uvicorn app.main:app --reload
 ## Evolucao esperada
 
 O objetivo dessa organizacao e permitir que cada parte do sistema evolua com fronteiras claras: implementacao e ferramental local ficam no workspace correspondente; a raiz e `docs/` descrevem a arquitetura do conjunto.
+
