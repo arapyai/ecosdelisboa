@@ -14,7 +14,8 @@ export interface ApiEnvelope<T> {
 
 export interface PublicPointSummary {
   id: string;
-  author_id: string;
+  author_id?: string | null;
+  authors?: Pick<PublicAuthorSummary, 'id' | 'name' | 'photo_url'>[];
   title_pt: string;
   address?: string | null;
   neighborhood?: string | null;
@@ -47,6 +48,8 @@ export interface PublicAudioFile {
 
 export interface PublicText {
   id: string;
+  author_id?: string;
+  author?: Pick<PublicAuthorSummary, 'id' | 'name' | 'photo_url'>;
   content?: string;
   content_pt: string;
   source_work?: string | null;
@@ -120,7 +123,6 @@ export interface AdminAuthor {
 
 export interface AdminPoint {
   id: string;
-  author_id: string;
   title_pt: string;
   address?: string | null;
   neighborhood?: string | null;
@@ -131,6 +133,7 @@ export interface AdminPoint {
 export interface AdminText {
   id: string;
   point_id: string;
+  author_id: string;
   content_pt: string;
   source_work?: string | null;
   source_year?: number | null;

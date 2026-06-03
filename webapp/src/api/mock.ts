@@ -38,6 +38,8 @@ export const mockPoints: Point[] = [
       {
         id: 'text-chiado',
         point_id: 'point-chiado',
+        author_id: 'author-pessoa',
+        author: mockAuthors[0],
         content_pt:
           'Aqui a cidade tem passos de escritorio, cafe e fantasma. A rua guarda a pressa e a hesitacao de quem escreve antes de chegar.',
         content_en:
@@ -75,6 +77,8 @@ export const mockPoints: Point[] = [
       {
         id: 'text-alfama',
         point_id: 'point-alfama',
+        author_id: 'author-saramago',
+        author: mockAuthors[1],
         content_pt:
           'As colinas fazem da memoria uma subida. Cada pedra parece perguntar quem passa, e cada janela responde com outra pergunta.',
         content_en:
@@ -100,6 +104,8 @@ export const mockPoints: Point[] = [
       {
         id: 'text-praca',
         point_id: 'point-praca-comercio',
+        author_id: 'author-pessoa',
+        author: mockAuthors[0],
         content_pt:
           'O rio abre a cidade como uma pagina larga. Entre arcadas e barcos, Lisboa aprende a despedir-se sem sair do lugar.',
         content_en:

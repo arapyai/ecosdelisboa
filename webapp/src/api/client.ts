@@ -50,6 +50,8 @@ function normalizePoint(point: Point | PublicPointSummary | PublicPointDetail, l
   const texts = backendPoint.texts?.map((text) => ({
     id: text.id,
     point_id: point.id,
+    author_id: text.author_id ?? text.author?.id,
+    author: text.author ? normalizeAuthor(text.author) : undefined,
     content_pt: 'content_pt' in text ? text.content_pt : '',
     content_en: lang === 'en' && 'content' in text ? text.content : undefined,
     source_work: text.source_work,
@@ -68,6 +70,7 @@ function normalizePoint(point: Point | PublicPointSummary | PublicPointDetail, l
 
   return {
     ...point,
+    author: (point as Point).author ?? (backendPoint.author ? normalizeAuthor(backendPoint.author) : backendPoint.authors?.[0] ? normalizeAuthor(backendPoint.authors[0]) : undefined),
     texts: texts ?? (point as Point).texts,
     audios: audios?.length ? audios : (point as Point).audios
   };
@@ -90,7 +93,6 @@ function normalizeRoute(route: PublicRoute | Route): Route {
         point: item.point
           ? {
               id: item.point.id,
-              author_id: '',
               title_pt: item.point.title_pt,
               lat: item.point.lat,
               lng: item.point.lng

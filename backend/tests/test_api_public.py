@@ -8,7 +8,6 @@ def seed_public_data(db_session):
     voice = Voice(elevenlabs_id="voice-default", name="Default Voice", is_default=True)
     author = Author(name="Fernando Pessoa", bio_pt="Poeta", elevenlabs_voice_id="voice-default")
     point = Point(
-        author=author,
         title_pt="Tabacaria do Rossio",
         address="Rossio 59",
         neighborhood="Baixa",
@@ -17,6 +16,7 @@ def seed_public_data(db_session):
     )
     text = Text(
         point=point,
+        author=author,
         content_pt="Nao sou nada.",
         source_work="Tabacaria",
         source_year=1928,

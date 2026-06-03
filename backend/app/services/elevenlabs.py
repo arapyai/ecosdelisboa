@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.entities import AudioFile, Author, Point, Text, Voice
+from app.models.entities import AudioFile, Text, Voice
 from app.models.enums import SupportedLanguage, TranslationStatus
 
 
@@ -30,12 +30,7 @@ class ElevenLabsService:
 
 
 def resolve_voice_id(db: Session, text: Text) -> str:
-    author = db.scalar(
-        select(Author)
-        .join(Author.points)
-        .join(Point.texts)
-        .where(Text.id == text.id)
-    )
+    author = text.author
     if author is not None and author.elevenlabs_voice_id:
         return author.elevenlabs_voice_id
 

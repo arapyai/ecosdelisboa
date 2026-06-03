@@ -31,7 +31,6 @@ def test_admin_can_crud_author_point_text_and_route(client, db_session) -> None:
     point_response = client.post(
         "/api/v1/admin/points",
         json={
-            "author_id": author_id,
             "title_pt": "O Ramalhete",
             "address": "Rua das Janelas Verdes",
             "neighborhood": "Santos",
@@ -46,6 +45,7 @@ def test_admin_can_crud_author_point_text_and_route(client, db_session) -> None:
         "/api/v1/admin/texts",
         json={
             "point_id": point_id,
+            "author_id": author_id,
             "content_pt": "Ali vivia.",
             "source_work": "Os Maias",
             "source_year": 1888,

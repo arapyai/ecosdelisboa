@@ -52,7 +52,6 @@ const mockAuthors: AdminAuthor[] = [
 const mockPoints: AdminPoint[] = [
   {
     id: 'point-chiado',
-    author_id: 'author-pessoa',
     title_pt: 'Chiado',
     address: 'Largo do Chiado',
     neighborhood: 'Chiado',
@@ -61,7 +60,6 @@ const mockPoints: AdminPoint[] = [
   },
   {
     id: 'point-alfama',
-    author_id: 'author-saramago',
     title_pt: 'Alfama',
     address: 'Miradouro de Santa Luzia',
     neighborhood: 'Alfama',
@@ -74,6 +72,7 @@ const mockTexts: AdminText[] = [
   {
     id: 'text-chiado',
     point_id: 'point-chiado',
+    author_id: 'author-pessoa',
     content_pt: 'Aqui a cidade tem passos de escritório, café e fantasma.',
     source_work: 'Fragmento demonstrativo',
     source_year: 2026,
@@ -113,7 +112,6 @@ function emptyDraft(resource: Resource): Draft {
   }
   if (resource === 'points') {
     return {
-      author_id: '',
       title_pt: '',
       address: '',
       neighborhood: '',
@@ -124,6 +122,7 @@ function emptyDraft(resource: Resource): Draft {
   if (resource === 'texts') {
     return {
       point_id: '',
+      author_id: '',
       content_pt: '',
       source_work: '',
       source_year: '',
@@ -355,7 +354,7 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
     queryClient.invalidateQueries({ queryKey: ['admin-resource', resource, token] });
     if (resource === 'authors') {
       queryClient.invalidateQueries({ queryKey: ['admin-options', 'authors', token] });
-      queryClient.invalidateQueries({ queryKey: ['admin-resource', 'points', token] });
+      queryClient.invalidateQueries({ queryKey: ['admin-resource', 'texts', token] });
     }
     if (resource === 'points') {
       queryClient.invalidateQueries({ queryKey: ['admin-options', 'points', token] });
@@ -456,7 +455,7 @@ function ResourceFields({
 
     fields.forEach((field) => {
       if (field.type !== 'select') return;
-      if (field.name === 'author_id' && !context.authorsReady) return;
+      if (field.name === 'author_id' && resource === 'texts' && !context.authorsReady) return;
       if (field.name === 'point_id' && !context.pointsReady) return;
       const currentValue = String(draft[field.name] ?? '');
       if (!currentValue) return;
@@ -555,7 +554,6 @@ function fieldsFor(resource: Resource, context: FieldContext): FieldConfig[] {
   }
   if (resource === 'points') {
     return [
-      { name: 'author_id', label: 'Autor', type: 'select', options: relationOptions(context.authors, 'Selecione um autor') },
       { name: 'title_pt', label: 'Título PT', type: 'text' },
       { name: 'address', label: 'Morada', type: 'text' },
       { name: 'neighborhood', label: 'Bairro', type: 'text' },
@@ -566,6 +564,7 @@ function fieldsFor(resource: Resource, context: FieldContext): FieldConfig[] {
   if (resource === 'texts') {
     return [
       { name: 'point_id', label: 'Ponto', type: 'select', options: relationOptions(context.points, 'Selecione um ponto') },
+      { name: 'author_id', label: 'Autor', type: 'select', options: relationOptions(context.authors, 'Selecione um autor') },
       { name: 'content_pt', label: 'Conteúdo PT', type: 'textarea', placeholder: 'Texto original em português' },
       { name: 'source_work', label: 'Obra', type: 'text', placeholder: 'Nome da obra ou fonte' },
       { name: 'source_year', label: 'Ano da obra', type: 'number', min: 0, max: 2100, step: 1 },
@@ -724,7 +723,7 @@ function selectOptions(field: FieldConfig, draft: Draft): FieldOption[] {
 function columnsFor(resource: Resource) {
   if (resource === 'authors') return ['name', 'bio_pt', 'birth_year'];
   if (resource === 'points') return ['title_pt', 'neighborhood', 'lat', 'lng'];
-  if (resource === 'texts') return ['content_pt', 'source_work', 'content_type'];
+  if (resource === 'texts') return ['content_pt', 'author_id', 'source_work', 'content_type'];
   return ['title_pt', 'is_published', 'estimated_distance_m', 'estimated_duration_s'];
 }
 

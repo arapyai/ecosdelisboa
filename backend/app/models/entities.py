@@ -69,7 +69,7 @@ class Author(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         ForeignKey("voices.elevenlabs_id", ondelete="SET NULL"), nullable=True
     )
 
-    points: Mapped[list[Point]] = relationship(
+    texts: Mapped[list[Text]] = relationship(
         back_populates="author",
         cascade="all, delete-orphan",
     )
@@ -78,9 +78,6 @@ class Author(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
 class Point(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "points"
 
-    author_id: Mapped[UUID] = mapped_column(
-        ForeignKey("authors.id", ondelete="CASCADE"), nullable=False, index=True
-    )
     title_pt: Mapped[str] = mapped_column(String(255), nullable=False)
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     neighborhood: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -88,7 +85,6 @@ class Point(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     lng: Mapped[float] = mapped_column(Float, nullable=False)
     geom: Mapped[str | None] = mapped_column(GeometryPoint4326(), nullable=True)
 
-    author: Mapped[Author] = relationship(back_populates="points")
     texts: Mapped[list[Text]] = relationship(back_populates="point", cascade="all, delete-orphan")
 
 
@@ -98,6 +94,9 @@ class Text(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     point_id: Mapped[UUID] = mapped_column(
         ForeignKey("points.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    author_id: Mapped[UUID] = mapped_column(
+        ForeignKey("authors.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     content_pt: Mapped[str] = mapped_column(SAText, nullable=False)
     source_work: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -106,6 +105,7 @@ class Text(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     )
 
     point: Mapped[Point] = relationship(back_populates="texts")
+    author: Mapped[Author] = relationship(back_populates="texts")
     translations: Mapped[list[Translation]] = relationship(
         back_populates="text", cascade="all, delete-orphan"
     )

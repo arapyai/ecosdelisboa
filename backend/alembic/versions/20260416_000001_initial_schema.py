@@ -112,7 +112,6 @@ def upgrade() -> None:
     op.create_table(
         "points",
         sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("author_id", sa.Uuid(), nullable=False),
         sa.Column("title_pt", sa.String(length=255), nullable=False),
         sa.Column("address", sa.String(length=255), nullable=True),
         sa.Column("neighborhood", sa.String(length=255), nullable=True),
@@ -125,15 +124,14 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.func.now(),
         ),
-        sa.ForeignKeyConstraint(["author_id"], ["authors.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_points_author_id", "points", ["author_id"])
 
     op.create_table(
         "texts",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("point_id", sa.Uuid(), nullable=False),
+        sa.Column("author_id", sa.Uuid(), nullable=False),
         sa.Column("content_pt", sa.Text(), nullable=False),
         sa.Column("source_work", sa.String(length=255), nullable=True),
         sa.Column("source_year", sa.Integer(), nullable=True),
@@ -144,9 +142,11 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.func.now(),
         ),
+        sa.ForeignKeyConstraint(["author_id"], ["authors.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["point_id"], ["points.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.create_index("ix_texts_author_id", "texts", ["author_id"])
     op.create_index("ix_texts_point_id", "texts", ["point_id"])
 
     op.create_table(
@@ -285,9 +285,9 @@ def downgrade() -> None:
     op.drop_table("routes")
     op.drop_table("audio_files")
     op.drop_table("translations")
+    op.drop_index("ix_texts_author_id", table_name="texts")
     op.drop_index("ix_texts_point_id", table_name="texts")
     op.drop_table("texts")
-    op.drop_index("ix_points_author_id", table_name="points")
     op.drop_table("points")
     op.drop_table("authors")
     op.drop_table("voices")
