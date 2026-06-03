@@ -6,13 +6,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.db import get_db
-from app.models.entities import Author
+from app.models.entities import Author, Text
 from app.schemas.common import EnvelopeMeta, envelope
 
 router = APIRouter(prefix="/api/v1/authors", tags=["authors"])
 
 
 def serialize_author(author: Author) -> dict[str, object]:
+    point_ids = {text.point_id for text in author.texts}
     return {
         "id": str(author.id),
         "name": author.name,
@@ -21,7 +22,7 @@ def serialize_author(author: Author) -> dict[str, object]:
         "death_year": author.death_year,
         "photo_url": author.photo_url,
         "elevenlabs_voice_id": author.elevenlabs_voice_id,
-        "point_count": len(author.points),
+        "point_count": len(point_ids),
     }
 
 
@@ -33,7 +34,7 @@ def list_authors(
 ) -> dict[str, object]:
     authors = db.scalars(
         select(Author)
-        .options(selectinload(Author.points))
+        .options(selectinload(Author.texts).selectinload(Text.point))
         .order_by(Author.name)
         .offset((page - 1) * per_page)
         .limit(per_page)
@@ -48,12 +49,13 @@ def list_authors(
 @router.get("/{author_id}")
 def get_author(author_id: UUID, db: Annotated[Session, Depends(get_db)]) -> dict[str, object]:
     author = db.scalar(
-        select(Author).options(selectinload(Author.points)).where(Author.id == author_id)
+        select(Author).options(selectinload(Author.texts).selectinload(Text.point)).where(Author.id == author_id)
     )
     if author is None:
         raise HTTPException(status_code=404, detail="Author not found")
 
     payload = serialize_author(author)
+    points_by_id = {text.point.id: text.point for text in author.texts}
     payload["points"] = [
         {
             "id": str(point.id),
@@ -62,6 +64,6 @@ def get_author(author_id: UUID, db: Annotated[Session, Depends(get_db)]) -> dict
             "lng": point.lng,
             "neighborhood": point.neighborhood,
         }
-        for point in author.points
+        for point in points_by_id.values()
     ]
     return envelope(payload, EnvelopeMeta())

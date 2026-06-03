@@ -48,7 +48,6 @@ backend/
 #### `points`
 
 - `id`
-- `author_id`
 - `title_pt`
 - `address`
 - `neighborhood`
@@ -56,14 +55,25 @@ backend/
 - `lng`
 - `geom`
 
+Nota:
+
+- pontos representam lugares georreferenciados e nao pertencem diretamente a um autor
+- a autoria fica em `texts.author_id`, porque um mesmo ponto pode conter textos de autores diferentes
+
 #### `texts`
 
 - `id`
 - `point_id`
+- `author_id`
 - `content_pt`
 - `source_work`
 - `source_year`
 - `content_type`
+
+Relacoes:
+
+- `texts.point_id -> points.id`
+- `texts.author_id -> authors.id`
 
 #### `translations`
 
@@ -153,8 +163,8 @@ Regras:
 | Metodo | Endpoint | Notas |
 | :--- | :--- | :--- |
 | GET | `/health` | healthcheck |
-| GET | `/api/v1/points` | filtros por localizacao, idioma e autor |
-| GET | `/api/v1/points/{id}` | inclui autor, textos e audios |
+| GET | `/api/v1/points` | filtros por localizacao, idioma e autor dos textos |
+| GET | `/api/v1/points/{id}` | inclui autores derivados dos textos, textos e audios |
 | GET | `/api/v1/authors` | lista de autores |
 | GET | `/api/v1/authors/{id}` | detalhe do autor |
 | GET | `/api/v1/routes` | apenas publicados |
@@ -196,6 +206,8 @@ author_name,title,address,neighborhood,lat,lng,content_pt,source_work,source_yea
 Fernando Pessoa,Tabacaria do Rossio,Rossio 59,Baixa,38.7134,-9.1392,"Nao sou nada...",Tabacaria,1928,poetry
 Eca de Queiros,O Ramalhete,Rua das Janelas Verdes,Santos,38.7037,-9.1597,"Ali vivia...",Os Maias,1888,prose
 ```
+
+Na importacao, `title/address/neighborhood/lat/lng` definem ou atualizam o ponto; `author_name` define o autor do texto criado ou atualizado para aquele ponto.
 
 ## Integracoes Externas
 

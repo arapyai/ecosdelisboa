@@ -46,7 +46,7 @@ export function MapPage({ lang }: Props) {
     () =>
       points.map((point) => ({
         ...point,
-        author: point.author ?? authors.find((author) => author.id === point.author_id)
+        author: point.author ?? point.authors?.[0] ?? authors.find((author) => author.id === point.author_id)
       })),
     [authors, points]
   );
@@ -61,7 +61,7 @@ export function MapPage({ lang }: Props) {
     setSelectedPoint({
       ...point,
       ...result.data,
-      author: result.data.author ?? point.author ?? authors.find((author) => author.id === point.author_id)
+      author: result.data.author ?? result.data.authors?.[0] ?? point.author ?? point.authors?.[0] ?? authors.find((author) => author.id === point.author_id)
     });
   }
 

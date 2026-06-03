@@ -102,8 +102,8 @@ No estado atual, `backend/` e `docs/` ja estao organizados como workspaces separ
 O modelo de dados do produto gira em torno destas entidades principais:
 
 - `authors`: autores e respectivas biografias e configuracao de voz
-- `points`: pontos literarios georreferenciados
-- `texts`: textos originais em portugues associados a um ponto
+- `points`: lugares literarios georreferenciados, sem autoria direta
+- `texts`: textos originais em portugues associados a um ponto e a um autor
 - `translations`: traducoes por lingua com status editorial
 - `audio_files`: audios gerados ou enviados manualmente por texto e lingua
 - `voices`: vozes disponiveis na conta ElevenLabs
@@ -121,8 +121,8 @@ Todos os endpoints publicos sao read-only, nao exigem autenticacao e respondem e
 | Metodo | Endpoint | Descricao |
 | :--- | :--- | :--- |
 | GET | `/health` | estado basico do servico |
-| GET | `/api/v1/points` | lista de pontos proximos com filtros |
-| GET | `/api/v1/points/{id}` | detalhe completo do ponto |
+| GET | `/api/v1/points` | lista de pontos proximos com filtros, incluindo filtro por autor dos textos |
+| GET | `/api/v1/points/{id}` | detalhe completo do ponto com textos, autores e audios |
 | GET | `/api/v1/authors` | lista de autores |
 | GET | `/api/v1/authors/{id}` | detalhe do autor |
 | GET | `/api/v1/routes` | lista de percursos publicados |
@@ -141,8 +141,8 @@ O painel administrativo e uma aplicacao interna com autenticacao por email e pas
 | :--- | :--- | :--- |
 | Dashboard | `/admin` | indicadores operacionais |
 | Autores | `/admin/authors` | CRUD de autores e atribuicao de voz |
-| Pontos Literarios | `/admin/points` | CRUD de pontos e importacao CSV |
-| Textos e Citacoes | `/admin/points/{id}` | gestao de textos, traducoes e audios |
+| Pontos Literarios | `/admin/points` | CRUD de pontos georreferenciados e importacao CSV |
+| Textos e Citacoes | `/admin/texts` | gestao de textos, autores, traducoes e audios |
 | Percursos | `/admin/routes` | CRUD e ordenacao de percursos |
 | Traducoes | `/admin/translations` | fila editorial de revisao |
 | Vozes | `/admin/voices` | sincronizacao e configuracao de voz padrao |
@@ -152,6 +152,7 @@ O painel administrativo e uma aplicacao interna com autenticacao por email e pas
 
 - criar e editar autores
 - criar e editar pontos manualmente
+- associar autores aos textos, nao aos pontos
 - importar pontos e textos via CSV com preview
 - gerir textos por ponto
 - disparar traducao automatica por lingua
@@ -167,7 +168,7 @@ O painel administrativo e uma aplicacao interna com autenticacao por email e pas
 - o sistema aceita criacao manual ou importacao em lote
 - cada linha valida ponto, coordenadas e conteudo minimo
 - o fluxo mostra preview antes da confirmacao
-- a importacao e idempotente por autor + titulo
+- a importacao e idempotente por titulo do ponto + autor do texto
 - a importacao nao dispara automaticamente traducao nem audio
 
 ### Traducao editorial
@@ -180,7 +181,7 @@ O painel administrativo e uma aplicacao interna com autenticacao por email e pas
 
 ### Geracao de audio
 
-- o audio pode usar voz especifica do autor
+- o audio pode usar voz especifica do autor associado ao texto
 - se nao houver voz do autor, usa a voz padrao configurada
 - audio em PT pode ser gerado diretamente
 - audio em outras linguas depende de traducao aprovada

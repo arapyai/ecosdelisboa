@@ -68,12 +68,7 @@ def preview_import(csv_content: str, db: Session) -> list[ImportPreviewRow]:
 
         action = "error"
         if not errors:
-            author = db.scalar(select(Author).where(Author.name == author_name))
-            point = None
-            if author is not None:
-                point = db.scalar(
-                    select(Point).where(Point.author_id == author.id, Point.title_pt == title)
-                )
+            point = db.scalar(select(Point).where(Point.title_pt == title))
             action = "update" if point is not None else "create"
 
         preview.append(
@@ -104,12 +99,9 @@ def apply_import(csv_content: str, db: Session) -> dict[str, object]:
             db.add(author)
             db.flush()
 
-        point = db.scalar(
-            select(Point).where(Point.author_id == author.id, Point.title_pt == preview_row.title)
-        )
+        point = db.scalar(select(Point).where(Point.title_pt == preview_row.title))
         if point is None:
             point = Point(
-                author_id=author.id,
                 title_pt=preview_row.title,
                 address=(row.get("address") or "").strip() or None,
                 neighborhood=(row.get("neighborhood") or "").strip() or None,
@@ -120,6 +112,7 @@ def apply_import(csv_content: str, db: Session) -> dict[str, object]:
             db.flush()
             text = Text(
                 point_id=point.id,
+                author_id=author.id,
                 content_pt=(row.get("content_pt") or "").strip(),
                 source_work=(row.get("source_work") or "").strip() or None,
                 source_year=(
@@ -135,10 +128,11 @@ def apply_import(csv_content: str, db: Session) -> dict[str, object]:
         point.neighborhood = (row.get("neighborhood") or "").strip() or point.neighborhood
         point.lat = float(row["lat"])
         point.lng = float(row["lng"])
-        existing_text = point.texts[0] if point.texts else None
+        existing_text = db.scalar(select(Text).where(Text.point_id == point.id, Text.author_id == author.id))
         if existing_text is None:
             existing_text = Text(
                 point_id=point.id,
+                author_id=author.id,
                 content_pt=(row.get("content_pt") or "").strip(),
                 source_work=(row.get("source_work") or "").strip() or None,
                 source_year=(

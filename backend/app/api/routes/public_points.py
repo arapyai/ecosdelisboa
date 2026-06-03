@@ -41,9 +41,20 @@ def resolve_text_content(text: Text, lang: SupportedLanguage) -> str:
 
 
 def serialize_point_summary(point: Point) -> dict[str, object]:
+    authors_by_id = {
+        str(text.author.id): {
+            "id": str(text.author.id),
+            "name": text.author.name,
+            "photo_url": text.author.photo_url,
+        }
+        for text in point.texts
+        if text.author is not None
+    }
+    first_author_id = next(iter(authors_by_id), None)
     return {
         "id": str(point.id),
-        "author_id": str(point.author_id),
+        "author_id": first_author_id,
+        "authors": list(authors_by_id.values()),
         "title_pt": point.title_pt,
         "address": point.address,
         "neighborhood": point.neighborhood,
@@ -60,9 +71,9 @@ def list_points(
     radius: float | None = Query(default=None, gt=0),
     author_id: UUID | None = None,
 ) -> dict[str, object]:
-    query = select(Point).order_by(Point.title_pt)
+    query = select(Point).options(selectinload(Point.texts).selectinload(Text.author)).order_by(Point.title_pt)
     if author_id:
-        query = query.where(Point.author_id == author_id)
+        query = query.where(Point.texts.any(Text.author_id == author_id))
 
     points = db.scalars(query).all()
     if lat is not None and lng is not None and radius is not None:
@@ -87,7 +98,7 @@ def get_point(
     point = db.scalar(
         select(Point)
         .options(
-            selectinload(Point.author),
+            selectinload(Point.texts).selectinload(Text.author),
             selectinload(Point.texts).selectinload(Text.translations),
             selectinload(Point.texts).selectinload(Text.audio_files),
         )
@@ -97,14 +108,16 @@ def get_point(
         raise HTTPException(status_code=404, detail="Point not found")
 
     payload = serialize_point_summary(point)
-    payload["author"] = {
-        "id": str(point.author.id),
-        "name": point.author.name,
-        "photo_url": point.author.photo_url,
-    }
+    payload["author"] = payload["authors"][0] if payload["authors"] else None
     payload["texts"] = [
         {
             "id": str(text.id),
+            "author_id": str(text.author_id),
+            "author": {
+                "id": str(text.author.id),
+                "name": text.author.name,
+                "photo_url": text.author.photo_url,
+            },
             "content": resolve_text_content(text, lang),
             "content_pt": text.content_pt,
             "source_work": text.source_work,

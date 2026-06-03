@@ -140,7 +140,7 @@ tests/
 
 ### CSV
 - Preview de importacao antes de confirmar.
-- Idempotencia por autor + titulo.
+- Idempotencia por titulo do ponto + autor do texto.
 - Criacao automatica de autor minimo quando necessario.
 
 ### Traducoes
@@ -148,7 +148,7 @@ tests/
 - Revisao humana explicita para `approved` ou `rejected`.
 
 ### Audio
-- Usa voz do autor quando existir.
+- Usa voz do autor associado ao texto quando existir.
 - Usa voz padrao como fallback.
 - Upload manual preservado contra regeneracao automatica.
 

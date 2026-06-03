@@ -72,17 +72,15 @@ def get_or_create_author(
 def get_or_create_point(
     session,
     *,
-    author: Author,
     title_pt: str,
     address: str,
     neighborhood: str,
     lat: float,
     lng: float,
 ) -> Point:
-    point = session.scalar(select(Point).where(Point.author == author, Point.title_pt == title_pt))
+    point = session.scalar(select(Point).where(Point.title_pt == title_pt))
     if point is None:
         point = Point(
-            author=author,
             title_pt=title_pt,
             address=address,
             neighborhood=neighborhood,
@@ -97,15 +95,19 @@ def get_or_create_text(
     session,
     *,
     point: Point,
+    author: Author,
     content_pt: str,
     source_work: str,
     source_year: int,
     content_type: ContentType = ContentType.PROSE,
 ) -> Text:
-    text = session.scalar(select(Text).where(Text.point == point, Text.source_work == source_work))
+    text = session.scalar(
+        select(Text).where(Text.point == point, Text.author == author, Text.source_work == source_work)
+    )
     if text is None:
         text = Text(
             point=point,
+            author=author,
             content_pt=content_pt,
             source_work=source_work,
             source_year=source_year,
@@ -180,7 +182,6 @@ def seed() -> None:
 
         chiado = get_or_create_point(
             session,
-            author=pessoa,
             title_pt="Chiado",
             address="Largo do Chiado",
             neighborhood="Chiado",
@@ -189,7 +190,6 @@ def seed() -> None:
         )
         alfama = get_or_create_point(
             session,
-            author=saramago,
             title_pt="Alfama",
             address="Miradouro de Santa Luzia",
             neighborhood="Alfama",
@@ -198,7 +198,6 @@ def seed() -> None:
         )
         praca = get_or_create_point(
             session,
-            author=pessoa,
             title_pt="Terreiro do Paco",
             address="Praca do Comercio",
             neighborhood="Baixa",
@@ -210,6 +209,7 @@ def seed() -> None:
         get_or_create_text(
             session,
             point=chiado,
+            author=pessoa,
             content_pt="Aqui a cidade tem passos de escritorio, cafe e fantasma.",
             source_work="Fragmento demonstrativo",
             source_year=2026,
@@ -217,6 +217,7 @@ def seed() -> None:
         get_or_create_text(
             session,
             point=alfama,
+            author=saramago,
             content_pt="As colinas fazem da memoria uma subida.",
             source_work="Fragmento demonstrativo",
             source_year=2026,
@@ -224,6 +225,7 @@ def seed() -> None:
         get_or_create_text(
             session,
             point=praca,
+            author=pessoa,
             content_pt="O rio abre a cidade como uma pagina larga.",
             source_work="Fragmento demonstrativo",
             source_year=2026,

@@ -58,6 +58,8 @@ const mockPointDetails: Record<string, PublicPointDetail> = {
     texts: [
       {
         id: 'text-chiado',
+        author_id: 'author-pessoa',
+        author: { id: 'author-pessoa', name: 'Fernando Pessoa' },
         content_pt:
           'Aqui a cidade tem passos de escritorio, cafe e fantasma. A rua guarda a pressa e a hesitacao de quem escreve antes de chegar.',
         source_work: 'Fragmento demonstrativo',
@@ -72,6 +74,8 @@ const mockPointDetails: Record<string, PublicPointDetail> = {
     texts: [
       {
         id: 'text-alfama',
+        author_id: 'author-saramago',
+        author: { id: 'author-saramago', name: 'Jose Saramago' },
         content_pt:
           'As colinas fazem da memoria uma subida. Cada pedra parece perguntar quem passa, e cada janela responde com outra pergunta.',
         source_work: 'Fragmento demonstrativo',
@@ -136,6 +140,10 @@ export default function App() {
     [authors]
   );
 
+  function authorNameForPoint(point: PublicPointSummary | PublicPointDetail) {
+    return point.authors?.[0]?.name ?? (point.author_id ? authorsById.get(point.author_id)?.name : undefined) ?? 'Autor';
+  }
+
   async function openPoint(point: PublicPointSummary) {
     setTab('points');
     setSelectedPoint(null);
@@ -178,7 +186,7 @@ export default function App() {
                 <Pressable key={point.id} style={styles.card} onPress={() => openPoint(point)}>
                   <Text style={styles.cardTitle}>{point.title_pt}</Text>
                   <Text style={styles.cardMeta}>
-                    {authorsById.get(point.author_id)?.name ?? 'Autor'} · {point.neighborhood ?? point.address ?? 'Lisboa'}
+                    {authorNameForPoint(point)} · {point.neighborhood ?? point.address ?? 'Lisboa'}
                   </Text>
                 </Pressable>
               ))
@@ -198,7 +206,7 @@ export default function App() {
               <Text style={styles.detailKicker}>Detalhe de ponto</Text>
               <Text style={styles.detailTitle}>{selectedPoint.title_pt}</Text>
               <Text style={styles.cardMeta}>
-                {selectedPoint.author?.name ?? authorsById.get(selectedPoint.author_id)?.name}
+                {selectedPoint.author?.name ?? authorNameForPoint(selectedPoint)}
               </Text>
               {selectedPoint.texts?.map((text) => (
                 <View key={text.id} style={styles.textBlock}>

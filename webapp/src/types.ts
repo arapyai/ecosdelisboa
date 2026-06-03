@@ -18,6 +18,8 @@ export interface Author {
 export interface TextEntry {
   id: string;
   point_id: string;
+  author_id?: string | null;
+  author?: Author;
   content_pt: string;
   content_en?: string | null;
   source_work?: string | null;
@@ -41,7 +43,8 @@ export interface TranscriptCue {
 
 export interface Point {
   id: string;
-  author_id: string;
+  author_id?: string | null;
+  authors?: Author[];
   title_pt: string;
   title_en?: string | null;
   address?: string | null;

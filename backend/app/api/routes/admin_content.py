@@ -25,7 +25,6 @@ class AuthorWrite(BaseModel):
 
 
 class PointWrite(BaseModel):
-    author_id: UUID
     title_pt: str
     address: str | None = None
     neighborhood: str | None = None
@@ -35,6 +34,7 @@ class PointWrite(BaseModel):
 
 class TextWrite(BaseModel):
     point_id: UUID
+    author_id: UUID
     content_pt: str
     source_work: str | None = None
     source_year: int | None = None
@@ -75,7 +75,6 @@ def serialize_author(author: Author) -> dict[str, object]:
 def serialize_point(point: Point) -> dict[str, object]:
     return {
         "id": str(point.id),
-        "author_id": str(point.author_id),
         "title_pt": point.title_pt,
         "address": point.address,
         "neighborhood": point.neighborhood,
@@ -88,6 +87,7 @@ def serialize_text(text: Text) -> dict[str, object]:
     return {
         "id": str(text.id),
         "point_id": str(text.point_id),
+        "author_id": str(text.author_id),
         "content_pt": text.content_pt,
         "source_work": text.source_work,
         "source_year": text.source_year,

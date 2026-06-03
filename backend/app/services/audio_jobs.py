@@ -76,6 +76,7 @@ def run_audio_job(
                 .options(
                     selectinload(Text.translations),
                     selectinload(Text.audio_files),
+                    selectinload(Text.author),
                     selectinload(Text.point),
                 )
                 .where(Text.id == item.text_id)
