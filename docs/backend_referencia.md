@@ -202,12 +202,13 @@ Regras:
 ## Exemplo de CSV de Importacao
 
 ```csv
-author_name,title,address,neighborhood,lat,lng,content_pt,source_work,source_year,content_type
-Fernando Pessoa,Tabacaria do Rossio,Rossio 59,Baixa,38.7134,-9.1392,"Nao sou nada...",Tabacaria,1928,poetry
-Eca de Queiros,O Ramalhete,Rua das Janelas Verdes,Santos,38.7037,-9.1597,"Ali vivia...",Os Maias,1888,prose
+point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,content_pt,content_type,source_work,source_year
+Tabacaria do Rossio,Rossio 59,Baixa,Lisboa,Portugal,38.7134,-9.1392,Fernando Pessoa,"Nao sou nada...",poetry,Tabacaria,1928
+O Ramalhete,Rua das Janelas Verdes,Santos,Lisboa,Portugal,,,Eca de Queiros,"Ali vivia...",prose,Os Maias,1888
 ```
 
-Na importacao, `title/address/neighborhood/lat/lng` definem ou atualizam o ponto; `author_name` define o autor do texto criado ou atualizado para aquele ponto.
+Na importacao, `point_name/address` definem ou atualizam o ponto; `author_name` define o autor do texto criado ou atualizado para aquele ponto.
+Quando `lat_override` e `lng_override` estao vazios, o importador tenta geocodificar o endereco usando `address`, `neighborhood`, `city` e `country`.
 
 ## Integracoes Externas
 

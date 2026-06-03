@@ -1,0 +1,4 @@
+point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,content_pt,content_type,source_work,source_year
+Chiado,Largo do Chiado,Chiado,Lisboa,Portugal,,,Fernando Pessoa,"Aqui a cidade tem passos de escritorio, cafe e fantasma.",prose,Fragmento demonstrativo,2026
+Alfama,Miradouro de Santa Luzia,Alfama,Lisboa,Portugal,,,Jose Saramago,"As colinas fazem da memoria uma subida.",prose,Fragmento demonstrativo,2026
+Terreiro do Paco,Praca do Comercio,Baixa,Lisboa,Portugal,38.7076,-9.1365,Fernando Pessoa,"O rio abre a cidade como uma pagina larga.",poetry,Fragmento demonstrativo,2026

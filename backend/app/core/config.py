@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     admin_initial_email: str = "admin@example.com"
     admin_initial_password: str = "change-me"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    geocoding_base_url: str = "https://nominatim.openstreetmap.org/search"
+    geocoding_user_agent: str = "lisboa-por-outros-api/0.1"
+    geocoding_timeout_s: float = 10.0
 
 
 @lru_cache
