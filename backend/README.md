@@ -165,3 +165,5 @@ tests/
 - As integracoes externas atuais estao encapsuladas em services testaveis e prontas para substituicao por clientes reais.
 
 - 
+
+
