@@ -9,6 +9,7 @@
     "preview": "vite preview --host 0.0.0.0 --port 4174"
   },
   "dependencies": {
+    "@ecosdelisboa/shared": "file:../shared",
     "@tanstack/react-query": "^5.90.12",
     "@vitejs/plugin-react": "^5.1.1",
     "vite": "^7.2.6",

@@ -42,7 +42,10 @@ def test_csv_confirm_is_idempotent_by_author_and_title(client, db_session) -> No
     assert len(db_session.query(Point).all()) == 1
 
 
-def test_csv_confirm_preserves_coordinates_when_existing_point_has_no_overrides(client, db_session) -> None:
+def test_csv_confirm_preserves_coordinates_when_existing_point_has_no_overrides(
+    client,
+    db_session,
+) -> None:
     headers = auth_header(client, db_session)
     point = Point(
         title_pt="Chiado",

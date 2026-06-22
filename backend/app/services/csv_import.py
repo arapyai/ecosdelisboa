@@ -50,7 +50,10 @@ def clean(row: dict[str, str], field: str) -> str:
     return (row.get(field) or "").strip()
 
 
-def parse_coordinate_pair(row: dict[str, str], errors: list[str]) -> tuple[float | None, float | None]:
+def parse_coordinate_pair(
+    row: dict[str, str],
+    errors: list[str],
+) -> tuple[float | None, float | None]:
     lat_raw = clean(row, "lat_override")
     lng_raw = clean(row, "lng_override")
 
@@ -106,7 +109,9 @@ def preview_import(csv_content: str, db: Session) -> list[ImportPreviewRow]:
         if title:
             point = db.scalar(select(Point).where(Point.title_pt == title))
             if point is None and (lat is None or lng is None):
-                errors.append("lat_override and lng_override are required when creating a new point")
+                errors.append(
+                    "lat_override and lng_override are required when creating a new point"
+                )
 
         if not errors:
             action = "update" if point is not None else "create"
@@ -172,7 +177,9 @@ def apply_import(csv_content: str, db: Session) -> dict[str, object]:
         if lat is not None and lng is not None:
             point.lat = lat
             point.lng = lng
-        existing_text = db.scalar(select(Text).where(Text.point_id == point.id, Text.author_id == author.id))
+        existing_text = db.scalar(
+            select(Text).where(Text.point_id == point.id, Text.author_id == author.id)
+        )
         if existing_text is None:
             existing_text = Text(
                 point_id=point.id,

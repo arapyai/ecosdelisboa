@@ -49,7 +49,9 @@ def list_authors(
 @router.get("/{author_id}")
 def get_author(author_id: UUID, db: Annotated[Session, Depends(get_db)]) -> dict[str, object]:
     author = db.scalar(
-        select(Author).options(selectinload(Author.texts).selectinload(Text.point)).where(Author.id == author_id)
+        select(Author)
+        .options(selectinload(Author.texts).selectinload(Text.point))
+        .where(Author.id == author_id)
     )
     if author is None:
         raise HTTPException(status_code=404, detail="Author not found")
