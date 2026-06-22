@@ -88,7 +88,7 @@ def build_podcast_rss(route: Route) -> str:
 
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
-        "<rss version=\"2.0\"><channel>"
+        '<rss version="2.0"><channel>'
         f"<title>{title}</title>"
         f"<description>{description}</description>"
         f"<link>https://api.lisboaporoutros.com/api/v1/routes/{route.id}</link>"
