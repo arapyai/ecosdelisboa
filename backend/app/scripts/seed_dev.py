@@ -102,7 +102,11 @@ def get_or_create_text(
     content_type: ContentType = ContentType.PROSE,
 ) -> Text:
     text = session.scalar(
-        select(Text).where(Text.point == point, Text.author == author, Text.source_work == source_work)
+        select(Text).where(
+            Text.point == point,
+            Text.author == author,
+            Text.source_work == source_work,
+        )
     )
     if text is None:
         text = Text(
@@ -149,7 +153,11 @@ def get_or_create_route(session, points: list[Point]) -> Route:
             estimated_duration_s=3300,
         )
         route.items = [
-            RouteItem(position=index + 1, point=point, transition_text_pt="Segue para o proximo ponto.")
+            RouteItem(
+                position=index + 1,
+                point=point,
+                transition_text_pt="Segue para o proximo ponto.",
+            )
             for index, point in enumerate(points)
         ]
         session.add(route)

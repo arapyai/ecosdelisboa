@@ -71,7 +71,11 @@ def list_points(
     radius: float | None = Query(default=None, gt=0),
     author_id: UUID | None = None,
 ) -> dict[str, object]:
-    query = select(Point).options(selectinload(Point.texts).selectinload(Text.author)).order_by(Point.title_pt)
+    query = (
+        select(Point)
+        .options(selectinload(Point.texts).selectinload(Text.author))
+        .order_by(Point.title_pt)
+    )
     if author_id:
         query = query.where(Point.texts.any(Text.author_id == author_id))
 
