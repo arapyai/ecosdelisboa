@@ -107,8 +107,8 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 
 ### Frontend
 
-- [ ] implementar fluxo admin de importacao CSV
-- [ ] implementar tabela de preview de importacao
+- [x] implementar fluxo admin de importacao CSV
+- [x] implementar tabela de preview de importacao
 - [ ] implementar tela de revisao de traducoes
 - [ ] implementar status por lingua na visao de textos por ponto
 - [ ] integrar fluxo de criar, aprovar e rejeitar traducoes
