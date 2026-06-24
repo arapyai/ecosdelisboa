@@ -82,11 +82,11 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 
 ### Infra
 
-- [ ] configurar secrets no Railway e ambientes locais
-- [ ] configurar pipeline de PR com testes backend
+- [x] configurar secrets no Railway e ambientes locais
+- [x] configurar pipeline de PR com testes backend
 - [ ] configurar dominio interno ou staging, se aplicavel
-- [ ] definir politica de logs e retencao
-- [ ] preparar base para Sentry, mesmo que ainda sem uso completo
+- [x] definir politica de logs e retencao
+- [x] preparar base para Sentry, mesmo que ainda sem uso completo
 
 ## Semana 3
 
@@ -107,8 +107,8 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 
 ### Frontend
 
-- [ ] implementar fluxo admin de importacao CSV
-- [ ] implementar tabela de preview de importacao
+- [x] implementar fluxo admin de importacao CSV
+- [x] implementar tabela de preview de importacao
 - [ ] implementar tela de revisao de traducoes
 - [ ] implementar status por lingua na visao de textos por ponto
 - [ ] integrar fluxo de criar, aprovar e rejeitar traducoes
@@ -116,9 +116,9 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 
 ### Infra
 
-- [ ] provisionar acesso a Gemini
-- [ ] validar politicas de segredo e rotacao
-- [ ] documentar quotas e limites operacionais da Gemini
+- [x] provisionar acesso a Gemini
+- [x] validar politicas de segredo e rotacao
+- [x] documentar quotas e limites operacionais da Gemini
 - [ ] ajustar CI para incluir checks de documentacao e formatacao, se existirem
 
 ## Semana 4

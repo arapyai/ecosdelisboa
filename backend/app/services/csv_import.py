@@ -1,6 +1,5 @@
 import csv
 import io
-from collections.abc import Callable
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -8,51 +7,30 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import Author, Point, Text
 from app.models.enums import ContentType
-from app.services.geocoding import GeocodingResult, geocode_address
-
-DEFAULT_CITY = "Lisboa"
-DEFAULT_COUNTRY = "Portugal"
 
 REQUIRED_COLUMNS = {
+    "author_name",
     "point_name",
     "address",
-    "author_name",
+    "neighborhood",
+    "city",
+    "country",
+    "lat_override",
+    "lng_override",
     "content_pt",
+    "content_type",
+    "source_work",
+    "source_year",
 }
 
 
 @dataclass
 class ImportPreviewRow:
     row_number: int
-    point_name: str
-    address: str
     author_name: str
+    title: str
     action: str
     errors: list[str]
-
-
-@dataclass
-class ImportRow:
-    row_number: int
-    point_name: str
-    address: str
-    neighborhood: str | None
-    city: str
-    country: str
-    lat: float | None
-    lng: float | None
-    author_name: str
-    content_pt: str
-    content_type: ContentType | None
-    source_work: str | None
-    source_year: int | None
-    author_bio_pt: str | None
-    author_birth_year: int | None
-    author_death_year: int | None
-    errors: list[str]
-
-
-Geocoder = Callable[..., GeocodingResult]
 
 
 def parse_csv_rows(csv_content: str) -> list[dict[str, str]]:
@@ -72,310 +50,161 @@ def clean(row: dict[str, str], field: str) -> str:
     return (row.get(field) or "").strip()
 
 
-def first_clean(row: dict[str, str], *fields: str) -> str:
-    for field in fields:
-        value = clean(row, field)
-        if value:
-            return value
-    return ""
-
-
-def parse_optional_int(raw: str, field: str, errors: list[str]) -> int | None:
-    if not raw:
-        return None
-    try:
-        return int(raw)
-    except ValueError:
-        errors.append(f"{field} must be a valid integer")
-        return None
-
-
-def parse_optional_float(raw: str, field: str, errors: list[str]) -> float | None:
-    if not raw:
-        return None
-    try:
-        return float(raw)
-    except ValueError:
-        errors.append(f"{field} must be a valid number")
-        return None
-
-
-def parse_year_from_date(raw: str) -> int | None:
-    if len(raw) >= 4 and raw[:4].isdigit():
-        return int(raw[:4])
-    return None
-
-
-def infer_content_type(content_pt: str) -> ContentType:
-    lines = [line.strip() for line in content_pt.splitlines() if line.strip()]
-    if len(lines) >= 3:
-        average_line_length = sum(len(line) for line in lines) / len(lines)
-        if average_line_length <= 80:
-            return ContentType.POETRY
-    return ContentType.PROSE
-
-
-def parse_content_type(raw: str, content_pt: str, errors: list[str]) -> ContentType | None:
-    if not raw:
-        return infer_content_type(content_pt)
-    if raw in {item.value for item in ContentType}:
-        return ContentType(raw)
-    errors.append("content_type must be one of prose, poetry, lyrics")
-    return None
-
-
-def find_point(db: Session, point_name: str, address: str) -> Point | None:
-    return db.scalar(select(Point).where(Point.title_pt == point_name, Point.address == address))
-
-
-def find_text(
-    db: Session,
-    *,
-    point: Point,
-    author: Author,
-    source_work: str | None,
-    source_year: int | None,
-    content_pt: str,
-) -> Text | None:
-    return db.scalar(
-        select(Text).where(
-            Text.point_id == point.id,
-            Text.author_id == author.id,
-            Text.source_work == source_work,
-            Text.source_year == source_year,
-            Text.content_pt == content_pt,
-        )
-    )
-
-
-def resolve_coordinates(
-    *,
-    address: str,
-    neighborhood: str | None,
-    city: str,
-    country: str,
-    lat_override: str,
-    lng_override: str,
+def parse_coordinate_pair(
+    row: dict[str, str],
     errors: list[str],
-    geocoder: Geocoder,
 ) -> tuple[float | None, float | None]:
-    lat = parse_optional_float(lat_override, "lat_override", errors)
-    lng = parse_optional_float(lng_override, "lng_override", errors)
-    if bool(lat_override) != bool(lng_override):
+    lat_raw = clean(row, "lat_override")
+    lng_raw = clean(row, "lng_override")
+
+    if not lat_raw and not lng_raw:
+        return None, None
+    if not lat_raw or not lng_raw:
         errors.append("lat_override and lng_override must be provided together")
         return None, None
-    if lat is not None and lng is not None:
-        return lat, lng
-    if errors:
-        return None, None
 
     try:
-        result = geocoder(
-            address=address,
-            neighborhood=neighborhood,
-            city=city,
-            country=country,
-        )
-    except Exception as exc:
-        errors.append(f"geocoding failed: {exc}")
+        return float(lat_raw), float(lng_raw)
+    except ValueError:
+        errors.append("lat_override and lng_override must be valid numbers")
         return None, None
-    return result.lat, result.lng
 
 
-def build_import_rows(
-    csv_content: str,
-    *,
-    geocoder: Geocoder = geocode_address,
-) -> list[ImportRow]:
+def parse_source_year(row: dict[str, str], errors: list[str]) -> int | None:
+    source_year = clean(row, "source_year")
+    if not source_year:
+        return None
+
+    try:
+        return int(source_year)
+    except ValueError:
+        errors.append("source_year must be a valid integer")
+        return None
+
+
+def resolve_content_type(raw: str) -> ContentType:
+    if raw in {item.value for item in ContentType}:
+        return ContentType(raw)
+    return ContentType.POETRY
+
+
+def preview_import(csv_content: str, db: Session) -> list[ImportPreviewRow]:
     rows = parse_csv_rows(csv_content)
-    parsed: list[ImportRow] = []
+    preview: list[ImportPreviewRow] = []
 
     for index, row in enumerate(rows, start=2):
         errors: list[str] = []
-        point_name = clean(row, "point_name")
-        address = clean(row, "address")
-        neighborhood = clean(row, "neighborhood") or None
-        city = clean(row, "city") or DEFAULT_CITY
-        country = clean(row, "country") or DEFAULT_COUNTRY
         author_name = clean(row, "author_name")
+        title = clean(row, "point_name")
         content_pt = clean(row, "content_pt")
-        content_type_raw = clean(row, "content_type")
-        source_work = clean(row, "source_work") or None
-        source_year = parse_optional_int(clean(row, "source_year"), "source_year", errors)
-        author_bio_pt = (
-            first_clean(row, "author_bio_pt", "Microbio curta (camada 2 do app)") or None
-        )
-        author_birth_year = parse_year_from_date(
-            first_clean(row, "birth_date", "Data de nascimento")
-        )
-        author_death_year = parse_year_from_date(first_clean(row, "death_date", "Data de morte"))
+        content_type = clean(row, "content_type")
+        lat, lng = parse_coordinate_pair(row, errors)
+        parse_source_year(row, errors)
 
-        if not point_name:
-            errors.append("point_name is required")
-        if not address:
-            errors.append("address is required")
         if not author_name:
             errors.append("author_name is required")
+        if not title:
+            errors.append("point_name is required")
         if not content_pt:
             errors.append("content_pt is required")
 
-        content_type = parse_content_type(content_type_raw, content_pt, errors)
+        content_type = resolve_content_type(content_type).value
 
-        lat: float | None = None
-        lng: float | None = None
-        if not errors:
-            lat, lng = resolve_coordinates(
-                address=address,
-                neighborhood=neighborhood,
-                city=city,
-                country=country,
-                lat_override=clean(row, "lat_override"),
-                lng_override=clean(row, "lng_override"),
-                errors=errors,
-                geocoder=geocoder,
-            )
-
-        parsed.append(
-            ImportRow(
-                row_number=index,
-                point_name=point_name,
-                address=address,
-                neighborhood=neighborhood,
-                city=city,
-                country=country,
-                lat=lat,
-                lng=lng,
-                author_name=author_name,
-                content_pt=content_pt,
-                content_type=content_type,
-                source_work=source_work,
-                source_year=source_year,
-                author_bio_pt=author_bio_pt,
-                author_birth_year=author_birth_year,
-                author_death_year=author_death_year,
-                errors=errors,
-            )
-        )
-
-    return parsed
-
-
-def preview_import(
-    csv_content: str,
-    db: Session,
-    *,
-    geocoder: Geocoder = geocode_address,
-) -> list[ImportPreviewRow]:
-    preview: list[ImportPreviewRow] = []
-
-    for row in build_import_rows(csv_content, geocoder=geocoder):
         action = "error"
-        if not row.errors:
-            author = db.scalar(select(Author).where(Author.name == row.author_name))
-            point = find_point(db, row.point_name, row.address)
-            existing_text = None
-            if author is not None and point is not None:
-                existing_text = find_text(
-                    db,
-                    point=point,
-                    author=author,
-                    source_work=row.source_work,
-                    source_year=row.source_year,
-                    content_pt=row.content_pt,
+        if title:
+            point = db.scalar(select(Point).where(Point.title_pt == title))
+            if point is None and (lat is None or lng is None):
+                errors.append(
+                    "lat_override and lng_override are required when creating a new point"
                 )
-            action = "update" if existing_text is not None else "create"
+
+        if not errors:
+            action = "update" if point is not None else "create"
 
         preview.append(
             ImportPreviewRow(
-                row_number=row.row_number,
-                point_name=row.point_name,
-                address=row.address,
-                author_name=row.author_name,
+                row_number=index,
+                author_name=author_name,
+                title=title,
                 action=action,
-                errors=row.errors,
+                errors=errors,
             )
         )
 
     return preview
 
 
-def apply_import(
-    csv_content: str,
-    db: Session,
-    *,
-    geocoder: Geocoder = geocode_address,
-) -> dict[str, object]:
-    rows = build_import_rows(csv_content, geocoder=geocoder)
+def apply_import(csv_content: str, db: Session) -> dict[str, object]:
+    preview = preview_import(csv_content, db)
     created = 0
     updated = 0
 
-    for row in rows:
-        if row.errors:
-            continue
-        if row.content_type is None or row.lat is None or row.lng is None:
+    for row, preview_row in zip(parse_csv_rows(csv_content), preview, strict=True):
+        if preview_row.errors:
             continue
 
-        author = db.scalar(select(Author).where(Author.name == row.author_name))
+        author = db.scalar(select(Author).where(Author.name == preview_row.author_name))
         if author is None:
-            author = Author(name=row.author_name)
+            author = Author(name=preview_row.author_name)
             db.add(author)
             db.flush()
-        author.bio_pt = row.author_bio_pt or author.bio_pt
-        author.birth_year = row.author_birth_year or author.birth_year
-        author.death_year = row.author_death_year or author.death_year
 
-        point = find_point(db, row.point_name, row.address)
+        point = db.scalar(select(Point).where(Point.title_pt == preview_row.title))
+        row_errors: list[str] = []
+        lat, lng = parse_coordinate_pair(row, row_errors)
+        source_year = parse_source_year(row, row_errors)
         if point is None:
+            if lat is None or lng is None:
+                continue
             point = Point(
-                title_pt=row.point_name,
-                address=row.address,
-                neighborhood=row.neighborhood,
-                lat=row.lat,
-                lng=row.lng,
+                title_pt=preview_row.title,
+                address=clean(row, "address") or None,
+                neighborhood=clean(row, "neighborhood") or None,
+                lat=lat,
+                lng=lng,
             )
             db.add(point)
             db.flush()
-        else:
-            point.neighborhood = row.neighborhood or point.neighborhood
-            point.lat = row.lat
-            point.lng = row.lng
-
-        existing_text = find_text(
-            db,
-            point=point,
-            author=author,
-            source_work=row.source_work,
-            source_year=row.source_year,
-            content_pt=row.content_pt,
-        )
-        if existing_text is None:
             text = Text(
                 point_id=point.id,
                 author_id=author.id,
-                content_pt=row.content_pt,
-                source_work=row.source_work,
-                source_year=row.source_year,
-                content_type=row.content_type,
+                content_pt=clean(row, "content_pt"),
+                source_work=clean(row, "source_work") or None,
+                source_year=source_year,
+                content_type=resolve_content_type(clean(row, "content_type")),
             )
             db.add(text)
             created += 1
+            continue
+
+        point.address = clean(row, "address") or point.address
+        point.neighborhood = clean(row, "neighborhood") or point.neighborhood
+        if lat is not None and lng is not None:
+            point.lat = lat
+            point.lng = lng
+        existing_text = db.scalar(
+            select(Text).where(Text.point_id == point.id, Text.author_id == author.id)
+        )
+        if existing_text is None:
+            existing_text = Text(
+                point_id=point.id,
+                author_id=author.id,
+                content_pt=clean(row, "content_pt"),
+                source_work=clean(row, "source_work") or None,
+                source_year=source_year,
+                content_type=resolve_content_type(clean(row, "content_type")),
+            )
+            db.add(existing_text)
         else:
-            existing_text.content_type = row.content_type
-            updated += 1
+            existing_text.content_pt = clean(row, "content_pt")
+            existing_text.source_work = clean(row, "source_work") or None
+            existing_text.source_year = source_year
+            existing_text.content_type = resolve_content_type(clean(row, "content_type"))
+        updated += 1
 
     db.commit()
     return {
         "created": created,
         "updated": updated,
-        "errors": [
-            {
-                "row_number": row.row_number,
-                "point_name": row.point_name,
-                "address": row.address,
-                "author_name": row.author_name,
-                "errors": row.errors,
-            }
-            for row in rows
-            if row.errors
-        ],
+        "errors": [preview_row.__dict__ for preview_row in preview if preview_row.errors],
     }

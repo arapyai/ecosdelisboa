@@ -147,6 +147,8 @@ tests/
 - Preview de importacao antes de confirmar.
 - Idempotencia por titulo do ponto + autor do texto.
 - Criacao automatica de autor minimo quando necessario.
+- Formato esperado: `point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,content_pt,content_type,source_work,source_year`.
+- `lat_override` e `lng_override` podem ficar vazios para pontos existentes; para pontos novos, ambos sao obrigatorios.
 
 ### Traducoes
 - Gera traducao automatica com status `pending`.
@@ -172,3 +174,7 @@ tests/
 ## Notas
 - A especificacao geral do projeto fica em `../docs/lisboa_spec_geral.md`.
 - As integracoes externas atuais estao encapsuladas em services testaveis e prontas para substituicao por clientes reais.
+
+- 
+
+

@@ -195,23 +195,19 @@ Regras:
 ### Traducao e audio
 
 - traducao por texto e lingua em `/api/v1/admin/translations/*`
-- upsert manual de traducao em `/api/v1/admin/translations/{text_id}/{lang}/manual`
 - revisao de traducao em `/api/v1/admin/translations/{translation_id}/review`
-- remocao de traducao em `/api/v1/admin/translations/{translation_id}`
 - sincronizacao e configuracao de vozes em `/api/v1/admin/voices/*`
 - geracao, upload e jobs de audio em `/api/v1/admin/audio/*`
-- remocao de audio por texto e lingua em `/api/v1/admin/audio/{text_id}/{lang}`
 
 ## Exemplo de CSV de Importacao
 
 ```csv
 point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,content_pt,content_type,source_work,source_year
-Tabacaria do Rossio,Rossio 59,Baixa,Lisboa,Portugal,38.7134,-9.1392,Fernando Pessoa,"Nao sou nada...",poetry,Tabacaria,1928
-O Ramalhete,Rua das Janelas Verdes,Santos,Lisboa,Portugal,,,Eca de Queiros,"Ali vivia...",prose,Os Maias,1888
+Chiado,Largo do Chiado,Chiado,Lisboa,Portugal,,,Fernando Pessoa,"Aqui a cidade tem passos de escritorio, cafe e fantasma.",prose,Fragmento demonstrativo,2026
+Terreiro do Paco,Praca do Comercio,Baixa,Lisboa,Portugal,38.7076,-9.1365,Fernando Pessoa,"O rio abre a cidade como uma pagina larga.",poetry,Fragmento demonstrativo,2026
 ```
 
-Na importacao, `point_name/address` definem ou atualizam o ponto; `author_name` define o autor do texto criado ou atualizado para aquele ponto.
-Quando `lat_override` e `lng_override` estao vazios, o importador tenta geocodificar o endereco usando `address`, `neighborhood`, `city` e `country`.
+Na importacao, `point_name/address/neighborhood` definem ou atualizam o ponto; `author_name` define o autor do texto criado ou atualizado para aquele ponto. `lat_override/lng_override` podem ficar vazios para pontos existentes; para criar um ponto novo, ambos devem ser preenchidos.
 
 ## Integracoes Externas
 
@@ -230,19 +226,16 @@ Fluxo:
 3. faz upload para o R2
 4. atualiza `audio_files`
 
-### LLM de traducao
+### Google Gemini
 
 Uso:
 
 - gerar traducao automatica de texto literario com contexto do autor e da obra
-- provider padrao: Claude, configurado por `TRANSLATION_LLM_PROVIDER=claude`
-- modelo padrao: `TRANSLATION_LLM_MODEL=claude-3-5-sonnet-latest`
 
 Regras:
 
 - o retorno e armazenado como `pending`
 - nunca vira `approved` automaticamente
-- traducoes manuais usam `auto_translated=false` e podem ser aprovadas no mesmo upsert
 
 Prompt esperado:
 

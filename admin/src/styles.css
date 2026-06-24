@@ -247,6 +247,81 @@ input[type='checkbox'] {
   padding: 16px;
 }
 
+.import-panel {
+  border: 1px solid #d8d0c4;
+  border-radius: 8px;
+  background: #fffaf1;
+  margin-bottom: 18px;
+  padding: 16px;
+}
+
+.import-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.import-heading h3 {
+  margin: 8px 0 0;
+}
+
+.import-heading p,
+.import-summary,
+.import-error {
+  margin: 0;
+  color: #69736e;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.import-error {
+  color: #9e3a20;
+}
+
+.import-summary {
+  color: #163832;
+}
+
+.import-actions {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.import-preview {
+  margin-top: 12px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.status-pill.create {
+  background: #dcead7;
+  color: #275032;
+}
+
+.status-pill.update {
+  background: #dbe9f0;
+  color: #315f7d;
+}
+
+.status-pill.error {
+  background: #f4d6c9;
+  color: #9e3a20;
+}
+
 .field-grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
@@ -301,5 +376,14 @@ tr:last-child td {
 
   .route-item-row {
     grid-template-columns: 1fr;
+  }
+
+  .import-heading,
+  .import-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .import-heading {
+    display: grid;
   }
 }
