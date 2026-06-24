@@ -51,6 +51,7 @@ def run_audio_job(
     job_id: UUID,
     elevenlabs: ElevenLabsService,
     r2: R2Service,
+    preferred_voice_id: str | None = None,
 ) -> AudioGenerationJob:
     job = db.scalar(
         select(AudioGenerationJob)
@@ -83,7 +84,7 @@ def run_audio_job(
             )
             if text is None:
                 raise ValueError("Text not found")
-            voice_id = resolve_voice_id(db, text)
+            voice_id = resolve_voice_id(db, text, item.lang, preferred_voice_id)
             source_text = get_audio_source_text(text, item.lang)
             generated = elevenlabs.generate_audio(source_text, voice_id)
             key = f"audio/{text.id}/{item.lang.value}.mp3"
