@@ -20,16 +20,20 @@ from app.models.enums import ContentType, SupportedLanguage, TranslationStatus
 
 
 def get_or_create_voice(session) -> Voice:
-    voice = session.scalar(select(Voice).where(Voice.elevenlabs_id == "voice-default-dev"))
+    settings = get_settings()
+    elevenlabs_id = settings.elevenlabs_default_voice_id or "voice-default-dev"
+    voice = session.scalar(select(Voice).where(Voice.elevenlabs_id == elevenlabs_id))
     if voice is None:
         voice = Voice(
-            elevenlabs_id="voice-default-dev",
+            elevenlabs_id=elevenlabs_id,
             name="Voz Padrao Dev",
             preview_url=None,
+            lang=SupportedLanguage.PT,
             is_default=True,
         )
         session.add(voice)
     else:
+        voice.lang = SupportedLanguage.PT
         voice.is_default = True
     return voice
 

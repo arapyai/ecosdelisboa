@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from starlette.responses import StreamingResponse
 
 from app.api.deps import get_current_admin
+from app.core.config import get_settings
 from app.core.db import get_db
 from app.models.entities import AdminUser, AudioFile, Text, Translation, Voice
 from app.models.enums import SupportedLanguage, TranslationStatus
@@ -22,7 +23,11 @@ router = APIRouter(prefix="/api/v1/admin", tags=["admin-automation"])
 
 translation_service = LLMTranslationService()
 elevenlabs_service = ElevenLabsService()
-r2_service = R2Service()
+settings = get_settings()
+r2_service = R2Service(
+    storage_dir=settings.audio_storage_dir,
+    public_base_url=settings.audio_public_base_url,
+)
 
 
 class TranslationReviewRequest(BaseModel):
@@ -295,6 +300,8 @@ def generate_audio(
     return envelope(
         {
             "job_id": str(job.id),
+            "status": job.status.value,
+            "error": job.last_error,
             "audio": {
                 "lang": audio_file.lang.value if audio_file else lang.value,
                 "public_url": audio_file.public_url if audio_file else None,
@@ -395,6 +402,7 @@ def create_and_run_audio_job(
             "status": job.status.value,
             "processed": job.processed,
             "total": job.total,
+            "error": job.last_error,
         },
         EnvelopeMeta(),
     )

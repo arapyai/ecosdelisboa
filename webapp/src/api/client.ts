@@ -29,6 +29,12 @@ function toQuery(params: Record<string, string | number | undefined>) {
   return query ? `?${query}` : '';
 }
 
+function toAssetUrl(url?: string | null) {
+  if (!url) return '';
+  if (/^https?:\/\//.test(url)) return url;
+  return `${API_BASE}${url}`;
+}
+
 async function withMockFallback<T>(call: () => Promise<T>, fallback: T): Promise<{ data: T; isMock: boolean }> {
   try {
     return { data: await call(), isMock: false };
@@ -60,7 +66,7 @@ function normalizePoint(point: Point | PublicPointSummary | PublicPointDetail, l
     audios: text.audio_files?.map((audio) => ({
       id: audio.id,
       lang: audio.lang,
-      url: audio.public_url ?? '',
+      url: toAssetUrl(audio.public_url),
       duration_sec: audio.duration_s ?? undefined
     })) ?? []
   }));
@@ -69,7 +75,7 @@ function normalizePoint(point: Point | PublicPointSummary | PublicPointDetail, l
     text.audio_files?.map((audio) => ({
       id: audio.id,
       lang: audio.lang,
-      url: audio.public_url ?? '',
+      url: toAssetUrl(audio.public_url),
       duration_sec: audio.duration_s ?? undefined
     })) ?? []
   );

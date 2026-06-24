@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from app.models.entities import AudioFile, Text, Translation, Voice
 from app.models.enums import ContentType, SupportedLanguage, TranslationStatus
 from app.services.elevenlabs import resolve_voice_id
@@ -173,6 +175,12 @@ def test_generate_audio_with_preferred_voice(client, db_session) -> None:
         .one()
     )
     assert audio.voice_id == "custom-voice"
+    assert audio.public_url == f"/media/audio/{text.id}/en.mp3"
+    assert Path(f"media/audio/{text.id}/en.mp3").read_bytes() == b"I am nothing."
+
+    media_response = client.get(audio.public_url)
+    assert media_response.status_code == 200
+    assert media_response.content == b"I am nothing."
 
 
 def test_manual_audio_upload_is_preserved_over_auto_regeneration(client, db_session) -> None:

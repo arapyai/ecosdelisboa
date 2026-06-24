@@ -19,7 +19,7 @@ export function PointSheet({ point, lang, onClose, selectedTextId }: Props) {
     : point.texts?.[0];
 
   const authorName = text?.author?.name ?? point.author?.name;
-  const audio = text?.audios?.find((item) => item.lang === lang) ?? text?.audios?.[0] ?? point.audios?.find((item) => item.lang === lang) ?? point.audios?.[0];
+  const audio = text?.audios?.find((item) => item.lang === lang && item.url) ?? text?.audios?.find((item) => item.url);
 
   return (
     <aside className="point-sheet" aria-label={localized(point, 'title', lang)}>
@@ -32,7 +32,7 @@ export function PointSheet({ point, lang, onClose, selectedTextId }: Props) {
       </div>
       <h2>{localized(point, 'title', lang)}</h2>
       <p className="byline">{authorName}</p>
-      <AudioPlayer track={audio} label={t(lang, 'listen')} />
+      {audio ? <AudioPlayer track={audio} label={t(lang, 'listen')} /> : null}
       {text ? (
         <div className="text-block">
           <span>{t(lang, 'transcript')}</span>
