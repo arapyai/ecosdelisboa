@@ -1,4 +1,5 @@
 import json
+import random
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from urllib.error import HTTPError, URLError
@@ -108,20 +109,31 @@ class ElevenLabsService:
             raise ValueError(f"ElevenLabs audio generation failed: {exc.reason}") from exc
 
 
-def resolve_voice_id(db: Session, text: Text) -> str:
+def resolve_voice_id(
+    db: Session,
+    text: Text,
+    lang: SupportedLanguage,
+    preferred_voice_id: str | None = None,
+) -> str:
+    if preferred_voice_id is not None:
+        return preferred_voice_id
+
     author = text.author
     if author is not None and author.elevenlabs_voice_id:
         return author.elevenlabs_voice_id
 
-    default_voice = db.scalar(select(Voice).where(Voice.is_default.is_(True)))
-    if default_voice is None:
-        raise ValueError("Default voice not configured")
-    return default_voice.elevenlabs_id
+    voices = list(db.scalars(select(Voice).where(Voice.lang == lang)))
+    if not voices:
+        voices = list(db.scalars(select(Voice).where(Voice.lang == SupportedLanguage.PT)))
+    if not voices:
+        raise ValueError(f"No voice configured for language '{lang.value}'")
+
+    return random.choice(voices).elevenlabs_id
 
 
 def get_audio_source_text(text: Text, lang: SupportedLanguage) -> str:
     if lang == SupportedLanguage.PT:
-        return text.content_pt
+        return text.phonetic_content or text.content_pt
 
     translation = next(
         (
@@ -133,7 +145,7 @@ def get_audio_source_text(text: Text, lang: SupportedLanguage) -> str:
     )
     if translation is None:
         raise ValueError("Approved translation required before audio generation")
-    return translation.content
+    return translation.phonetic_content or translation.content
 
 
 def upsert_audio_file(

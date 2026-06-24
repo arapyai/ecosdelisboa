@@ -1,5 +1,6 @@
 from app.models.entities import AudioFile, Text, Translation, Voice
-from app.models.enums import SupportedLanguage, TranslationStatus
+from app.models.enums import ContentType, SupportedLanguage, TranslationStatus
+from app.services.elevenlabs import resolve_voice_id
 from tests.test_admin_content import auth_header
 from tests.test_api_public import seed_public_data
 
@@ -81,6 +82,97 @@ def test_voice_sync_and_default_selection(client, db_session) -> None:
 
     assert response.status_code == 200
     assert response.json()["data"]["default_voice_id"] == str(voice.id)
+
+
+def test_admin_voice_list_and_lang_assignment(client, db_session) -> None:
+    headers = auth_header(client, db_session)
+    sync = client.post("/api/v1/admin/voices/sync", headers=headers)
+    assert sync.status_code == 200
+
+    voice = db_session.query(Voice).filter(Voice.elevenlabs_id == "voice-default").one()
+
+    lang_resp = client.put(f"/api/v1/admin/voices/{voice.id}/lang?lang=pt", headers=headers)
+    assert lang_resp.status_code == 200
+    assert lang_resp.json()["data"]["lang"] == "pt"
+
+    list_resp = client.get("/api/v1/admin/voices", headers=headers)
+    assert list_resp.status_code == 200
+    voices = list_resp.json()["data"]
+    pt_voices = [v for v in voices if v["lang"] == "pt"]
+    assert len(pt_voices) == 1
+
+    lang_resp = client.put(f"/api/v1/admin/voices/{voice.id}/lang", headers=headers)
+    assert lang_resp.json()["data"]["lang"] is None
+
+
+def test_voice_selection_with_lang_fallback(client, db_session) -> None:
+    from app.models.entities import Author, Point, Text
+
+    pt_voice = Voice(elevenlabs_id="voice-pt", name="PT Voice", lang=SupportedLanguage.PT)
+    en_voice = Voice(elevenlabs_id="voice-en", name="EN Voice", lang=SupportedLanguage.EN)
+    db_session.add_all([pt_voice, en_voice])
+    db_session.commit()
+
+    author = Author(name="Test Author")
+    author = Author(name="Test Author")
+    point = Point(title_pt="Test Point", lat=38.7, lng=-9.14)
+    text = Text(point=point, author=author, content_pt="Test", content_type=ContentType.POETRY)
+    text.translations = []
+    text.audio_files = []
+    db_session.add_all([author, point, text])
+    db_session.commit()
+    db_session.refresh(text)
+
+    en_id = resolve_voice_id(db_session, text, SupportedLanguage.EN)
+    assert en_id == "voice-en"
+
+    fr_id = resolve_voice_id(db_session, text, SupportedLanguage.FR)
+    assert fr_id == "voice-pt"
+
+    preferred = resolve_voice_id(db_session, text, SupportedLanguage.PT, preferred_voice_id="custom")
+    assert preferred == "custom"
+
+
+def test_random_voice_selection(client, db_session) -> None:
+    from app.models.entities import Author, Point, Text
+
+    db_session.add_all([
+        Voice(elevenlabs_id="v1", name="V1", lang=SupportedLanguage.PT),
+        Voice(elevenlabs_id="v2", name="V2", lang=SupportedLanguage.PT),
+        Voice(elevenlabs_id="v3", name="V3", lang=SupportedLanguage.PT),
+    ])
+    db_session.commit()
+
+    author = Author(name="Test")
+    point = Point(title_pt="T", lat=38.7, lng=-9.14)
+    text = Text(point=point, author=author, content_pt="T", content_type=ContentType.POETRY)
+    text.translations = []
+    text.audio_files = []
+    db_session.add_all([author, point, text])
+    db_session.commit()
+    db_session.refresh(text)
+
+    ids = {resolve_voice_id(db_session, text, SupportedLanguage.PT) for _ in range(20)}
+    assert len(ids) > 1
+
+
+def test_generate_audio_with_preferred_voice(client, db_session) -> None:
+    headers = auth_header(client, db_session)
+    ids = seed_public_data(db_session)
+    text = db_session.query(Text).filter(Text.point_id == ids["point"].id).one()
+
+    response = client.post(
+        f"/api/v1/admin/audio/{text.id}/en/generate?voice_id=custom-voice",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    audio = (
+        db_session.query(AudioFile)
+        .filter(AudioFile.text_id == text.id, AudioFile.lang == SupportedLanguage.EN)
+        .one()
+    )
+    assert audio.voice_id == "custom-voice"
 
 
 def test_manual_audio_upload_is_preserved_over_auto_regeneration(client, db_session) -> None:

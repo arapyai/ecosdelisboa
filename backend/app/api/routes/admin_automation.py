@@ -27,11 +27,13 @@ r2_service = R2Service()
 
 class TranslationReviewRequest(BaseModel):
     content: str
+    phonetic_content: str | None = None
     status: TranslationStatus
 
 
 class TranslationUpsertRequest(BaseModel):
     content: str
+    phonetic_content: str | None = None
     status: TranslationStatus = TranslationStatus.PENDING
 
 
@@ -103,6 +105,7 @@ def upsert_translation(
         translation = Translation(text_id=text.id, lang=lang)
         db.add(translation)
     translation.content = payload.content
+    translation.phonetic_content = payload.phonetic_content
     translation.status = payload.status
     translation.auto_translated = False
     translation.reviewed_by = current_admin.email
@@ -115,6 +118,7 @@ def upsert_translation(
             "text_id": str(translation.text_id),
             "lang": translation.lang.value,
             "content": translation.content,
+            "phonetic_content": translation.phonetic_content,
             "status": translation.status.value,
             "auto_translated": translation.auto_translated,
             "reviewed_by": translation.reviewed_by,
@@ -134,6 +138,7 @@ def review_translation(
     if translation is None:
         raise HTTPException(status_code=404, detail="Translation not found")
     translation.content = payload.content
+    translation.phonetic_content = payload.phonetic_content
     translation.status = payload.status
     translation.reviewed_by = current_admin.email
     translation.reviewed_at = datetime.now(UTC)
@@ -191,6 +196,32 @@ def list_translations(
     )
 
 
+@router.get("/voices")
+def list_voices(
+    _: Annotated[AdminUser, Depends(get_current_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    lang: SupportedLanguage | None = None,
+) -> dict[str, object]:
+    query = select(Voice).order_by(Voice.name)
+    if lang is not None:
+        query = query.where(Voice.lang == lang)
+    voices = db.scalars(query).all()
+    return envelope(
+        [
+            {
+                "id": str(v.id),
+                "elevenlabs_id": v.elevenlabs_id,
+                "name": v.name,
+                "preview_url": v.preview_url,
+                "lang": v.lang.value if v.lang else None,
+                "is_default": v.is_default,
+            }
+            for v in voices
+        ],
+        EnvelopeMeta(total=len(voices)),
+    )
+
+
 @router.post("/voices/sync")
 def sync_voices(
     _: Annotated[AdminUser, Depends(get_current_admin)],
@@ -216,6 +247,22 @@ def sync_voices(
     return envelope({"synced": len(synced)}, EnvelopeMeta())
 
 
+@router.put("/voices/{voice_id}/lang")
+def set_voice_lang(
+    voice_id: UUID,
+    _: Annotated[AdminUser, Depends(get_current_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    lang: SupportedLanguage | None = None,
+) -> dict[str, object]:
+    voice = db.get(Voice, voice_id)
+    if voice is None:
+        raise HTTPException(status_code=404, detail="Voice not found")
+    voice.lang = lang
+    db.commit()
+    db.refresh(voice)
+    return envelope({"id": str(voice.id), "lang": voice.lang.value if voice.lang else None}, EnvelopeMeta())
+
+
 @router.put("/voices/{voice_id}/default")
 def set_default_voice(
     voice_id: UUID,
@@ -237,10 +284,11 @@ def generate_audio(
     lang: SupportedLanguage,
     _: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
+    voice_id: str | None = None,
 ) -> dict[str, object]:
     text = get_text_or_404(db, text_id)
     job = create_audio_job(db, requested_by=None, items=[(text.id, lang)])
-    run_audio_job(db, job.id, elevenlabs_service, r2_service)
+    run_audio_job(db, job.id, elevenlabs_service, r2_service, preferred_voice_id=voice_id)
     audio_file = db.scalar(
         select(AudioFile).where(AudioFile.text_id == text.id, AudioFile.lang == lang)
     )
@@ -338,8 +386,9 @@ def create_and_run_audio_job(
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
     items = [(UUID(item["text_id"]), SupportedLanguage(item["lang"])) for item in payload.items]
+    first_voice_id: str | None = payload.items[0].get("voice_id") if payload.items else None
     job = create_audio_job(db, current_admin.email, items)
-    run_audio_job(db, job.id, elevenlabs_service, r2_service)
+    run_audio_job(db, job.id, elevenlabs_service, r2_service, preferred_voice_id=first_voice_id)
     return envelope(
         {
             "job_id": str(job.id),

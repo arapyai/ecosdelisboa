@@ -120,6 +120,26 @@ def test_get_default_voice_returns_current_voice(client, db_session) -> None:
     assert response.json()["data"]["elevenlabs_id"] == "voice-default"
 
 
+def test_list_voices_filters_by_lang(client, db_session) -> None:
+    from app.models.entities import Voice
+    from app.models.enums import SupportedLanguage
+
+    db_session.add_all([
+        Voice(elevenlabs_id="v-pt", name="PT Voice", lang=SupportedLanguage.PT),
+        Voice(elevenlabs_id="v-en", name="EN Voice", lang=SupportedLanguage.EN),
+        Voice(elevenlabs_id="v-fr", name="FR Voice", lang=SupportedLanguage.FR),
+    ])
+    db_session.commit()
+
+    all_resp = client.get("/api/v1/voices")
+    assert all_resp.status_code == 200
+    assert len(all_resp.json()["data"]) == 3
+
+    pt_resp = client.get("/api/v1/voices?lang=pt")
+    assert len(pt_resp.json()["data"]) == 1
+    assert pt_resp.json()["data"][0]["elevenlabs_id"] == "v-pt"
+
+
 def test_get_route_gpx_returns_xml_payload(client, db_session) -> None:
     ids = seed_public_data(db_session)
 
