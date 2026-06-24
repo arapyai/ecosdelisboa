@@ -56,7 +56,13 @@ function normalizePoint(point: Point | PublicPointSummary | PublicPointDetail, l
     content_en: lang === 'en' && 'content' in text ? text.content : undefined,
     source_work: text.source_work,
     source_year: text.source_year,
-    content_type: text.content_type
+    content_type: text.content_type,
+    audios: text.audio_files?.map((audio) => ({
+      id: audio.id,
+      lang: audio.lang,
+      url: audio.public_url ?? '',
+      duration_sec: audio.duration_s ?? undefined
+    })) ?? []
   }));
 
   const audios = backendPoint.texts?.flatMap((text) =>

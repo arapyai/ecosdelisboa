@@ -16,6 +16,7 @@ export function MapPage({ lang }: Props) {
   const [points, setPoints] = useState<Point[]>([]);
   const [authors, setAuthors] = useState<Author[]>([]);
   const [selectedPoint, setSelectedPoint] = useState<Point | null>(null);
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [authorId, setAuthorId] = useState('');
   const [radius, setRadius] = useState(cityConfig.map.defaultRadius);
   const [isMock, setIsMock] = useState(false);
@@ -57,12 +58,21 @@ export function MapPage({ lang }: Props) {
 
   async function selectPoint(point: Point) {
     setSelectedPoint(point);
+    setSelectedTextId(null);
     const result = await api.getPoint(point.id, lang);
-    setSelectedPoint({
+    const loadedPoint = {
       ...point,
       ...result.data,
       author: result.data.author ?? result.data.authors?.[0] ?? point.author ?? point.authors?.[0] ?? authors.find((author) => author.id === point.author_id)
-    });
+    };
+    setSelectedPoint(loadedPoint);
+    if (loadedPoint.texts && loadedPoint.texts.length > 0) {
+      setSelectedTextId(loadedPoint.texts[0].id);
+    }
+  }
+
+  function selectText(point: Point, textId: string) {
+    setSelectedTextId(textId);
   }
 
   return (
@@ -123,8 +133,22 @@ export function MapPage({ lang }: Props) {
         </div>
       </section>
       <section className="map-stage">
-        <CityMap points={pointsWithAuthors} selected={selectedPoint} onSelect={selectPoint} />
-        <PointSheet point={selectedPoint} lang={lang} onClose={() => setSelectedPoint(null)} />
+        <CityMap
+          points={pointsWithAuthors}
+          selected={selectedPoint}
+          onSelect={selectPoint}
+          selectedTextId={selectedTextId}
+          onSelectText={selectText}
+        />
+        <PointSheet
+          point={selectedPoint}
+          lang={lang}
+          onClose={() => {
+            setSelectedPoint(null);
+            setSelectedTextId(null);
+          }}
+          selectedTextId={selectedTextId}
+        />
       </section>
     </main>
   );
