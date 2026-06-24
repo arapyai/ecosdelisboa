@@ -65,7 +65,10 @@ class GeocodingService:
 
         api_key = self.api_key or settings.geocoding_api_key or ""
         base = (self.base_url or settings.geocoding_base_url).rstrip("/")
-        url = f"{base}/{quote(query)}.json?access_token={api_key}&limit=1&country={country}"
+        country_code = _country_to_iso(country) if country else None
+        url = f"{base}/{quote(query)}.json?access_token={api_key}&limit=1"
+        if country_code:
+            url += f"&country={country_code}"
         request = Request(url)
         payload = self._fetch(request, settings)
         return parse_mapbox_payload(payload, query)
@@ -115,6 +118,28 @@ def parse_mapbox_payload(payload: object, query: str) -> GeocodingResult:
         raise ValueError("geocoding response is invalid")
 
     return GeocodingResult(lat=float(center[1]), lng=float(center[0]))
+
+
+_COUNTRY_TO_ISO = {
+    "portugal": "pt",
+    "brasil": "br",
+    "brazil": "br",
+    "espanha": "es",
+    "spain": "es",
+    "frança": "fr",
+    "france": "fr",
+    "inglaterra": "gb",
+    "england": "gb",
+    "reino unido": "gb",
+    "united kingdom": "gb",
+    "eua": "us",
+    "estados unidos": "us",
+    "united states": "us",
+}
+
+
+def _country_to_iso(country: str) -> str | None:
+    return _COUNTRY_TO_ISO.get(country.strip().lower())
 
 
 def geocode_address(
