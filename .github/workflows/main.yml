@@ -2,9 +2,14 @@ name: Backend CI
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "development" ]
     paths:
       - 'backend/**'
+  push:
+    branches: [ "main", "development" ]
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
 
 jobs:
   lint-and-test:
@@ -30,7 +35,10 @@ jobs:
         run: uv sync --dev
 
       - name: Run linting
-        run: uv run ruff check . 
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
 
       - name: Run tests with coverage threshold
         run: uv run pytest --cov=app --cov-fail-under=70

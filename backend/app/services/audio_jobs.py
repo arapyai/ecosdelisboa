@@ -112,8 +112,8 @@ def stream_job_events(db: Session, job_id: UUID) -> Iterator[str]:
         if job is None:
             break
         yield (
-            f"data: {{\"job_id\": \"{job.id}\", \"status\": \"{job.status.value}\", "
-            f"\"processed\": {job.processed}, \"total\": {job.total}}}\n\n"
+            f'data: {{"job_id": "{job.id}", "status": "{job.status.value}", '
+            f'"processed": {job.processed}, "total": {job.total}}}\n\n'
         )
         if job.status in {AudioJobStatus.COMPLETED, AudioJobStatus.FAILED}:
             break
