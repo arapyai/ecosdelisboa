@@ -36,6 +36,7 @@ class TextWrite(BaseModel):
     point_id: UUID
     author_id: UUID
     content_pt: str
+    phonetic_content: str | None = None
     source_work: str | None = None
     source_year: int | None = None
     content_type: ContentType
@@ -89,6 +90,7 @@ def serialize_text(text: Text) -> dict[str, object]:
         "point_id": str(text.point_id),
         "author_id": str(text.author_id),
         "content_pt": text.content_pt,
+        "phonetic_content": text.phonetic_content,
         "source_work": text.source_work,
         "source_year": text.source_year,
         "content_type": text.content_type.value,
