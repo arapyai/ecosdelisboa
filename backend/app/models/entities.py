@@ -98,6 +98,7 @@ class Text(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         ForeignKey("authors.id", ondelete="CASCADE"), nullable=False, index=True
     )
     content_pt: Mapped[str] = mapped_column(SAText, nullable=False)
+    phonetic_content: Mapped[str | None] = mapped_column(SAText, nullable=True)
     source_work: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     content_type: Mapped[ContentType] = mapped_column(
@@ -125,6 +126,7 @@ class Translation(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         value_enum(SupportedLanguage, "language"), nullable=False
     )
     content: Mapped[str] = mapped_column(SAText, nullable=False)
+    phonetic_content: Mapped[str | None] = mapped_column(SAText, nullable=True)
     status: Mapped[TranslationStatus] = mapped_column(
         value_enum(TranslationStatus, "translation_status"),
         default=TranslationStatus.PENDING,

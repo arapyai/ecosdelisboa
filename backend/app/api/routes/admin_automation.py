@@ -27,11 +27,13 @@ r2_service = R2Service()
 
 class TranslationReviewRequest(BaseModel):
     content: str
+    phonetic_content: str | None = None
     status: TranslationStatus
 
 
 class TranslationUpsertRequest(BaseModel):
     content: str
+    phonetic_content: str | None = None
     status: TranslationStatus = TranslationStatus.PENDING
 
 
@@ -103,6 +105,7 @@ def upsert_translation(
         translation = Translation(text_id=text.id, lang=lang)
         db.add(translation)
     translation.content = payload.content
+    translation.phonetic_content = payload.phonetic_content
     translation.status = payload.status
     translation.auto_translated = False
     translation.reviewed_by = current_admin.email
@@ -115,6 +118,7 @@ def upsert_translation(
             "text_id": str(translation.text_id),
             "lang": translation.lang.value,
             "content": translation.content,
+            "phonetic_content": translation.phonetic_content,
             "status": translation.status.value,
             "auto_translated": translation.auto_translated,
             "reviewed_by": translation.reviewed_by,
@@ -134,6 +138,7 @@ def review_translation(
     if translation is None:
         raise HTTPException(status_code=404, detail="Translation not found")
     translation.content = payload.content
+    translation.phonetic_content = payload.phonetic_content
     translation.status = payload.status
     translation.reviewed_by = current_admin.email
     translation.reviewed_at = datetime.now(UTC)

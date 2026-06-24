@@ -121,7 +121,7 @@ def resolve_voice_id(db: Session, text: Text) -> str:
 
 def get_audio_source_text(text: Text, lang: SupportedLanguage) -> str:
     if lang == SupportedLanguage.PT:
-        return text.content_pt
+        return text.phonetic_content or text.content_pt
 
     translation = next(
         (
@@ -133,7 +133,7 @@ def get_audio_source_text(text: Text, lang: SupportedLanguage) -> str:
     )
     if translation is None:
         raise ValueError("Approved translation required before audio generation")
-    return translation.content
+    return translation.phonetic_content or translation.content
 
 
 def upsert_audio_file(
