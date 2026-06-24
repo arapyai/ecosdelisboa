@@ -2,9 +2,10 @@ import json
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from app.core.config import get_settings
+from app.services.http_client import open_url
 
 
 @dataclass(frozen=True)
@@ -47,7 +48,7 @@ class GeocodingService:
             headers=headers,
         )
         try:
-            with urlopen(request, timeout=settings.geocoding_timeout_s) as response:
+            with open_url(request, timeout=settings.geocoding_timeout_s) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             message = exc.read().decode("utf-8", "ignore")

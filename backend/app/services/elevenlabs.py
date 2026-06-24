@@ -2,7 +2,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models.entities import AudioFile, Text, Voice
 from app.models.enums import SupportedLanguage, TranslationStatus
+from app.services.http_client import open_url
 
 
 @dataclass
@@ -45,7 +46,7 @@ class ElevenLabsService:
             headers={"xi-api-key": api_key, "Accept": "application/json"},
         )
         try:
-            with urlopen(request, timeout=get_settings().elevenlabs_timeout_s) as response:
+            with open_url(request, timeout=get_settings().elevenlabs_timeout_s) as response:
                 return json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             message = exc.read().decode("utf-8", "ignore")
@@ -94,7 +95,7 @@ class ElevenLabsService:
             },
         )
         try:
-            with urlopen(request, timeout=get_settings().elevenlabs_timeout_s) as response:
+            with open_url(request, timeout=get_settings().elevenlabs_timeout_s) as response:
                 return GeneratedAudio(
                     content=response.read(),
                     duration_s=None,
