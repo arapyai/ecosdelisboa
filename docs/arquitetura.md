@@ -9,7 +9,7 @@ O projeto Lisboa por Outros e composto por:
 - clientes: app mobile, web PWA e painel admin
 - backend: API FastAPI responsavel por conteudo, autenticacao admin, traducoes e audio
 - persistencia: PostgreSQL com PostGIS
-- integracoes externas: ElevenLabs, Gemini e Cloudflare R2
+- integracoes externas: ElevenLabs, provider LLM configuravel e Cloudflare R2
 
 ## Estrutura de repositorio alvo
 

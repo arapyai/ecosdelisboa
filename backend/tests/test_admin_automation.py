@@ -38,6 +38,38 @@ def test_translation_review_requires_explicit_status(client, db_session) -> None
     assert response.json()["data"]["status"] == "approved"
 
 
+def test_translation_can_be_upserted_and_deleted_independently(client, db_session) -> None:
+    headers = auth_header(client, db_session)
+    ids = seed_public_data(db_session)
+    text = db_session.query(Text).filter(Text.point_id == ids["point"].id).one()
+
+    upsert = client.put(
+        f"/api/v1/admin/translations/{text.id}/fr/manual",
+        headers=headers,
+        json={"content": "Je ne suis rien.", "status": "approved"},
+    )
+
+    assert upsert.status_code == 200
+    assert upsert.json()["data"]["status"] == "approved"
+    assert upsert.json()["data"]["auto_translated"] is False
+
+    update = client.put(
+        f"/api/v1/admin/translations/{text.id}/fr/manual",
+        headers=headers,
+        json={"content": "Je ne suis rien du tout.", "status": "pending"},
+    )
+    translation_id = update.json()["data"]["id"]
+
+    assert update.status_code == 200
+    assert update.json()["data"]["content"] == "Je ne suis rien du tout."
+    assert db_session.query(Translation).filter(Translation.text_id == text.id).count() == 2
+
+    delete = client.delete(f"/api/v1/admin/translations/{translation_id}", headers=headers)
+
+    assert delete.status_code == 200
+    assert delete.json()["data"]["deleted"] is True
+
+
 def test_voice_sync_and_default_selection(client, db_session) -> None:
     headers = auth_header(client, db_session)
 
@@ -66,9 +98,54 @@ def test_manual_audio_upload_is_preserved_over_auto_regeneration(client, db_sess
     generate = client.post(f"/api/v1/admin/audio/{text.id}/en/generate", headers=headers)
     assert generate.status_code == 200
 
-    audio_file = db_session.query(AudioFile).filter(AudioFile.text_id == text.id).one()
+    audio_file = (
+        db_session.query(AudioFile)
+        .filter(AudioFile.text_id == text.id, AudioFile.lang == SupportedLanguage.EN)
+        .one()
+    )
     assert audio_file.public_url == "https://audio.example/manual.mp3"
     assert audio_file.manually_uploaded is True
+
+
+def test_manual_audio_upload_can_overwrite_and_delete_audio_independently(
+    client, db_session
+) -> None:
+    headers = auth_header(client, db_session)
+    ids = seed_public_data(db_session)
+    text = db_session.query(Text).filter(Text.point_id == ids["point"].id).one()
+
+    first = client.put(
+        f"/api/v1/admin/audio/{text.id}/pt/upload",
+        headers=headers,
+        json={"public_url": "https://audio.example/first.mp3", "voice_id": "manual-1"},
+    )
+    second = client.put(
+        f"/api/v1/admin/audio/{text.id}/pt/upload",
+        headers=headers,
+        json={"public_url": "https://audio.example/second.mp3", "voice_id": "manual-2"},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    audio_file = (
+        db_session.query(AudioFile)
+        .filter(AudioFile.text_id == text.id, AudioFile.lang == SupportedLanguage.PT)
+        .one()
+    )
+    assert audio_file.public_url == "https://audio.example/second.mp3"
+    assert audio_file.voice_id == "manual-2"
+    assert audio_file.r2_key is None
+
+    delete = client.delete(f"/api/v1/admin/audio/{text.id}/pt", headers=headers)
+
+    assert delete.status_code == 200
+    assert delete.json()["data"]["deleted"] is True
+    remaining_pt_audio = (
+        db_session.query(AudioFile)
+        .filter(AudioFile.text_id == text.id, AudioFile.lang == SupportedLanguage.PT)
+        .count()
+    )
+    assert remaining_pt_audio == 0
 
 
 def test_audio_job_runs_and_sse_reports_completion(client, db_session) -> None:

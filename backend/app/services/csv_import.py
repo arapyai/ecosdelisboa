@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import Author, Point, Text
 from app.models.enums import ContentType
+from app.services.geocoding import GeocodingResult, geocode_address
 
 REQUIRED_COLUMNS = {
     "author_name",
@@ -82,7 +83,43 @@ def parse_source_year(row: dict[str, str], errors: list[str]) -> int | None:
         return None
 
 
-def preview_import(csv_content: str, db: Session) -> list[ImportPreviewRow]:
+def resolve_content_type(raw: str) -> ContentType:
+    if raw in {item.value for item in ContentType}:
+        return ContentType(raw)
+    return ContentType.POETRY
+
+
+def resolve_coordinates(
+    row: dict[str, str],
+    errors: list[str],
+    *,
+    geocoder,
+) -> tuple[float | None, float | None]:
+    lat, lng = parse_coordinate_pair(row, errors)
+    if lat is not None and lng is not None:
+        return lat, lng
+    if errors:
+        return None, None
+
+    try:
+        result = geocoder(
+            address=clean(row, "address"),
+            neighborhood=clean(row, "neighborhood") or None,
+            city=clean(row, "city") or "Lisboa",
+            country=clean(row, "country") or "Portugal",
+        )
+        return result.lat, result.lng
+    except Exception as exc:
+        errors.append(f"geocoding failed: {exc}")
+        return None, None
+
+
+def preview_import(
+    csv_content: str,
+    db: Session,
+    *,
+    geocoder=geocode_address,
+) -> list[ImportPreviewRow]:
     rows = parse_csv_rows(csv_content)
     preview: list[ImportPreviewRow] = []
 
@@ -92,7 +129,6 @@ def preview_import(csv_content: str, db: Session) -> list[ImportPreviewRow]:
         title = clean(row, "point_name")
         content_pt = clean(row, "content_pt")
         content_type = clean(row, "content_type")
-        lat, lng = parse_coordinate_pair(row, errors)
         parse_source_year(row, errors)
 
         if not author_name:
@@ -102,19 +138,17 @@ def preview_import(csv_content: str, db: Session) -> list[ImportPreviewRow]:
         if not content_pt:
             errors.append("content_pt is required")
 
-        if content_type not in {item.value for item in ContentType}:
-            errors.append("content_type must be one of prose, poetry, lyrics")
+        content_type = resolve_content_type(content_type).value
 
         action = "error"
-        if title:
+        if title and not errors:
             point = db.scalar(select(Point).where(Point.title_pt == title))
-            if point is None and (lat is None or lng is None):
-                errors.append(
-                    "lat_override and lng_override are required when creating a new point"
-                )
-
-        if not errors:
-            action = "update" if point is not None else "create"
+            if point is not None:
+                action = "update"
+            else:
+                lat, lng = resolve_coordinates(row, errors, geocoder=geocoder)
+                if lat is not None and lng is not None:
+                    action = "create"
 
         preview.append(
             ImportPreviewRow(
@@ -129,8 +163,13 @@ def preview_import(csv_content: str, db: Session) -> list[ImportPreviewRow]:
     return preview
 
 
-def apply_import(csv_content: str, db: Session) -> dict[str, object]:
-    preview = preview_import(csv_content, db)
+def apply_import(
+    csv_content: str,
+    db: Session,
+    *,
+    geocoder=geocode_address,
+) -> dict[str, object]:
+    preview = preview_import(csv_content, db, geocoder=geocoder)
     created = 0
     updated = 0
 
@@ -145,10 +184,10 @@ def apply_import(csv_content: str, db: Session) -> dict[str, object]:
             db.flush()
 
         point = db.scalar(select(Point).where(Point.title_pt == preview_row.title))
-        row_errors: list[str] = []
-        lat, lng = parse_coordinate_pair(row, row_errors)
-        source_year = parse_source_year(row, row_errors)
+        source_year = parse_source_year(row, [])
         if point is None:
+            errors: list[str] = []
+            lat, lng = resolve_coordinates(row, errors, geocoder=geocoder)
             if lat is None or lng is None:
                 continue
             point = Point(
@@ -166,7 +205,7 @@ def apply_import(csv_content: str, db: Session) -> dict[str, object]:
                 content_pt=clean(row, "content_pt"),
                 source_work=clean(row, "source_work") or None,
                 source_year=source_year,
-                content_type=ContentType(clean(row, "content_type")),
+                content_type=resolve_content_type(clean(row, "content_type")),
             )
             db.add(text)
             created += 1
@@ -174,9 +213,10 @@ def apply_import(csv_content: str, db: Session) -> dict[str, object]:
 
         point.address = clean(row, "address") or point.address
         point.neighborhood = clean(row, "neighborhood") or point.neighborhood
-        if lat is not None and lng is not None:
-            point.lat = lat
-            point.lng = lng
+        olat, olng = parse_coordinate_pair(row, [])
+        if olat is not None and olng is not None:
+            point.lat = olat
+            point.lng = olng
         existing_text = db.scalar(
             select(Text).where(Text.point_id == point.id, Text.author_id == author.id)
         )
@@ -187,14 +227,14 @@ def apply_import(csv_content: str, db: Session) -> dict[str, object]:
                 content_pt=clean(row, "content_pt"),
                 source_work=clean(row, "source_work") or None,
                 source_year=source_year,
-                content_type=ContentType(clean(row, "content_type")),
+                content_type=resolve_content_type(clean(row, "content_type")),
             )
             db.add(existing_text)
         else:
             existing_text.content_pt = clean(row, "content_pt")
             existing_text.source_work = clean(row, "source_work") or None
             existing_text.source_year = source_year
-            existing_text.content_type = ContentType(clean(row, "content_type"))
+            existing_text.content_type = resolve_content_type(clean(row, "content_type"))
         updated += 1
 
     db.commit()
