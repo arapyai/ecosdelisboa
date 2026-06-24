@@ -143,11 +143,13 @@ def test_voice_selection_with_lang_fallback(client, db_session) -> None:
 def test_random_voice_selection(client, db_session) -> None:
     from app.models.entities import Author, Point, Text
 
-    db_session.add_all([
-        Voice(elevenlabs_id="v1", name="V1", lang=SupportedLanguage.PT),
-        Voice(elevenlabs_id="v2", name="V2", lang=SupportedLanguage.PT),
-        Voice(elevenlabs_id="v3", name="V3", lang=SupportedLanguage.PT),
-    ])
+    db_session.add_all(
+        [
+            Voice(elevenlabs_id="v1", name="V1", lang=SupportedLanguage.PT),
+            Voice(elevenlabs_id="v2", name="V2", lang=SupportedLanguage.PT),
+            Voice(elevenlabs_id="v3", name="V3", lang=SupportedLanguage.PT),
+        ]
+    )
     db_session.commit()
 
     author = Author(name="Test")

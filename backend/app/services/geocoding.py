@@ -40,7 +40,9 @@ class GeocodingService:
         return self._geocode_nominatim(settings, query)
 
     def _geocode_nominatim(
-        self, settings, query: str,
+        self,
+        settings,
+        query: str,
     ) -> GeocodingResult:
         params: dict[str, str | int] = {"q": query, "format": "jsonv2", "limit": 1}
         api_key = self.api_key or settings.geocoding_api_key
@@ -59,7 +61,10 @@ class GeocodingService:
         return parse_nominatim_payload(payload, query)
 
     def _geocode_mapbox(
-        self, settings, query: str, country: str,
+        self,
+        settings,
+        query: str,
+        country: str,
     ) -> GeocodingResult:
         from urllib.parse import quote
 
