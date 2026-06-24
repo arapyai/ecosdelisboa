@@ -20,12 +20,12 @@ point_name,address,neighborhood,city,country,lat_override,lng_override,author_na
 | `address` | Endereco usado para geocoding. Ex.: `Largo do Chiado`. |
 | `author_name` | Nome do autor do texto. |
 | `content_pt` | Texto original em portugues. |
-| `content_type` | Tipo do conteudo. Valores aceitos: `prose`, `poetry`, `lyrics`. |
 
 ## Campos opcionais
 
 | Campo | Descricao |
 | --- | --- |
+| `content_type` | Tipo do conteudo. Valores aceitos: `prose`, `poetry`, `lyrics`. Se vazio, o backend infere `poetry` para textos com varias linhas curtas e `prose` nos demais casos. |
 | `neighborhood` | Bairro ou zona. Ajuda na revisao editorial e no geocoding. |
 | `city` | Cidade. Se vazio, o importador assume `Lisboa`. |
 | `country` | Pais. Se vazio, o importador assume `Portugal`. |
@@ -33,6 +33,16 @@ point_name,address,neighborhood,city,country,lat_override,lng_override,author_na
 | `lng_override` | Longitude manual, usada junto com `lat_override`. |
 | `source_work` | Obra, livro, poema, cronica ou fonte do trecho. |
 | `source_year` | Ano da obra ou fonte, quando conhecido. |
+
+## Colunas curatoriais opcionais aceitas
+
+O importador tambem aceita algumas colunas extras vindas de planilhas editoriais. Colunas desconhecidas sao ignoradas.
+
+| Campo | Uso no backend |
+| --- | --- |
+| `Microbio curta (camada 2 do app)` ou `author_bio_pt` | Preenche `authors.bio_pt` quando o autor for criado ou ainda estiver sem bio. |
+| `Data de nascimento` ou `birth_date` | Extrai o ano inicial para `authors.birth_year`. |
+| `Data de morte` ou `death_date` | Extrai o ano inicial para `authors.death_year`. |
 
 ## Regras de geocoding
 
@@ -83,6 +93,6 @@ Terreiro do Paco,Praca do Comercio,Baixa,Lisboa,Portugal,38.7076,-9.1365,Fernand
 ## Observacoes para a equipe de conteudo
 
 - Textos com virgula devem ficar entre aspas.
-- Quebras de linha dentro de `content_pt` devem ser evitadas no primeiro fluxo de importacao.
+- Quebras de linha dentro de `content_pt` sao aceitas quando o campo estiver corretamente entre aspas.
 - `lat_override` e `lng_override` devem ser preenchidos juntos ou deixados ambos vazios.
 - O arquivo deve ser salvo em UTF-8.

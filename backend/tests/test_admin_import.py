@@ -84,6 +84,39 @@ def test_csv_import_allows_multiple_authors_for_same_point(db_session) -> None:
     assert len(db_session.query(Text).all()) == 2
 
 
+def test_csv_import_infers_blank_content_type_and_imports_author_metadata(db_session) -> None:
+    csv_content = (
+        "point_name,address,neighborhood,city,country,lat_override,lng_override,"
+        "author_name,content_pt,content_type,source_work,source_year,"
+        "Data de nascimento,Data de morte,Microbio curta (camada 2 do app)\n"
+        "Calçada de Carriche,Calçada de Carriche,,Lisboa,Portugal,38.7805,-9.1602,"
+        'António Gedeão,"Luísa sobe,\nsobe a calçada,\nsobe e não pode",,'
+        'Lisboa e seus poetas,,1906-11-24,1997-02-19,"Poeta e professor."\n'
+    )
+
+    result = apply_import(csv_content, db_session)
+
+    author = db_session.query(Author).one()
+    text = db_session.query(Text).one()
+    assert result["created"] == 1
+    assert text.content_type.value == "poetry"
+    assert author.bio_pt == "Poeta e professor."
+    assert author.birth_year == 1906
+    assert author.death_year == 1997
+
+
+def test_csv_preview_keeps_missing_point_and_address_as_errors(db_session) -> None:
+    csv_content = (
+        "point_name,address,author_name,content_pt,content_type\n"
+        ",,António Gedeão,Luísa sobe,\n"
+    )
+
+    preview = preview_import(csv_content, db_session, geocoder=fake_geocoder)
+
+    assert preview[0].action == "error"
+    assert preview[0].errors == ["point_name is required", "address is required"]
+
+
 def test_csv_preview_reports_geocoding_errors(db_session) -> None:
     def failing_geocoder(**_: object) -> GeocodingResult:
         raise ValueError("not found")

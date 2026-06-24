@@ -18,7 +18,6 @@ REQUIRED_COLUMNS = {
     "address",
     "author_name",
     "content_pt",
-    "content_type",
 }
 
 
@@ -47,6 +46,9 @@ class ImportRow:
     content_type: ContentType | None
     source_work: str | None
     source_year: int | None
+    author_bio_pt: str | None
+    author_birth_year: int | None
+    author_death_year: int | None
     errors: list[str]
 
 
@@ -70,6 +72,14 @@ def clean(row: dict[str, str], field: str) -> str:
     return (row.get(field) or "").strip()
 
 
+def first_clean(row: dict[str, str], *fields: str) -> str:
+    for field in fields:
+        value = clean(row, field)
+        if value:
+            return value
+    return ""
+
+
 def parse_optional_int(raw: str, field: str, errors: list[str]) -> int | None:
     if not raw:
         return None
@@ -88,6 +98,30 @@ def parse_optional_float(raw: str, field: str, errors: list[str]) -> float | Non
     except ValueError:
         errors.append(f"{field} must be a valid number")
         return None
+
+
+def parse_year_from_date(raw: str) -> int | None:
+    if len(raw) >= 4 and raw[:4].isdigit():
+        return int(raw[:4])
+    return None
+
+
+def infer_content_type(content_pt: str) -> ContentType:
+    lines = [line.strip() for line in content_pt.splitlines() if line.strip()]
+    if len(lines) >= 3:
+        average_line_length = sum(len(line) for line in lines) / len(lines)
+        if average_line_length <= 80:
+            return ContentType.POETRY
+    return ContentType.PROSE
+
+
+def parse_content_type(raw: str, content_pt: str, errors: list[str]) -> ContentType | None:
+    if not raw:
+        return infer_content_type(content_pt)
+    if raw in {item.value for item in ContentType}:
+        return ContentType(raw)
+    errors.append("content_type must be one of prose, poetry, lyrics")
+    return None
 
 
 def find_point(db: Session, point_name: str, address: str) -> Point | None:
@@ -168,6 +202,13 @@ def build_import_rows(
         content_type_raw = clean(row, "content_type")
         source_work = clean(row, "source_work") or None
         source_year = parse_optional_int(clean(row, "source_year"), "source_year", errors)
+        author_bio_pt = (
+            first_clean(row, "author_bio_pt", "Microbio curta (camada 2 do app)") or None
+        )
+        author_birth_year = parse_year_from_date(
+            first_clean(row, "birth_date", "Data de nascimento")
+        )
+        author_death_year = parse_year_from_date(first_clean(row, "death_date", "Data de morte"))
 
         if not point_name:
             errors.append("point_name is required")
@@ -178,11 +219,7 @@ def build_import_rows(
         if not content_pt:
             errors.append("content_pt is required")
 
-        content_type = None
-        if content_type_raw in {item.value for item in ContentType}:
-            content_type = ContentType(content_type_raw)
-        else:
-            errors.append("content_type must be one of prose, poetry, lyrics")
+        content_type = parse_content_type(content_type_raw, content_pt, errors)
 
         lat: float | None = None
         lng: float | None = None
@@ -213,6 +250,9 @@ def build_import_rows(
                 content_type=content_type,
                 source_work=source_work,
                 source_year=source_year,
+                author_bio_pt=author_bio_pt,
+                author_birth_year=author_birth_year,
+                author_death_year=author_death_year,
                 errors=errors,
             )
         )
@@ -280,6 +320,9 @@ def apply_import(
             author = Author(name=row.author_name)
             db.add(author)
             db.flush()
+        author.bio_pt = row.author_bio_pt or author.bio_pt
+        author.birth_year = row.author_birth_year or author.birth_year
+        author.death_year = row.author_death_year or author.death_year
 
         point = find_point(db, row.point_name, row.address)
         if point is None:
