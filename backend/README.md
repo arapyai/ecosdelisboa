@@ -37,6 +37,11 @@ Variaveis principais:
 - `ADMIN_INITIAL_EMAIL`
 - `ADMIN_INITIAL_PASSWORD`
 - `CORS_ORIGINS`
+- `TRANSLATION_LLM_PROVIDER` (padrao: `claude`)
+- `TRANSLATION_LLM_MODEL`
+- `TRANSLATION_LLM_API_KEY` ou `ANTHROPIC_API_KEY`
+- `ELEVENLABS_API_KEY`
+- `GEOCODING_API_KEY` quando o provedor de geocoding exigir chave
 
 ## Desenvolvimento
 
@@ -145,12 +150,16 @@ tests/
 
 ### Traducoes
 - Gera traducao automatica com status `pending`.
+- Usa provider LLM configuravel, com `claude` como padrao.
 - Revisao humana explicita para `approved` ou `rejected`.
+- Traducoes podem ser criadas, sobrescritas ou removidas manualmente sem reimportar CSV.
 
 ### Audio
 - Usa voz do autor associado ao texto quando existir.
 - Usa voz padrao como fallback.
 - Upload manual preservado contra regeneracao automatica.
+- Upload manual pode sobrescrever o audio de uma lingua de forma independente.
+- Audio pode ser removido por texto e lingua para permitir nova geracao ou novo upload.
 
 ### Jobs e SSE
 - Jobs de geracao de audio sao persistidos na base.

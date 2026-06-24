@@ -195,9 +195,12 @@ Regras:
 ### Traducao e audio
 
 - traducao por texto e lingua em `/api/v1/admin/translations/*`
+- upsert manual de traducao em `/api/v1/admin/translations/{text_id}/{lang}/manual`
 - revisao de traducao em `/api/v1/admin/translations/{translation_id}/review`
+- remocao de traducao em `/api/v1/admin/translations/{translation_id}`
 - sincronizacao e configuracao de vozes em `/api/v1/admin/voices/*`
 - geracao, upload e jobs de audio em `/api/v1/admin/audio/*`
+- remocao de audio por texto e lingua em `/api/v1/admin/audio/{text_id}/{lang}`
 
 ## Exemplo de CSV de Importacao
 
@@ -227,16 +230,19 @@ Fluxo:
 3. faz upload para o R2
 4. atualiza `audio_files`
 
-### Google Gemini
+### LLM de traducao
 
 Uso:
 
 - gerar traducao automatica de texto literario com contexto do autor e da obra
+- provider padrao: Claude, configurado por `TRANSLATION_LLM_PROVIDER=claude`
+- modelo padrao: `TRANSLATION_LLM_MODEL=claude-3-5-sonnet-latest`
 
 Regras:
 
 - o retorno e armazenado como `pending`
 - nunca vira `approved` automaticamente
+- traducoes manuais usam `auto_translated=false` e podem ser aprovadas no mesmo upsert
 
 Prompt esperado:
 
