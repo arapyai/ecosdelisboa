@@ -265,7 +265,10 @@ def set_voice_lang(
     voice.lang = lang
     db.commit()
     db.refresh(voice)
-    return envelope({"id": str(voice.id), "lang": voice.lang.value if voice.lang else None}, EnvelopeMeta())
+    return envelope(
+        {"id": str(voice.id), "lang": voice.lang.value if voice.lang else None},
+        EnvelopeMeta(),
+    )
 
 
 @router.put("/voices/{voice_id}/default")

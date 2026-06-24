@@ -131,7 +131,12 @@ def test_voice_selection_with_lang_fallback(client, db_session) -> None:
     fr_id = resolve_voice_id(db_session, text, SupportedLanguage.FR)
     assert fr_id == "voice-pt"
 
-    preferred = resolve_voice_id(db_session, text, SupportedLanguage.PT, preferred_voice_id="custom")
+    preferred = resolve_voice_id(
+        db_session,
+        text,
+        SupportedLanguage.PT,
+        preferred_voice_id="custom",
+    )
     assert preferred == "custom"
 
 
