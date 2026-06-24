@@ -3,12 +3,12 @@ import pytest
 from app.models.entities import Text
 from app.models.enums import SupportedLanguage
 from app.services.elevenlabs import ElevenLabsService
-from app.services.geocoding import parse_geocoding_payload
+from app.services.geocoding import parse_nominatim_payload
 from app.services.llm import build_translation_prompt, extract_claude_text
 
 
 def test_geocoding_payload_parser_returns_coordinates() -> None:
-    result = parse_geocoding_payload([{"lat": "38.7076", "lon": "-9.1365"}], "Lisboa")
+    result = parse_nominatim_payload([{"lat": "38.7076", "lon": "-9.1365"}], "Lisboa")
 
     assert result.lat == 38.7076
     assert result.lng == -9.1365
@@ -16,7 +16,7 @@ def test_geocoding_payload_parser_returns_coordinates() -> None:
 
 def test_geocoding_payload_parser_rejects_empty_results() -> None:
     with pytest.raises(ValueError, match="Address not found"):
-        parse_geocoding_payload([], "Lugar inexistente")
+        parse_nominatim_payload([], "Lugar inexistente")
 
 
 def test_claude_response_extractor_returns_text() -> None:
