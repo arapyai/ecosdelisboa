@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     elevenlabs_base_url: str = "https://api.elevenlabs.io/v1"
     elevenlabs_model_id: str = "eleven_multilingual_v2"
     elevenlabs_timeout_s: float = 60.0
+    elevenlabs_default_voice_id: str | None = None
+    audio_storage_dir: str = "media"
+    audio_public_base_url: str = "/media"
 
 
 @lru_cache

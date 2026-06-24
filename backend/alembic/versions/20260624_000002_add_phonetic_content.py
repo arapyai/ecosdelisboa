@@ -19,9 +19,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column("texts", sa.Column("phonetic_content", sa.Text(), nullable=True))
-    op.add_column(
-        "translations", sa.Column("phonetic_content", sa.Text(), nullable=True)
-    )
+    op.add_column("translations", sa.Column("phonetic_content", sa.Text(), nullable=True))
 
 
 def downgrade() -> None:

@@ -21,6 +21,7 @@ export interface PublicPointSummary {
   neighborhood?: string | null;
   lat: number;
   lng: number;
+  texts_count?: number;
 }
 
 export interface PublicAuthorSummary {

@@ -124,11 +124,13 @@ def test_list_voices_filters_by_lang(client, db_session) -> None:
     from app.models.entities import Voice
     from app.models.enums import SupportedLanguage
 
-    db_session.add_all([
-        Voice(elevenlabs_id="v-pt", name="PT Voice", lang=SupportedLanguage.PT),
-        Voice(elevenlabs_id="v-en", name="EN Voice", lang=SupportedLanguage.EN),
-        Voice(elevenlabs_id="v-fr", name="FR Voice", lang=SupportedLanguage.FR),
-    ])
+    db_session.add_all(
+        [
+            Voice(elevenlabs_id="v-pt", name="PT Voice", lang=SupportedLanguage.PT),
+            Voice(elevenlabs_id="v-en", name="EN Voice", lang=SupportedLanguage.EN),
+            Voice(elevenlabs_id="v-fr", name="FR Voice", lang=SupportedLanguage.FR),
+        ]
+    )
     db_session.commit()
 
     all_resp = client.get("/api/v1/voices")

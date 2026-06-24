@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from app.models.entities import AudioFile, Text, Translation, Voice
 from app.models.enums import ContentType, SupportedLanguage, TranslationStatus
 from app.services.elevenlabs import resolve_voice_id
@@ -129,18 +131,25 @@ def test_voice_selection_with_lang_fallback(client, db_session) -> None:
     fr_id = resolve_voice_id(db_session, text, SupportedLanguage.FR)
     assert fr_id == "voice-pt"
 
-    preferred = resolve_voice_id(db_session, text, SupportedLanguage.PT, preferred_voice_id="custom")
+    preferred = resolve_voice_id(
+        db_session,
+        text,
+        SupportedLanguage.PT,
+        preferred_voice_id="custom",
+    )
     assert preferred == "custom"
 
 
 def test_random_voice_selection(client, db_session) -> None:
     from app.models.entities import Author, Point, Text
 
-    db_session.add_all([
-        Voice(elevenlabs_id="v1", name="V1", lang=SupportedLanguage.PT),
-        Voice(elevenlabs_id="v2", name="V2", lang=SupportedLanguage.PT),
-        Voice(elevenlabs_id="v3", name="V3", lang=SupportedLanguage.PT),
-    ])
+    db_session.add_all(
+        [
+            Voice(elevenlabs_id="v1", name="V1", lang=SupportedLanguage.PT),
+            Voice(elevenlabs_id="v2", name="V2", lang=SupportedLanguage.PT),
+            Voice(elevenlabs_id="v3", name="V3", lang=SupportedLanguage.PT),
+        ]
+    )
     db_session.commit()
 
     author = Author(name="Test")
@@ -173,6 +182,12 @@ def test_generate_audio_with_preferred_voice(client, db_session) -> None:
         .one()
     )
     assert audio.voice_id == "custom-voice"
+    assert audio.public_url == f"/media/audio/{text.id}/en.mp3"
+    assert Path(f"media/audio/{text.id}/en.mp3").read_bytes() == b"I am nothing."
+
+    media_response = client.get(audio.public_url)
+    assert media_response.status_code == 200
+    assert media_response.content == b"I am nothing."
 
 
 def test_manual_audio_upload_is_preserved_over_auto_regeneration(client, db_session) -> None:

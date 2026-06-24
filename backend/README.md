@@ -41,6 +41,9 @@ Variaveis principais:
 - `TRANSLATION_LLM_MODEL`
 - `TRANSLATION_LLM_API_KEY` ou `ANTHROPIC_API_KEY`
 - `ELEVENLABS_API_KEY`
+- `ELEVENLABS_DEFAULT_VOICE_ID` quando a API key nao puder listar vozes ou o seed usar placeholder
+- `AUDIO_STORAGE_DIR` (padrao: `media`, pasta local onde MP3s gerados sao gravados)
+- `AUDIO_PUBLIC_BASE_URL` (padrao: `/media`, prefixo publico servido pela API)
 - `GEOCODING_API_KEY` quando o provedor de geocoding exigir chave
 
 ## Desenvolvimento
@@ -176,5 +179,3 @@ tests/
 - As integracoes externas atuais estao encapsuladas em services testaveis e prontas para substituicao por clientes reais.
 
 - 
-
-

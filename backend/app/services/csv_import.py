@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import Author, Point, Text
 from app.models.enums import ContentType
-from app.services.geocoding import GeocodingResult, geocode_address
+from app.services.geocoding import geocode_address
 
 REQUIRED_COLUMNS = {
     "author_name",

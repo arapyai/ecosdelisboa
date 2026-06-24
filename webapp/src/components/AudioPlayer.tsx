@@ -22,11 +22,10 @@ export function AudioPlayer({ track, label }: Props) {
     setTime(0);
   }, [track?.id]);
 
+  if (!track?.url) return null;
+
   function toggle() {
-    if (!track?.url || !audioRef.current) {
-      setPlaying((current) => !current);
-      return;
-    }
+    if (!audioRef.current) return;
 
     if (audioRef.current.paused) {
       audioRef.current.play();

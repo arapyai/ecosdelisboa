@@ -118,9 +118,15 @@ def resolve_voice_id(
     if preferred_voice_id is not None:
         return preferred_voice_id
 
+    default_voice_id = get_settings().elevenlabs_default_voice_id
     author = text.author
     if author is not None and author.elevenlabs_voice_id:
+        if author.elevenlabs_voice_id == "voice-default-dev" and default_voice_id:
+            return default_voice_id
         return author.elevenlabs_voice_id
+
+    if default_voice_id:
+        return default_voice_id
 
     voices = list(db.scalars(select(Voice).where(Voice.lang == lang)))
     if not voices:

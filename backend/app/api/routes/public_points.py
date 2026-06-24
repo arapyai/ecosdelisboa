@@ -57,6 +57,7 @@ def serialize_point_summary(point: Point) -> dict[str, object]:
         "neighborhood": point.neighborhood,
         "lat": point.lat,
         "lng": point.lng,
+        "texts_count": len(point.texts),
     }
 
 

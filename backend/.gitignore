@@ -4,6 +4,7 @@ __pycache__/
 .ruff_cache/
 .coverage
 app.db
+media/
 htmlcov/
 dist/
 build/
