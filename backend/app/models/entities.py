@@ -53,6 +53,9 @@ class Voice(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     elevenlabs_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     preview_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    lang: Mapped[SupportedLanguage | None] = mapped_column(
+        value_enum(SupportedLanguage, "language"), nullable=True
+    )
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
