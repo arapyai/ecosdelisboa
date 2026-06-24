@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models.entities import Text, Translation
 from app.models.enums import SupportedLanguage, TranslationStatus
+from app.services.http_client import open_url
 
 
 @dataclass
@@ -66,7 +67,7 @@ class LLMTranslationService:
             },
         )
         try:
-            with urlopen(request, timeout=settings.translation_llm_timeout_s) as response:
+            with open_url(request, timeout=settings.translation_llm_timeout_s) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             message = exc.read().decode("utf-8", "ignore")
