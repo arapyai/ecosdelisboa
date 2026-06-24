@@ -40,7 +40,7 @@ O produto e composto por quatro superficies principais:
 | Infra principal | Railway |
 | Storage de audio | Cloudflare R2 |
 | Sintese de voz | ElevenLabs |
-| Traducao automatica | Google Gemini |
+| Traducao automatica | LLM provider configuravel, padrao Claude |
 | Modelo editorial | revisao humana obrigatoria para traducoes |
 
 ## Arquitetura de Alto Nivel
@@ -62,7 +62,7 @@ Backend API (FastAPI)
         |
         +--> PostgreSQL + PostGIS
         +--> ElevenLabs
-        +--> Google Gemini
+        +--> LLM provider (Claude por padrao)
         +--> Cloudflare R2
 ```
 
@@ -92,7 +92,7 @@ No estado atual, `backend/` e `docs/` ja estao organizados como workspaces separ
 | Web publica | React 18 + Vite | PWA |
 | Admin UI | React 18 + Vite + TanStack Query | SPA interna |
 | Audio | ElevenLabs | voz por autor com fallback |
-| Traducao | Google Gemini | traducao assistida com contexto literario |
+| Traducao | LLM provider configuravel | traducao assistida com contexto literario |
 | Storage | Cloudflare R2 | armazenamento de MP3 |
 | CI/CD | GitHub Actions + Railway | testes e deploy |
 | Observabilidade | Railway Metrics + Sentry | logs e erros |
@@ -170,14 +170,16 @@ O painel administrativo e uma aplicacao interna com autenticacao por email e pas
 - o fluxo mostra preview antes da confirmacao
 - a importacao e idempotente por titulo do ponto + autor do texto
 - a importacao nao dispara automaticamente traducao nem audio
+- textos importados podem ser corrigidos depois pelo CRUD admin, sem nova importacao
 
 ### Traducao editorial
 
 - o texto original e sempre mantido em portugues
-- o backend pode gerar traducao automatica via Gemini
+- o backend pode gerar traducao automatica via provider LLM, com Claude como padrao
 - toda traducao criada automaticamente entra com status `pending`
 - nenhuma traducao e aprovada automaticamente
 - aprovacao e rejeicao acontecem no painel admin
+- a equipe pode criar, sobrescrever ou remover traducoes manualmente por texto e lingua
 
 ### Geracao de audio
 
@@ -186,6 +188,7 @@ O painel administrativo e uma aplicacao interna com autenticacao por email e pas
 - audio em PT pode ser gerado diretamente
 - audio em outras linguas depende de traducao aprovada
 - jobs em lote reportam progresso por SSE
+- audio pode ser gerado, enviado manualmente, sobrescrito manualmente ou removido por lingua
 
 ### Substituicao manual de audio
 
@@ -205,7 +208,7 @@ O painel administrativo e uma aplicacao interna com autenticacao por email e pas
 | Integracao | Uso principal |
 | :--- | :--- |
 | ElevenLabs | listar vozes, gerar audio e preview |
-| Google Gemini | gerar traducao automatica com contexto literario |
+| LLM provider | gerar traducao automatica com contexto literario |
 | Cloudflare R2 | guardar e servir MP3 |
 | Railway | hospedar API e PostgreSQL |
 

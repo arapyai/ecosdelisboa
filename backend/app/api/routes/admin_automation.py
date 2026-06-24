@@ -14,13 +14,13 @@ from app.models.entities import AdminUser, AudioFile, Text, Translation, Voice
 from app.models.enums import SupportedLanguage, TranslationStatus
 from app.schemas.common import EnvelopeMeta, envelope
 from app.services.audio_jobs import create_audio_job, run_audio_job, stream_job_events
-from app.services.elevenlabs import ElevenLabsService, upsert_audio_file
-from app.services.gemini import GeminiService, request_translation
+from app.services.elevenlabs import ElevenLabsService
+from app.services.llm import LLMTranslationService, request_translation
 from app.services.r2 import R2Service
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-automation"])
 
-gemini_service = GeminiService()
+translation_service = LLMTranslationService()
 elevenlabs_service = ElevenLabsService()
 r2_service = R2Service()
 
@@ -28,6 +28,11 @@ r2_service = R2Service()
 class TranslationReviewRequest(BaseModel):
     content: str
     status: TranslationStatus
+
+
+class TranslationUpsertRequest(BaseModel):
+    content: str
+    status: TranslationStatus = TranslationStatus.PENDING
 
 
 class AudioUploadRequest(BaseModel):
@@ -65,7 +70,7 @@ def trigger_translation(
     if lang == SupportedLanguage.PT:
         raise HTTPException(status_code=400, detail="Portuguese is the source language")
     text = get_text_or_404(db, text_id)
-    translation = request_translation(db, text, lang, gemini_service)
+    translation = request_translation(db, text, lang, translation_service)
     db.commit()
     db.refresh(translation)
     return envelope(
@@ -75,6 +80,44 @@ def trigger_translation(
             "lang": translation.lang.value,
             "content": translation.content,
             "status": translation.status.value,
+        },
+        EnvelopeMeta(),
+    )
+
+
+@router.put("/translations/{text_id}/{lang}/manual")
+def upsert_translation(
+    text_id: UUID,
+    lang: SupportedLanguage,
+    payload: TranslationUpsertRequest,
+    current_admin: Annotated[AdminUser, Depends(get_current_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict[str, object]:
+    if lang == SupportedLanguage.PT:
+        raise HTTPException(status_code=400, detail="Portuguese is the source language")
+    text = get_text_or_404(db, text_id)
+    translation = db.scalar(
+        select(Translation).where(Translation.text_id == text.id, Translation.lang == lang)
+    )
+    if translation is None:
+        translation = Translation(text_id=text.id, lang=lang)
+        db.add(translation)
+    translation.content = payload.content
+    translation.status = payload.status
+    translation.auto_translated = False
+    translation.reviewed_by = current_admin.email
+    translation.reviewed_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(translation)
+    return envelope(
+        {
+            "id": str(translation.id),
+            "text_id": str(translation.text_id),
+            "lang": translation.lang.value,
+            "content": translation.content,
+            "status": translation.status.value,
+            "auto_translated": translation.auto_translated,
+            "reviewed_by": translation.reviewed_by,
         },
         EnvelopeMeta(),
     )
@@ -104,6 +147,20 @@ def review_translation(
         },
         EnvelopeMeta(),
     )
+
+
+@router.delete("/translations/{translation_id}")
+def delete_translation(
+    translation_id: UUID,
+    _: Annotated[AdminUser, Depends(get_current_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict[str, object]:
+    translation = db.get(Translation, translation_id)
+    if translation is None:
+        raise HTTPException(status_code=404, detail="Translation not found")
+    db.delete(translation)
+    db.commit()
+    return envelope({"deleted": True}, EnvelopeMeta())
 
 
 @router.get("/translations")
@@ -209,17 +266,18 @@ def upload_audio(
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
     text = get_text_or_404(db, text_id)
-    generated = elevenlabs_service.generate_audio(text.content_pt, payload.voice_id or "manual")
-    audio_file = upsert_audio_file(
-        db,
-        text,
-        lang,
-        generated,
-        payload.public_url,
-        manually_uploaded=True,
+    audio_file = db.scalar(
+        select(AudioFile).where(AudioFile.text_id == text.id, AudioFile.lang == lang)
     )
+    if audio_file is None:
+        audio_file = AudioFile(text_id=text.id, lang=lang)
+        db.add(audio_file)
+    audio_file.r2_key = None
+    audio_file.public_url = payload.public_url
     audio_file.duration_s = payload.duration_s
     audio_file.voice_id = payload.voice_id
+    audio_file.manually_uploaded = True
+    audio_file.generated_at = None
     db.commit()
     db.refresh(audio_file)
     return envelope(
@@ -230,6 +288,26 @@ def upload_audio(
         },
         EnvelopeMeta(),
     )
+
+
+@router.delete("/audio/{text_id}/{lang}")
+def delete_audio(
+    text_id: UUID,
+    lang: SupportedLanguage,
+    _: Annotated[AdminUser, Depends(get_current_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict[str, object]:
+    text = get_text_or_404(db, text_id)
+    audio_file = db.scalar(
+        select(AudioFile).where(AudioFile.text_id == text.id, AudioFile.lang == lang)
+    )
+    if audio_file is None:
+        raise HTTPException(status_code=404, detail="Audio not found")
+    if audio_file.r2_key:
+        r2_service.delete_audio(audio_file.r2_key)
+    db.delete(audio_file)
+    db.commit()
+    return envelope({"deleted": True}, EnvelopeMeta())
 
 
 @router.get("/audio")
