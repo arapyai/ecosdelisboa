@@ -18,10 +18,7 @@ def haversine_distance_m(lat1: float, lng1: float, lat2: float, lng2: float) -> 
     radius_m = 6_371_000
     d_lat = radians(lat2 - lat1)
     d_lng = radians(lng2 - lng1)
-    a = (
-        sin(d_lat / 2) ** 2
-        + cos(radians(lat1)) * cos(radians(lat2)) * sin(d_lng / 2) ** 2
-    )
+    a = sin(d_lat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(d_lng / 2) ** 2
     return 2 * radius_m * asin(sqrt(a))
 
 
@@ -60,6 +57,7 @@ def serialize_point_summary(point: Point) -> dict[str, object]:
         "neighborhood": point.neighborhood,
         "lat": point.lat,
         "lng": point.lng,
+        "texts_count": len(point.texts),
     }
 
 
@@ -71,7 +69,11 @@ def list_points(
     radius: float | None = Query(default=None, gt=0),
     author_id: UUID | None = None,
 ) -> dict[str, object]:
-    query = select(Point).options(selectinload(Point.texts).selectinload(Text.author)).order_by(Point.title_pt)
+    query = (
+        select(Point)
+        .options(selectinload(Point.texts).selectinload(Text.author))
+        .order_by(Point.title_pt)
+    )
     if author_id:
         query = query.where(Point.texts.any(Text.author_id == author_id))
 

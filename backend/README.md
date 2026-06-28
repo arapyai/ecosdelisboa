@@ -142,15 +142,21 @@ tests/
 - Preview de importacao antes de confirmar.
 - Idempotencia por titulo do ponto + autor do texto.
 - Criacao automatica de autor minimo quando necessario.
+- Formato esperado: `point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,content_pt,content_type,source_work,source_year`.
+- `lat_override` e `lng_override` podem ficar vazios para pontos existentes; para pontos novos, ambos sao obrigatorios.
 
 ### Traducoes
 - Gera traducao automatica com status `pending`.
+- Usa provider LLM configuravel, com `claude` como padrao.
 - Revisao humana explicita para `approved` ou `rejected`.
+- Traducoes podem ser criadas, sobrescritas ou removidas manualmente sem reimportar CSV.
 
 ### Audio
 - Usa voz do autor associado ao texto quando existir.
 - Usa voz padrao como fallback.
 - Upload manual preservado contra regeneracao automatica.
+- Upload manual pode sobrescrever o audio de uma lingua de forma independente.
+- Audio pode ser removido por texto e lingua para permitir nova geracao ou novo upload.
 
 ### Jobs e SSE
 - Jobs de geracao de audio sao persistidos na base.
@@ -165,5 +171,3 @@ tests/
 - As integracoes externas atuais estao encapsuladas em services testaveis e prontas para substituicao por clientes reais.
 
 - 
-
-

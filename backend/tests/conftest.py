@@ -6,9 +6,20 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import get_settings
 from app.core.db import get_db
 from app.main import create_app
 from app.models import Base
+from app.services.elevenlabs import ElevenLabsService
+from app.services.llm import LLMTranslationService
+
+
+@pytest.fixture(autouse=True)
+def clear_settings_cache(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    monkeypatch.setenv("ELEVENLABS_DEFAULT_VOICE_ID", "")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture
@@ -34,6 +45,10 @@ def client(db_session: Session) -> Iterator[TestClient]:
     def override_get_db() -> Iterator[Session]:
         yield db_session
 
+    from app.api.routes import admin_automation
+
+    admin_automation.translation_service = LLMTranslationService(api_key="")
+    admin_automation.elevenlabs_service = ElevenLabsService(api_key="")
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
         yield test_client

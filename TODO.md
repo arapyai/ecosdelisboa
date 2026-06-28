@@ -107,8 +107,8 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 
 ### Frontend
 
-- [ ] implementar fluxo admin de importacao CSV
-- [ ] implementar tabela de preview de importacao
+- [x] implementar fluxo admin de importacao CSV
+- [x] implementar tabela de preview de importacao
 - [ ] implementar tela de revisao de traducoes
 - [ ] implementar status por lingua na visao de textos por ponto
 - [ ] integrar fluxo de criar, aprovar e rejeitar traducoes
@@ -119,7 +119,7 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 - [x] provisionar acesso a Gemini
 - [x] validar politicas de segredo e rotacao
 - [x] documentar quotas e limites operacionais da Gemini
-- [x] ajustar CI para incluir checks de documentacao e formatacao, se existirem
+- [ ] ajustar CI para incluir checks de documentacao e formatacao, se existirem
 
 ## Semana 4
 
@@ -153,7 +153,7 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 
 ### Infra
 
-- [x] provisionar bucket R2 e credenciais
+- [ ] provisionar bucket R2 e credenciais
 - [ ] configurar dominio publico de audio
 - [ ] validar CORS e politicas de acesso do bucket
 - [ ] monitorar erros de integracao externa

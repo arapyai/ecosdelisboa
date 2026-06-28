@@ -1,48 +1,145 @@
+import json
+import random
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from urllib.error import HTTPError, URLError
+from urllib.request import Request
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.models.entities import AudioFile, Text, Voice
 from app.models.enums import SupportedLanguage, TranslationStatus
+from app.services.http_client import open_url
 
 
 @dataclass
 class GeneratedAudio:
     content: bytes
-    duration_s: float
+    duration_s: float | None
     voice_id: str
 
 
 @dataclass
 class ElevenLabsService:
+    api_key: str | None = None
+    base_url: str | None = None
+    model_id: str | None = None
+
+    def _api_key(self) -> str | None:
+        if self.api_key is not None:
+            return self.api_key
+        return get_settings().elevenlabs_api_key
+
+    def _base_url(self) -> str:
+        return (self.base_url or get_settings().elevenlabs_base_url).rstrip("/")
+
+    def _model_id(self) -> str:
+        return self.model_id or get_settings().elevenlabs_model_id
+
+    def _request_json(self, path: str) -> dict[str, object]:
+        api_key = self._api_key()
+        if not api_key:
+            raise ValueError("ELEVENLABS_API_KEY is not configured")
+        request = Request(
+            f"{self._base_url()}{path}",
+            headers={"xi-api-key": api_key, "Accept": "application/json"},
+        )
+        try:
+            with open_url(request, timeout=get_settings().elevenlabs_timeout_s) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            message = exc.read().decode("utf-8", "ignore")
+            raise ValueError(f"ElevenLabs request failed: {exc.code} {message}") from exc
+        except URLError as exc:
+            raise ValueError(f"ElevenLabs request failed: {exc.reason}") from exc
+
     def list_voices(self) -> list[dict[str, str | None]]:
+        if not self._api_key():
+            return [
+                {
+                    "elevenlabs_id": "voice-default",
+                    "name": "Default Voice",
+                    "preview_url": "https://example.test/voice-default.mp3",
+                }
+            ]
+
+        payload = self._request_json("/voices")
+        voices = payload.get("voices", [])
+        if not isinstance(voices, list):
+            raise ValueError("ElevenLabs voices response is invalid")
         return [
             {
-                "elevenlabs_id": "voice-default",
-                "name": "Default Voice",
-                "preview_url": "https://example.test/voice-default.mp3",
+                "elevenlabs_id": str(voice.get("voice_id")),
+                "name": str(voice.get("name")),
+                "preview_url": voice.get("preview_url"),
             }
+            for voice in voices
+            if isinstance(voice, dict) and voice.get("voice_id") and voice.get("name")
         ]
 
     def generate_audio(self, text: str, voice_id: str) -> GeneratedAudio:
-        return GeneratedAudio(content=text.encode("utf-8"), duration_s=12.5, voice_id=voice_id)
+        api_key = self._api_key()
+        if not api_key:
+            return GeneratedAudio(content=text.encode("utf-8"), duration_s=12.5, voice_id=voice_id)
+
+        body = json.dumps({"text": text, "model_id": self._model_id()}).encode("utf-8")
+        request = Request(
+            f"{self._base_url()}/text-to-speech/{voice_id}",
+            data=body,
+            method="POST",
+            headers={
+                "xi-api-key": api_key,
+                "Accept": "audio/mpeg",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with open_url(request, timeout=get_settings().elevenlabs_timeout_s) as response:
+                return GeneratedAudio(
+                    content=response.read(),
+                    duration_s=None,
+                    voice_id=voice_id,
+                )
+        except HTTPError as exc:
+            message = exc.read().decode("utf-8", "ignore")
+            raise ValueError(f"ElevenLabs audio generation failed: {exc.code} {message}") from exc
+        except URLError as exc:
+            raise ValueError(f"ElevenLabs audio generation failed: {exc.reason}") from exc
 
 
-def resolve_voice_id(db: Session, text: Text) -> str:
+def resolve_voice_id(
+    db: Session,
+    text: Text,
+    lang: SupportedLanguage,
+    preferred_voice_id: str | None = None,
+) -> str:
+    if preferred_voice_id is not None:
+        return preferred_voice_id
+
+    default_voice_id = get_settings().elevenlabs_default_voice_id
     author = text.author
     if author is not None and author.elevenlabs_voice_id:
+        if author.elevenlabs_voice_id == "voice-default-dev" and default_voice_id:
+            return default_voice_id
         return author.elevenlabs_voice_id
 
-    default_voice = db.scalar(select(Voice).where(Voice.is_default.is_(True)))
-    if default_voice is None:
-        raise ValueError("Default voice not configured")
-    return default_voice.elevenlabs_id
+    if default_voice_id:
+        return default_voice_id
+
+    voices = list(db.scalars(select(Voice).where(Voice.lang == lang)))
+    if not voices:
+        voices = list(db.scalars(select(Voice).where(Voice.lang == SupportedLanguage.PT)))
+    if not voices:
+        raise ValueError(f"No voice configured for language '{lang.value}'")
+
+    return random.choice(voices).elevenlabs_id
 
 
 def get_audio_source_text(text: Text, lang: SupportedLanguage) -> str:
     if lang == SupportedLanguage.PT:
-        return text.content_pt
+        return text.phonetic_content or text.content_pt
 
     translation = next(
         (
@@ -54,7 +151,7 @@ def get_audio_source_text(text: Text, lang: SupportedLanguage) -> str:
     )
     if translation is None:
         raise ValueError("Approved translation required before audio generation")
-    return translation.content
+    return translation.phonetic_content or translation.content
 
 
 def upsert_audio_file(
@@ -79,5 +176,6 @@ def upsert_audio_file(
     audio_file.public_url = public_url
     audio_file.duration_s = generated_audio.duration_s
     audio_file.voice_id = generated_audio.voice_id
+    audio_file.generated_at = datetime.now(UTC)
     audio_file.manually_uploaded = manually_uploaded
     return audio_file

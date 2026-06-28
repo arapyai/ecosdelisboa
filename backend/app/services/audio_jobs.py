@@ -51,6 +51,7 @@ def run_audio_job(
     job_id: UUID,
     elevenlabs: ElevenLabsService,
     r2: R2Service,
+    preferred_voice_id: str | None = None,
 ) -> AudioGenerationJob:
     job = db.scalar(
         select(AudioGenerationJob)
@@ -83,7 +84,7 @@ def run_audio_job(
             )
             if text is None:
                 raise ValueError("Text not found")
-            voice_id = resolve_voice_id(db, text)
+            voice_id = resolve_voice_id(db, text, item.lang, preferred_voice_id)
             source_text = get_audio_source_text(text, item.lang)
             generated = elevenlabs.generate_audio(source_text, voice_id)
             key = f"audio/{text.id}/{item.lang.value}.mp3"
@@ -112,8 +113,8 @@ def stream_job_events(db: Session, job_id: UUID) -> Iterator[str]:
         if job is None:
             break
         yield (
-            f"data: {{\"job_id\": \"{job.id}\", \"status\": \"{job.status.value}\", "
-            f"\"processed\": {job.processed}, \"total\": {job.total}}}\n\n"
+            f'data: {{"job_id": "{job.id}", "status": "{job.status.value}", '
+            f'"processed": {job.processed}, "total": {job.total}}}\n\n'
         )
         if job.status in {AudioJobStatus.COMPLETED, AudioJobStatus.FAILED}:
             break
