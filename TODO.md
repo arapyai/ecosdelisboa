@@ -119,7 +119,7 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 - [x] provisionar acesso a Gemini
 - [x] validar politicas de segredo e rotacao
 - [x] documentar quotas e limites operacionais da Gemini
-- [ ] ajustar CI para incluir checks de documentacao e formatacao, se existirem
+- [x] ajustar CI para incluir checks de documentacao e formatacao, se existirem
 
 ## Semana 4
 
@@ -153,7 +153,7 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 
 ### Infra
 
-- [ ] provisionar bucket R2 e credenciais
+- [x] provisionar bucket R2 e credenciais
 - [ ] configurar dominio publico de audio
 - [ ] validar CORS e politicas de acesso do bucket
 - [ ] monitorar erros de integracao externa
