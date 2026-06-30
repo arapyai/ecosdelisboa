@@ -84,7 +84,7 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 
 - [x] configurar secrets no Railway e ambientes locais
 - [x] configurar pipeline de PR com testes backend
-- [ ] configurar dominio interno ou staging, se aplicavel
+- [x] configurar dominio interno ou staging, se aplicavel
 - [x] definir politica de logs e retencao
 - [x] preparar base para Sentry, mesmo que ainda sem uso completo
 

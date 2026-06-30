@@ -13,19 +13,31 @@ The backend runs on [Railway](https://railway.app) under the `ecos-de-lisboa` pr
 
 Each environment has its own backend service and its own Postgres database. They are fully isolated — data in `development` never touches `master`.
 
-## API URLs
+## Public URLs
 
-### Development
+DNS for `literarymap.org` is managed in Cloudflare.
 
-- **Base URL:** `https://ecosdelisboa-development.up.railway.app`
-- **Swagger docs:** https://ecosdelisboa-development.up.railway.app/docs
-- **OpenAPI schema:** https://ecosdelisboa-development.up.railway.app/openapi.json
+### Backend (Railway)
 
-### Production (`master`)
+| Environment | Public URL | Railway fallback |
+|---|---|---|
+| `development` | `https://api-dev.lisbon.literarymap.org` | `https://ecosdelisboa-development.up.railway.app` |
+| `master` | `https://api.lisbon.literarymap.org` | Railway-generated `*.up.railway.app` |
 
-- **Base URL:** _to be generated when ready to ship_
+Swagger docs at `/docs`, OpenAPI schema at `/openapi.json`.
 
-To get a public URL for a new environment: Railway → service → **Settings → Networking → Generate Domain**.
+### Frontend (Netlify)
+
+| Surface | Public URL | Netlify fallback |
+|---|---|---|
+| Webapp (public) | `https://lisbon.literarymap.org` | `https://lisbon-literary-map.netlify.app` |
+| Admin (internal) | `https://admin.lisbon.literarymap.org` | `https://lisbon-literary-map-admin.netlify.app` |
+
+### Adding a new environment / service URL
+
+1. Railway / Netlify → service → add custom domain
+2. Cloudflare → DNS → add CNAME → target = the platform's CNAME target → Proxy status `DNS only`
+3. Wait for the platform to provision the SSL certificate
 
 ## Frontend setup
 
@@ -152,6 +164,21 @@ Model: `gemini-2.0-flash`.
 | Requests per day (RPD) | 1,500 |
 | Daily reset | Midnight Pacific (08:00 Lisbon, 04:00 São Paulo) |
 | Scope | Per GCP project (not per API key) |
+
+## Deploy failure alerts
+
+A Make.com scenario receives webhooks from Railway and Netlify on deploy failures and sends an email to the dev team.
+
+- **Make scenario:** `deploy-failures` (account `lisbonliterarymap@gmail.com`)
+- **Webhook URL:** stored in password manager (`ecos-de-lisboa / Make webhook`)
+- **Sources:**
+  - Railway → Project Settings → Webhooks → events `Deploy Failed`, `Deploy Crashed`
+  - Netlify (each project) → Build & deploy → Deploy notifications → HTTP POST request → event `Deploy failed`
+- **Email recipients:** dev team
+- **Email content:** project name, environment, branch, commit, link to deploy
+
+To add a new recipient, edit the To field in the Make Gmail module.
+To rotate the webhook URL, recreate the webhook in Make and update both Railway and all Netlify projects.
 
 ## Who to ping
 
