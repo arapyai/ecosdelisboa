@@ -23,7 +23,7 @@ language_enum = postgresql.ENUM(
 
 
 def upgrade() -> None:
-    language_enum.create(op.get_bind(), checkfirst=False)
+    language_enum.create(op.get_bind(), checkfirst=True)
     op.add_column(
         "voices",
         sa.Column(
