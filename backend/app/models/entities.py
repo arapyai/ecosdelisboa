@@ -63,7 +63,7 @@ class Voice(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
 class Author(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "authors"
 
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(SAText, nullable=False)
     bio_pt: Mapped[str | None] = mapped_column(SAText, nullable=True)
     birth_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     death_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -81,9 +81,9 @@ class Author(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
 class Point(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "points"
 
-    title_pt: Mapped[str] = mapped_column(String(255), nullable=False)
-    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    neighborhood: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    title_pt: Mapped[str] = mapped_column(SAText, nullable=False)
+    address: Mapped[str | None] = mapped_column(SAText, nullable=True)
+    neighborhood: Mapped[str | None] = mapped_column(SAText, nullable=True)
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lng: Mapped[float] = mapped_column(Float, nullable=False)
     geom: Mapped[str | None] = mapped_column(GeometryPoint4326(), nullable=True)
@@ -102,7 +102,7 @@ class Text(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     )
     content_pt: Mapped[str] = mapped_column(SAText, nullable=False)
     phonetic_content: Mapped[str | None] = mapped_column(SAText, nullable=True)
-    source_work: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_work: Mapped[str | None] = mapped_column(SAText, nullable=True)
     source_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     content_type: Mapped[ContentType] = mapped_column(
         value_enum(ContentType, "content_type"), nullable=False
