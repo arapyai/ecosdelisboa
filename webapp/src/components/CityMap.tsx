@@ -12,19 +12,20 @@ interface Props {
   onSelectText?: (point: Point, textId: string) => void;
 }
 
-interface PointLayout {
-  point: Point;
-  offset: [number, number];
-}
-
 interface ProjectedPoint {
   point: Point;
   x: number;
   y: number;
 }
 
-const MARKER_SIZE_PX = 34;
-const MARKER_GAP_PX = 8;
+interface PointCluster {
+  points: Point[];
+  lng: number;
+  lat: number;
+}
+
+const POINT_CLUSTER_RADIUS_PX = 42;
+const POINT_CLUSTER_MAX_ZOOM = 13.5;
 const TEXT_MARKER_SIZE_PX = 30;
 const TEXT_MARKER_GAP_PX = 10;
 
@@ -40,7 +41,15 @@ function getCircleOffset(index: number, count: number, radiusPx: number): [numbe
   return [Math.cos(angle) * radiusPx, Math.sin(angle) * radiusPx];
 }
 
-function getPointLayouts(points: Point[], map: maplibregl.Map): PointLayout[] {
+function getPointClusters(points: Point[], map: maplibregl.Map): PointCluster[] {
+  if (map.getZoom() >= POINT_CLUSTER_MAX_ZOOM) {
+    return points.map((point) => ({
+      points: [point],
+      lng: point.lng,
+      lat: point.lat
+    }));
+  }
+
   const clusters: ProjectedPoint[][] = [];
 
   points.forEach((point) => {
@@ -53,7 +62,7 @@ function getPointLayouts(points: Point[], map: maplibregl.Map): PointLayout[] {
     const cluster = clusters.find((items) =>
       items.some((item) => {
         const distance = Math.hypot(projectedPoint.x - item.x, projectedPoint.y - item.y);
-        return distance < MARKER_SIZE_PX + MARKER_GAP_PX;
+        return distance < POINT_CLUSTER_RADIUS_PX;
       })
     );
 
@@ -64,36 +73,18 @@ function getPointLayouts(points: Point[], map: maplibregl.Map): PointLayout[] {
     }
   });
 
-  const layouts = new Map<string, PointLayout>();
-  clusters.forEach((cluster) => {
-    const radiusPx = getClusterRadiusPx(cluster.length, MARKER_SIZE_PX, MARKER_GAP_PX);
-    const center = cluster.reduce(
-      (total, item) => ({
-        x: total.x + item.x / cluster.length,
-        y: total.y + item.y / cluster.length
-      }),
-      { x: 0, y: 0 }
-    );
-
-    cluster.forEach((item, index) => {
-      const circleOffset = getCircleOffset(index, cluster.length, radiusPx);
-      layouts.set(item.point.id, {
-        point: item.point,
-        offset: [
-          center.x - item.x + circleOffset[0],
-          center.y - item.y + circleOffset[1]
-        ]
-      });
-    });
-  });
-
-  return points.map((point) => layouts.get(point.id) ?? { point, offset: [0, 0] });
+  return clusters.map((cluster) => ({
+    points: cluster.map((item) => item.point),
+    lng: cluster.reduce((total, item) => total + item.point.lng / cluster.length, 0),
+    lat: cluster.reduce((total, item) => total + item.point.lat / cluster.length, 0)
+  }));
 }
 
 export function CityMap({ points, selected, onSelect, selectedTextId, onSelectText }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const lastFocusedPointIdRef = useRef<string | null>(null);
   const [viewportVersion, setViewportVersion] = useState(0);
 
   useEffect(() => {
@@ -124,13 +115,68 @@ export function CityMap({ points, selected, onSelect, selectedTextId, onSelectTe
   }, [selected]);
 
   useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selected || lastFocusedPointIdRef.current === selected.id) return;
+
+    lastFocusedPointIdRef.current = selected.id;
+    map.flyTo({
+      center: [selected.lng, selected.lat],
+      zoom: Math.max(map.getZoom(), 15),
+      duration: 650,
+      essential: true
+    });
+  }, [selected]);
+
+  function openCluster(cluster: PointCluster) {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const bounds = cluster.points.reduce(
+      (nextBounds, point) => nextBounds.extend([point.lng, point.lat]),
+      new maplibregl.LngLatBounds()
+    );
+    const hasCoordinateSpread = cluster.points.some(
+      (point) => Math.abs(point.lng - cluster.lng) > 0.00001 || Math.abs(point.lat - cluster.lat) > 0.00001
+    );
+
+    if (hasCoordinateSpread && map.getZoom() < 16) {
+      map.fitBounds(bounds, { padding: 88, maxZoom: 16, duration: 450 });
+      return;
+    }
+
+    onSelect(cluster.points[0]);
+  }
+
+  useEffect(() => {
     if (!mapRef.current) return;
     markersRef.current.forEach((marker) => marker.remove());
 
     const newMarkers: maplibregl.Marker[] = [];
-    const pointLayouts = getPointLayouts(points, mapRef.current);
+    const pointClusters = getPointClusters(points, mapRef.current);
 
-    pointLayouts.forEach(({ point, offset }) => {
+    pointClusters.forEach((cluster) => {
+      if (cluster.points.length > 1) {
+        const hasSelectedPoint = cluster.points.some((point) => selected?.id === point.id);
+        const container = document.createElement('div');
+        container.style.width = '42px';
+        container.style.height = '42px';
+
+        const element = document.createElement('button');
+        element.className = hasSelectedPoint ? 'map-marker cluster-marker selected' : 'map-marker cluster-marker';
+        element.type = 'button';
+        element.setAttribute('aria-label', `${cluster.points.length} pontos próximos`);
+        element.textContent = String(cluster.points.length);
+        element.addEventListener('click', () => openCluster(cluster));
+        container.appendChild(element);
+
+        const marker = new maplibregl.Marker({ element: container })
+          .setLngLat([cluster.lng, cluster.lat])
+          .addTo(mapRef.current!);
+        newMarkers.push(marker);
+        return;
+      }
+
+      const point = cluster.points[0];
       const selectedPoint = selectedById?.get(point.id);
       const isExploded = selectedPoint && selectedPoint.texts && selectedPoint.texts.length > 1;
 
@@ -147,7 +193,6 @@ export function CityMap({ points, selected, onSelect, selectedTextId, onSelectTe
         centerContainer.appendChild(centerElement);
 
         const centerMarker = new maplibregl.Marker({ element: centerContainer })
-          .setOffset(offset)
           .setLngLat([point.lng, point.lat])
           .addTo(mapRef.current!);
         newMarkers.push(centerMarker);
@@ -179,7 +224,7 @@ export function CityMap({ points, selected, onSelect, selectedTextId, onSelectTe
           subContainer.appendChild(subElement);
 
           const subMarker = new maplibregl.Marker({ element: subContainer })
-            .setOffset([offset[0] + textOffset[0], offset[1] + textOffset[1]])
+            .setOffset(textOffset)
             .setLngLat([point.lng, point.lat])
             .addTo(mapRef.current!);
           newMarkers.push(subMarker);
@@ -209,7 +254,6 @@ export function CityMap({ points, selected, onSelect, selectedTextId, onSelectTe
         }
 
         const marker = new maplibregl.Marker({ element: container })
-          .setOffset(offset)
           .setLngLat([point.lng, point.lat])
           .addTo(mapRef.current!);
         newMarkers.push(marker);
