@@ -118,10 +118,17 @@ export function CityMap({ points, selected, onSelect, selectedTextId, onSelectTe
     const map = mapRef.current;
     if (!map || !selected || lastFocusedPointIdRef.current === selected.id) return;
 
+    const container = map.getContainer();
+    const isCompactViewport = container.clientWidth <= 700;
+    const verticalOffset = isCompactViewport
+      ? -Math.min(container.clientHeight * 0.34, 220)
+      : 0;
+
     lastFocusedPointIdRef.current = selected.id;
     map.flyTo({
       center: [selected.lng, selected.lat],
       zoom: Math.max(map.getZoom(), 15),
+      offset: [0, verticalOffset],
       duration: 650,
       essential: true
     });
@@ -160,6 +167,7 @@ export function CityMap({ points, selected, onSelect, selectedTextId, onSelectTe
         const container = document.createElement('div');
         container.style.width = '42px';
         container.style.height = '42px';
+        container.style.zIndex = hasSelectedPoint ? '20' : '5';
 
         const element = document.createElement('button');
         element.className = hasSelectedPoint ? 'map-marker cluster-marker selected' : 'map-marker cluster-marker';
@@ -185,12 +193,23 @@ export function CityMap({ points, selected, onSelect, selectedTextId, onSelectTe
         const centerContainer = document.createElement('div');
         centerContainer.style.width = '34px';
         centerContainer.style.height = '34px';
+        centerContainer.style.zIndex = '30';
 
         const centerElement = document.createElement('button');
-        centerElement.className = 'map-marker exploded-center';
+        centerElement.className = 'map-marker exploded-center selected';
         centerElement.type = 'button';
-        centerElement.textContent = '';
+        centerElement.setAttribute('aria-label', point.title_pt);
+        centerElement.textContent =
+          selectedPoint.author?.name?.slice(0, 1) ??
+          textsList[0]?.author?.name?.slice(0, 1) ??
+          point.author?.name?.slice(0, 1) ??
+          'L';
         centerContainer.appendChild(centerElement);
+
+        const centerBadge = document.createElement('span');
+        centerBadge.className = 'map-marker-badge';
+        centerBadge.textContent = String(textsList.length);
+        centerContainer.appendChild(centerBadge);
 
         const centerMarker = new maplibregl.Marker({ element: centerContainer })
           .setLngLat([point.lng, point.lat])
@@ -204,6 +223,7 @@ export function CityMap({ points, selected, onSelect, selectedTextId, onSelectTe
           const subContainer = document.createElement('div');
           subContainer.style.width = '30px';
           subContainer.style.height = '30px';
+          subContainer.style.zIndex = '40';
 
           const subElement = document.createElement('button');
           const isSubSelected = selectedTextId ? selectedTextId === text.id : i === 0;
@@ -235,6 +255,7 @@ export function CityMap({ points, selected, onSelect, selectedTextId, onSelectTe
         const container = document.createElement('div');
         container.style.width = '34px';
         container.style.height = '34px';
+        container.style.zIndex = selected?.id === point.id ? '30' : '1';
 
         const element = document.createElement('button');
         element.className = selected?.id === point.id ? 'map-marker selected' : 'map-marker';
