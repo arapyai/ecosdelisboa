@@ -1,7 +1,7 @@
 {
-  "name": "Lisboa por Outros",
-  "short_name": "Lisboa",
-  "description": "Percursos literarios por Lisboa com narracao dramatizada.",
+  "name": "Lisbon Literary Map",
+  "short_name": "Literary Map",
+  "description": "A literary map of Lisbon with narrated texts and routes.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f4efe7",
@@ -9,9 +9,9 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/branding/literary-map-icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

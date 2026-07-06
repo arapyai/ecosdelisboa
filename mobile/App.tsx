@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -161,8 +162,13 @@ export default function App() {
     <SafeAreaView style={styles.screen}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <Text style={styles.kicker}>Lisboa por Outros</Text>
-        <Text style={styles.title}>Mapa literario</Text>
+        <View style={styles.brandRow}>
+          <Image source={require('./assets/literary-map-icon.png')} style={styles.brandIcon} />
+          <View>
+            <Text style={styles.kicker}>Lisbon Literary Map</Text>
+            <Text style={styles.title}>Mapa literário</Text>
+          </View>
+        </View>
         {isMock ? <Text style={styles.notice}>Dados de exemplo enquanto a API nao responde.</Text> : null}
       </View>
 

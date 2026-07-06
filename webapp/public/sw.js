@@ -1,5 +1,5 @@
-const CACHE_NAME = 'por-outros-app-shell-v1';
-const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon.svg'];
+const CACHE_NAME = 'lisbon-literary-map-app-shell-v1';
+const APP_SHELL = ['/', '/manifest.webmanifest', '/branding/literary-map-icon.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));

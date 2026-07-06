@@ -25,7 +25,7 @@ export interface CityConfig {
 }
 
 export const cityConfig: CityConfig = {
-  appName: 'Lisboa por Outros',
+  appName: 'Lisbon Literary Map',
   cityName: 'Lisboa',
   slug: 'lisboa',
   defaultLanguage: 'pt',
@@ -45,7 +45,7 @@ export const cityConfig: CityConfig = {
     defaultLng: -9.1393
   },
   cache: {
-    appShell: 'lisboa-por-outros-v1',
+    appShell: 'lisbon-literary-map-v1',
     neighborhoodPrefetch: 'lisboa-neighborhood-prefetch'
   }
 };

@@ -218,8 +218,13 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
   return (
     <main className="login-screen">
       <section className="login-panel">
-        <span>Login Admin</span>
-        <h1>Lisboa por Outros</h1>
+        <div className="admin-brand">
+          <img src="/branding/literary-map-icon.png" alt="" />
+          <div>
+            <span>Login Admin</span>
+            <h1>Lisbon Literary Map</h1>
+          </div>
+        </div>
         <form onSubmit={submit}>
           <label>
             Email
@@ -251,8 +256,13 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   return (
     <main className="admin-shell">
       <aside className="sidebar">
-        <span>Admin</span>
-        <h1>Lisboa por Outros</h1>
+        <div className="admin-brand">
+          <img src="/branding/literary-map-icon.png" alt="" />
+          <div>
+            <span>Admin</span>
+            <h1>Lisbon Literary Map</h1>
+          </div>
+        </div>
         <p>{me.data?.email ?? 'Sessão autenticada'}</p>
         <nav>
           {(Object.keys(resourceLabels) as Resource[]).map((key) => (

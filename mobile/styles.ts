@@ -9,6 +9,16 @@ export const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 12
   },
+  brandRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12
+  },
+  brandIcon: {
+    borderRadius: 8,
+    height: 56,
+    width: 56
+  },
   kicker: {
     color: '#c45732',
     fontSize: 12,
@@ -18,7 +28,7 @@ export const styles = StyleSheet.create({
   },
   title: {
     color: '#16211f',
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: '800'
   },
   notice: {
