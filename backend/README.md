@@ -78,7 +78,7 @@ uv run python -m app.scripts.seed_dev
 O seed e idempotente e cria dados minimos para desenvolvimento:
 
 - admin inicial
-- voz padrao
+- catalogo de linguas e vozes de `../docs/voice_language_seed.csv`
 - autores
 - pontos
 - textos
@@ -125,7 +125,8 @@ tests/
 - `GET /api/v1/routes/{id}`
 - `GET /api/v1/routes/{id}/gpx`
 - `GET /api/v1/routes/{id}/podcast.rss`
-- `GET /api/v1/voices/default`
+- `GET /api/v1/voices/default` (sorteia uma voz do pool default)
+- `GET /api/v1/languages`
 
 ### Admin
 - `POST /api/v1/admin/auth/login`
@@ -134,6 +135,7 @@ tests/
 - Importacao CSV em `/api/v1/admin/points/import/*`
 - Traducoes em `/api/v1/admin/translations/*`
 - Vozes em `/api/v1/admin/voices/*`
+- Linguas e importacao do catalogo em `/api/v1/admin/languages/*`
 - Audio e jobs em `/api/v1/admin/audio/*`
 
 ## Fluxos implementados
@@ -152,8 +154,9 @@ tests/
 - Traducoes podem ser criadas, sobrescritas ou removidas manualmente sem reimportar CSV.
 
 ### Audio
-- Usa voz do autor associado ao texto quando existir.
-- Usa voz padrao como fallback.
+- Resolve a voz por override explicito, autor, pool da lingua, pool default e variavel de ambiente.
+- Uma voz pode atender varias linguas e varios autores.
+- Varias vozes podem compor o pool default.
 - Upload manual preservado contra regeneracao automatica.
 - Upload manual pode sobrescrever o audio de uma lingua de forma independente.
 - Audio pode ser removido por texto e lingua para permitir nova geracao ou novo upload.
@@ -162,6 +165,29 @@ tests/
 - Jobs de geracao de audio sao persistidos na base.
 - Progresso pode ser consumido por `text/event-stream`.
 
+### Linguas e vozes
+
+O catalogo inicial fica em `../docs/voice_language_seed.csv`. Para aplica-lo de forma
+idempotente em uma instalacao nova:
+
+```bash
+uv run python -m app.scripts.seed_languages
+```
+
+Tambem e possivel informar outro arquivo:
+
+```bash
+uv run python -m app.scripts.seed_languages /caminho/catalogo.csv
+```
+
+O endpoint `POST /api/v1/admin/languages/import` recebe o mesmo CSV como multipart.
+Sem `replace`, ele adiciona e atualiza configuracoes. Com `replace=true`, linguas ausentes
+sao desativadas e as associacoes voz-lingua e o pool default passam a refletir exatamente
+o arquivo. Traducoes, audios, jobs e vozes historicas nao sao apagados.
+
+O passo a passo completo de ElevenLabs, configuracao de vozes, geracao em lote e diagnostico
+fica em `../docs/runbook_elevenlabs_vozes.md`.
+
 ## Qualidade
 - Suite com testes unitarios e de integracao.
 - Cobertura atual acima do minimo exigido de 70%.
@@ -169,5 +195,3 @@ tests/
 ## Notas
 - A especificacao geral do projeto fica em `../docs/lisboa_spec_geral.md`.
 - As integracoes externas atuais estao encapsuladas em services testaveis e prontas para substituicao por clientes reais.
-
-- 
