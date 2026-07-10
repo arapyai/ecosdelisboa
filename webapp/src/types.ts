@@ -20,6 +20,7 @@ export interface TextEntry {
   point_id: string;
   author_id?: string | null;
   author?: Author;
+  content?: string;
   content_pt: string;
   content_en?: string | null;
   source_work?: string | null;

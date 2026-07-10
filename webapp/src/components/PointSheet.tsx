@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { localized, t } from '../i18n/messages';
 import type { Lang, Point } from '../types';
 import { AudioPlayer } from './AudioPlayer';
+import { BrowserSpeechPlayer } from './BrowserSpeechPlayer';
 
 interface Props {
   point: Point | null;
@@ -19,7 +20,10 @@ export function PointSheet({ point, lang, onClose, selectedTextId }: Props) {
     : point.texts?.[0];
 
   const authorName = text?.author?.name ?? point.author?.name;
-  const audio = text?.audios?.find((item) => item.lang === lang && item.url) ?? text?.audios?.find((item) => item.url);
+  const audio = text?.audios?.find((item) => item.lang === lang && item.url);
+  const translatedContent = text?.content ?? (lang === 'en' ? text?.content_en : undefined);
+  const content = translatedContent || text?.content_pt || '';
+  const speechLang = translatedContent ? lang : 'pt';
 
   return (
     <aside className="point-sheet" aria-label={localized(point, 'title', lang)}>
@@ -32,11 +36,21 @@ export function PointSheet({ point, lang, onClose, selectedTextId }: Props) {
       </div>
       <h2>{localized(point, 'title', lang)}</h2>
       <p className="byline">{authorName}</p>
-      {audio ? <AudioPlayer track={audio} label={t(lang, 'listen')} /> : null}
+      {audio ? (
+        <AudioPlayer track={audio} label={t(lang, 'listen')} />
+      ) : content ? (
+        <BrowserSpeechPlayer
+          key={`${text?.id}:${speechLang}`}
+          text={content}
+          lang={speechLang}
+          label={t(lang, 'listen')}
+          sourceLabel={t(lang, 'deviceVoice')}
+        />
+      ) : null}
       {text ? (
         <div className="text-block">
           <span>{t(lang, 'transcript')}</span>
-          <p>{localized(text, 'content', lang)}</p>
+          <p>{content}</p>
           <small>
             {t(lang, 'source')}: {text.source_work}
             {text.source_year ? `, ${text.source_year}` : ''}

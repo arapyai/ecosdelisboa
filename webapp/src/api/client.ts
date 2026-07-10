@@ -58,6 +58,7 @@ function normalizePoint(point: Point | PublicPointSummary | PublicPointDetail, l
     point_id: point.id,
     author_id: text.author_id ?? text.author?.id,
     author: text.author ? normalizeAuthor(text.author) : undefined,
+    content: 'content' in text ? text.content : undefined,
     content_pt: 'content_pt' in text ? text.content_pt : '',
     content_en: lang === 'en' && 'content' in text ? text.content : undefined,
     source_work: text.source_work,
