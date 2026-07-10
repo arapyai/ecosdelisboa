@@ -1,7 +1,6 @@
 import pytest
 
 from app.models.entities import Text
-from app.models.enums import SupportedLanguage
 from app.services.elevenlabs import ElevenLabsService
 from app.services.geocoding import parse_nominatim_payload
 from app.services.llm import build_translation_prompt, extract_claude_text
@@ -28,9 +27,10 @@ def test_claude_response_extractor_returns_text() -> None:
 def test_translation_prompt_includes_literary_context() -> None:
     text = Text(content_pt="Nao sou nada.", source_work="Tabacaria")
 
-    prompt = build_translation_prompt(text, SupportedLanguage.EN)
+    prompt = build_translation_prompt(text, "en", "pt")
 
     assert "Target language: en" in prompt
+    assert "Source language: pt" in prompt
     assert "Source work: Tabacaria" in prompt
     assert "Nao sou nada." in prompt
 

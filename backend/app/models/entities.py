@@ -7,13 +7,18 @@ from uuid import UUID
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Column,
     DateTime,
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
+    Table,
     UniqueConstraint,
+    Uuid,
+    text,
 )
 from sqlalchemy import (
     Text as SAText,
@@ -25,7 +30,6 @@ from app.models.enums import (
     AudioJobItemStatus,
     AudioJobStatus,
     ContentType,
-    SupportedLanguage,
     TranslationStatus,
 )
 from app.models.sqltypes import GeometryPoint4326
@@ -47,17 +51,59 @@ class AdminUser(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
+voice_languages = Table(
+    "voice_languages",
+    Base.metadata,
+    Column("voice_id", Uuid, ForeignKey("voices.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "language_code",
+        String(16),
+        ForeignKey("languages.code", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
+
+class Language(CreatedAtMixin, Base):
+    __tablename__ = "languages"
+
+    code: Mapped[str] = mapped_column(String(16), primary_key=True)
+    locale: Mapped[str] = mapped_column(String(35), unique=True, nullable=False)
+    country_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_source: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    voices: Mapped[list[Voice]] = relationship(
+        secondary=voice_languages,
+        back_populates="languages",
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_languages_single_source",
+            "is_source",
+            unique=True,
+            postgresql_where=text("is_source"),
+            sqlite_where=text("is_source = 1"),
+        ),
+    )
+
+
 class Voice(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "voices"
 
     elevenlabs_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     preview_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    lang: Mapped[SupportedLanguage | None] = mapped_column(
-        value_enum(SupportedLanguage, "language"), nullable=True
-    )
+    gender: Mapped[str | None] = mapped_column(String(32), nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    languages: Mapped[list[Language]] = relationship(
+        secondary=voice_languages,
+        back_populates="voices",
+    )
 
 
 class Author(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
@@ -125,8 +171,8 @@ class Translation(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         ForeignKey("texts.id", ondelete="CASCADE"),
         nullable=False,
     )
-    lang: Mapped[SupportedLanguage] = mapped_column(
-        value_enum(SupportedLanguage, "language"), nullable=False
+    lang: Mapped[str] = mapped_column(
+        String(16), ForeignKey("languages.code", ondelete="RESTRICT"), nullable=False
     )
     content: Mapped[str] = mapped_column(SAText, nullable=False)
     phonetic_content: Mapped[str | None] = mapped_column(SAText, nullable=True)
@@ -141,10 +187,7 @@ class Translation(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
 
     text: Mapped[Text] = relationship(back_populates="translations")
 
-    __table_args__ = (
-        CheckConstraint("lang != 'pt'", name="translation_lang_not_pt"),
-        UniqueConstraint("text_id", "lang", name="uq_translations_text_lang"),
-    )
+    __table_args__ = (UniqueConstraint("text_id", "lang", name="uq_translations_text_lang"),)
 
 
 class AudioFile(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
@@ -154,8 +197,8 @@ class AudioFile(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         ForeignKey("texts.id", ondelete="CASCADE"),
         nullable=False,
     )
-    lang: Mapped[SupportedLanguage] = mapped_column(
-        value_enum(SupportedLanguage, "language"), nullable=False
+    lang: Mapped[str] = mapped_column(
+        String(16), ForeignKey("languages.code", ondelete="RESTRICT"), nullable=False
     )
     r2_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     public_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
@@ -244,8 +287,8 @@ class AudioGenerationJobItem(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         ForeignKey("texts.id", ondelete="CASCADE"),
         nullable=False,
     )
-    lang: Mapped[SupportedLanguage] = mapped_column(
-        value_enum(SupportedLanguage, "language"), nullable=False
+    lang: Mapped[str] = mapped_column(
+        String(16), ForeignKey("languages.code", ondelete="RESTRICT"), nullable=False
     )
     status: Mapped[AudioJobItemStatus] = mapped_column(
         value_enum(AudioJobItemStatus, "audio_job_item_status"),

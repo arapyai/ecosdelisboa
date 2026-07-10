@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.entities import Text, Translation
-from app.models.enums import SupportedLanguage, TranslationStatus
+from app.models.enums import TranslationStatus
 from app.services.http_client import open_url
+from app.services.languages import get_source_language
 
 
 @dataclass
@@ -36,19 +37,19 @@ class LLMTranslationService:
         base_url = self.base_url or settings.translation_llm_base_url or settings.anthropic_base_url
         return base_url.rstrip("/")
 
-    def translate(self, text: Text, target_lang: SupportedLanguage) -> str:
+    def translate(self, text: Text, target_lang: str, source_lang: str) -> str:
         provider = self._provider()
         if provider in {"claude", "anthropic"}:
-            return self._translate_with_claude(text, target_lang)
+            return self._translate_with_claude(text, target_lang, source_lang)
         raise ValueError(f"Unsupported LLM provider: {provider}")
 
-    def _translate_with_claude(self, text: Text, target_lang: SupportedLanguage) -> str:
+    def _translate_with_claude(self, text: Text, target_lang: str, source_lang: str) -> str:
         api_key = self._api_key()
         if not api_key:
-            return f"[claude:{target_lang.value}] {text.content_pt}"
+            return f"[claude:{target_lang}] {text.content_pt}"
 
         settings = get_settings()
-        prompt = build_translation_prompt(text, target_lang)
+        prompt = build_translation_prompt(text, target_lang, source_lang)
         body = json.dumps(
             {
                 "model": self._model(),
@@ -78,17 +79,18 @@ class LLMTranslationService:
         return extract_claude_text(payload)
 
 
-def build_translation_prompt(text: Text, target_lang: SupportedLanguage) -> str:
+def build_translation_prompt(text: Text, target_lang: str, source_lang: str) -> str:
     author = text.author.name if text.author else "Unknown author"
     source = text.source_work or "Unknown source"
     return (
         "You are a literary translator. Preserve the author's voice, rhythm, "
         "punctuation style and register. Do not modernize or simplify. "
         "Return only the translated text.\n\n"
-        f"Target language: {target_lang.value}\n"
+        f"Source language: {source_lang}\n"
+        f"Target language: {target_lang}\n"
         f"Author: {author}\n"
         f"Source work: {source}\n\n"
-        f"Portuguese original:\n{text.content_pt}"
+        f"Original text:\n{text.content_pt}"
     )
 
 
@@ -113,13 +115,14 @@ def extract_claude_text(payload: dict[str, object]) -> str:
 def request_translation(
     db: Session,
     text: Text,
-    target_lang: SupportedLanguage,
+    target_lang: str,
     service: LLMTranslationService,
 ) -> Translation:
     existing = db.scalar(
         select(Translation).where(Translation.text_id == text.id, Translation.lang == target_lang)
     )
-    content = service.translate(text, target_lang)
+    source_lang = get_source_language(db).code
+    content = service.translate(text, target_lang, source_lang)
     if existing is None:
         translation = Translation(
             text_id=text.id,

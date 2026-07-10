@@ -12,10 +12,15 @@ from app.api.deps import get_current_admin
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.models.entities import AdminUser, AudioFile, Text, Translation, Voice
-from app.models.enums import SupportedLanguage, TranslationStatus
+from app.models.enums import TranslationStatus
 from app.schemas.common import EnvelopeMeta, envelope
 from app.services.audio_jobs import create_audio_job, run_audio_job, stream_job_events
 from app.services.elevenlabs import ElevenLabsService
+from app.services.languages import (
+    get_active_language,
+    get_source_language,
+    normalize_language_code,
+)
 from app.services.llm import LLMTranslationService, request_translation
 from app.services.r2 import R2Service
 
@@ -67,15 +72,37 @@ def get_text_or_404(db: Session, text_id: UUID) -> Text:
     return text
 
 
+def resolve_active_language(db: Session, lang: str) -> str:
+    try:
+        return get_active_language(db, lang).code
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def serialize_voice(voice: Voice) -> dict[str, object]:
+    languages = sorted(language.code for language in voice.languages)
+    return {
+        "id": str(voice.id),
+        "elevenlabs_id": voice.elevenlabs_id,
+        "name": voice.name,
+        "preview_url": voice.preview_url,
+        "gender": voice.gender,
+        "languages": languages,
+        "lang": languages[0] if len(languages) == 1 else None,
+        "is_default": voice.is_default,
+    }
+
+
 @router.post("/translations/{text_id}/{lang}")
 def trigger_translation(
     text_id: UUID,
-    lang: SupportedLanguage,
+    lang: str,
     _: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
-    if lang == SupportedLanguage.PT:
-        raise HTTPException(status_code=400, detail="Portuguese is the source language")
+    lang = resolve_active_language(db, lang)
+    if lang == get_source_language(db).code:
+        raise HTTPException(status_code=400, detail="Target language is the source language")
     text = get_text_or_404(db, text_id)
     translation = request_translation(db, text, lang, translation_service)
     db.commit()
@@ -84,7 +111,7 @@ def trigger_translation(
         {
             "id": str(translation.id),
             "text_id": str(translation.text_id),
-            "lang": translation.lang.value,
+            "lang": translation.lang,
             "content": translation.content,
             "status": translation.status.value,
         },
@@ -95,13 +122,14 @@ def trigger_translation(
 @router.put("/translations/{text_id}/{lang}/manual")
 def upsert_translation(
     text_id: UUID,
-    lang: SupportedLanguage,
+    lang: str,
     payload: TranslationUpsertRequest,
     current_admin: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
-    if lang == SupportedLanguage.PT:
-        raise HTTPException(status_code=400, detail="Portuguese is the source language")
+    lang = resolve_active_language(db, lang)
+    if lang == get_source_language(db).code:
+        raise HTTPException(status_code=400, detail="Target language is the source language")
     text = get_text_or_404(db, text_id)
     translation = db.scalar(
         select(Translation).where(Translation.text_id == text.id, Translation.lang == lang)
@@ -121,7 +149,7 @@ def upsert_translation(
         {
             "id": str(translation.id),
             "text_id": str(translation.text_id),
-            "lang": translation.lang.value,
+            "lang": translation.lang,
             "content": translation.content,
             "phonetic_content": translation.phonetic_content,
             "status": translation.status.value,
@@ -178,12 +206,13 @@ def list_translations(
     _: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
     status: TranslationStatus | None = None,
-    lang: SupportedLanguage | None = None,
+    lang: str | None = None,
 ) -> dict[str, object]:
     query = select(Translation).order_by(Translation.created_at.desc())
     if status is not None:
         query = query.where(Translation.status == status)
     if lang is not None:
+        lang = normalize_language_code(lang)
         query = query.where(Translation.lang == lang)
     translations = db.scalars(query).all()
     return envelope(
@@ -191,7 +220,7 @@ def list_translations(
             {
                 "id": str(item.id),
                 "text_id": str(item.text_id),
-                "lang": item.lang.value,
+                "lang": item.lang,
                 "status": item.status.value,
                 "reviewed_by": item.reviewed_by,
             }
@@ -205,24 +234,15 @@ def list_translations(
 def list_voices(
     _: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
-    lang: SupportedLanguage | None = None,
+    lang: str | None = None,
 ) -> dict[str, object]:
-    query = select(Voice).order_by(Voice.name)
+    query = select(Voice).options(selectinload(Voice.languages)).order_by(Voice.name)
     if lang is not None:
-        query = query.where(Voice.lang == lang)
-    voices = db.scalars(query).all()
+        language = resolve_active_language(db, lang)
+        query = query.where(Voice.languages.any(code=language))
+    voices = db.scalars(query).unique().all()
     return envelope(
-        [
-            {
-                "id": str(v.id),
-                "elevenlabs_id": v.elevenlabs_id,
-                "name": v.name,
-                "preview_url": v.preview_url,
-                "lang": v.lang.value if v.lang else None,
-                "is_default": v.is_default,
-            }
-            for v in voices
-        ],
+        [serialize_voice(voice) for voice in voices],
         EnvelopeMeta(total=len(voices)),
     )
 
@@ -257,16 +277,25 @@ def set_voice_lang(
     voice_id: UUID,
     _: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
-    lang: SupportedLanguage | None = None,
+    lang: str | None = None,
 ) -> dict[str, object]:
-    voice = db.get(Voice, voice_id)
+    voice = db.scalar(
+        select(Voice).options(selectinload(Voice.languages)).where(Voice.id == voice_id)
+    )
     if voice is None:
         raise HTTPException(status_code=404, detail="Voice not found")
-    voice.lang = lang
+    if lang is None:
+        voice.languages = []
+    else:
+        voice.languages = [get_active_language(db, resolve_active_language(db, lang))]
     db.commit()
     db.refresh(voice)
     return envelope(
-        {"id": str(voice.id), "lang": voice.lang.value if voice.lang else None},
+        {
+            "id": str(voice.id),
+            "lang": voice.languages[0].code if voice.languages else None,
+            "languages": [language.code for language in voice.languages],
+        },
         EnvelopeMeta(),
     )
 
@@ -280,20 +309,34 @@ def set_default_voice(
     voice = db.get(Voice, voice_id)
     if voice is None:
         raise HTTPException(status_code=404, detail="Voice not found")
-    for current in db.scalars(select(Voice)).all():
-        current.is_default = current.id == voice.id
+    voice.is_default = True
     db.commit()
-    return envelope({"default_voice_id": str(voice.id)}, EnvelopeMeta())
+    return envelope({"default_voice_id": str(voice.id), "is_default": True}, EnvelopeMeta())
+
+
+@router.delete("/voices/{voice_id}/default")
+def remove_default_voice(
+    voice_id: UUID,
+    _: Annotated[AdminUser, Depends(get_current_admin)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict[str, object]:
+    voice = db.get(Voice, voice_id)
+    if voice is None:
+        raise HTTPException(status_code=404, detail="Voice not found")
+    voice.is_default = False
+    db.commit()
+    return envelope({"default_voice_id": str(voice.id), "is_default": False}, EnvelopeMeta())
 
 
 @router.post("/audio/{text_id}/{lang}/generate")
 def generate_audio(
     text_id: UUID,
-    lang: SupportedLanguage,
+    lang: str,
     _: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
     voice_id: str | None = None,
 ) -> dict[str, object]:
+    lang = resolve_active_language(db, lang)
     text = get_text_or_404(db, text_id)
     job = create_audio_job(db, requested_by=None, items=[(text.id, lang)])
     run_audio_job(db, job.id, elevenlabs_service, r2_service, preferred_voice_id=voice_id)
@@ -306,7 +349,7 @@ def generate_audio(
             "status": job.status.value,
             "error": job.last_error,
             "audio": {
-                "lang": audio_file.lang.value if audio_file else lang.value,
+                "lang": audio_file.lang if audio_file else lang,
                 "public_url": audio_file.public_url if audio_file else None,
                 "manually_uploaded": audio_file.manually_uploaded if audio_file else False,
             },
@@ -318,11 +361,12 @@ def generate_audio(
 @router.put("/audio/{text_id}/{lang}/upload")
 def upload_audio(
     text_id: UUID,
-    lang: SupportedLanguage,
+    lang: str,
     payload: AudioUploadRequest,
     _: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
+    lang = resolve_active_language(db, lang)
     text = get_text_or_404(db, text_id)
     audio_file = db.scalar(
         select(AudioFile).where(AudioFile.text_id == text.id, AudioFile.lang == lang)
@@ -351,10 +395,11 @@ def upload_audio(
 @router.delete("/audio/{text_id}/{lang}")
 def delete_audio(
     text_id: UUID,
-    lang: SupportedLanguage,
+    lang: str,
     _: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
+    lang = normalize_language_code(lang)
     text = get_text_or_404(db, text_id)
     audio_file = db.scalar(
         select(AudioFile).where(AudioFile.text_id == text.id, AudioFile.lang == lang)
@@ -379,7 +424,7 @@ def list_audio_status(
             {
                 "id": str(audio.id),
                 "text_id": str(audio.text_id),
-                "lang": audio.lang.value,
+                "lang": audio.lang,
                 "public_url": audio.public_url,
                 "manually_uploaded": audio.manually_uploaded,
             }
@@ -395,7 +440,9 @@ def create_and_run_audio_job(
     current_admin: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
-    items = [(UUID(item["text_id"]), SupportedLanguage(item["lang"])) for item in payload.items]
+    items = [
+        (UUID(item["text_id"]), resolve_active_language(db, item["lang"])) for item in payload.items
+    ]
     first_voice_id: str | None = payload.items[0].get("voice_id") if payload.items else None
     job = create_audio_job(db, current_admin.email, items)
     run_audio_job(db, job.id, elevenlabs_service, r2_service, preferred_voice_id=first_voice_id)

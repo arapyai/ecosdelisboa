@@ -1,0 +1,41 @@
+language_code,locale,country_code,language_name,is_source,gender,voice_label,voice_name,elevenlabs_voice_id,is_default
+pt,pt-PT,PT,Portuguese European,true,male,VOZ 1,,4CjBwgOHgeySRaWbGCA2,true
+pt,pt-PT,PT,Portuguese European,true,male,VOZ 2,,A26KfvFuSKaMzhhYkSlQ,true
+pt,pt-PT,PT,Portuguese European,true,male,VOZ 3,,ejarTsrf33xoVlH9hMuy,true
+pt,pt-PT,PT,Portuguese European,true,male,VOZ 4,,c0rzOw18hxEhaSybUod2,true
+pt,pt-PT,PT,Portuguese European,true,male,VOZ 5,,a2m6tcgyJTe32Q3VSi6f,true
+pt,pt-PT,PT,Portuguese European,true,female,VOZ 6,,iLelOQ6m5mpSeNH8fRob,true
+pt,pt-PT,PT,Portuguese European,true,female,VOZ 7,,zKjRewuiqTkXNUVAMwat,true
+pt,pt-PT,PT,Portuguese European,true,female,VOZ 8,,nJ5NFqyKb8kn9JBPmo6i,true
+pt,pt-PT,PT,Portuguese European,true,female,VOZ 9,,bBNhdwrIjl4fcVYiRbT2,true
+pt,pt-PT,PT,Portuguese European,true,female,VOZ 10,,IZipF5JhqPlWzpduTV0E,true
+en,en-US,US,English,false,male,,Chris,UEKYgullGqaF0keqT8Bu,false
+en,en-US,US,English,false,male,,Rowan,kLhAstPcnnPxqzk6gS5i,false
+en,en-US,US,English,false,male,,Wil,KjWPwHJWLungxeiYigoM,false
+en,en-US,US,English,false,male,,Mark,jgzHfSd2o0L7p0de3yr0,false
+en,en-US,US,English,false,male,,Adam,hGERZVS2GlHj1vhJb9bY,false
+en,en-US,US,English,false,female,,Elariel,ksryVoNAGZT8GxWCTiVm,false
+en,en-US,US,English,false,female,,Rachel,c3QefzBhE1Cx4Yl23IV3,false
+en,en-US,US,English,false,female,,Diana,UizRZo250FhTtKlJa6mo,false
+en,en-US,US,English,false,female,,Maya,zzAIcrq5pp7webLI6ptl,false
+en,en-US,US,English,false,female,,Cate,J64VNrjLE6uKFBKlxfSJ,false
+fr,fr-FR,FR,French,false,male,,Rudy,wufFsVwuYBePWKO6dMMN,false
+fr,fr-FR,FR,French,false,male,,Adam,93nuHbke4dTER9x2pDwE,false
+fr,fr-FR,FR,French,false,male,,Martim Dupont,FNOttooGMYDRXmqkQ0Fz,false
+fr,fr-FR,FR,French,false,male,,Maxime,ZLI7yULK3cOkcZl6GABN,false
+fr,fr-FR,FR,French,false,male,,Jean,4p5WXd3ZuWR9pPtRQuxC,false
+fr,fr-FR,FR,French,false,female,,Stephira,QMNPncWXVcTVhJ9rDEQO,false
+fr,fr-FR,FR,French,false,female,,Sarah,t8BrjWUT5Z23DLLBzbuY,false
+fr,fr-FR,FR,French,false,female,,Lucie,zgR4sWC2Er1b98AtnnBf,false
+fr,fr-FR,FR,French,false,female,,Stella,ebRwkdEFVZIx2A6YucFh,false
+fr,fr-FR,FR,French,false,female,,Camille Martin,hFgOzpmS0CMtL2to8sAl,false
+zh,zh-CN,CN,Chinese,false,male,,Yychen,WLOnxmJlqAiX5zG0dLlu,false
+zh,zh-CN,CN,Chinese,false,male,,Lin,UFDAUkGzdLAEJlINT3Fx,false
+zh,zh-CN,CN,Chinese,false,male,,Zicai,DVE92KG0Yd4X7RoMqy8J,false
+zh,zh-CN,CN,Chinese,false,male,,Jin,vZZLclMx4wouUtKBRfZn,false
+zh,zh-CN,CN,Chinese,false,male,,Jordan,EttSxNTvxX50EUdRPQQl,false
+de,de-DE,DE,German,false,male,,Peter,TVGn2JVJHeMuzxos8a3h,false
+de,de-DE,DE,German,false,male,,Vincent,ABvMrd8urrMUl3V6UZ3Y,false
+de,de-DE,DE,German,false,male,,Arthur,3nMIMZ7RlGwsq1WLgxY3,false
+de,de-DE,DE,German,false,male,,Lennard,HNYELfQMgCeL9N0RGyxo,false
+de,de-DE,DE,German,false,male,,German Narration,TUKJhQmz3RPYBNAgC5A1,false

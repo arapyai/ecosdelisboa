@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.entities import AudioFile, Text, Voice
-from app.models.enums import SupportedLanguage, TranslationStatus
+from app.models.enums import TranslationStatus
 from app.services.http_client import open_url
+from app.services.languages import get_source_language
 
 
 @dataclass
@@ -112,33 +113,33 @@ class ElevenLabsService:
 def resolve_voice_id(
     db: Session,
     text: Text,
-    lang: SupportedLanguage,
+    lang: str,
     preferred_voice_id: str | None = None,
 ) -> str:
     if preferred_voice_id is not None:
         return preferred_voice_id
 
-    default_voice_id = get_settings().elevenlabs_default_voice_id
     author = text.author
     if author is not None and author.elevenlabs_voice_id:
-        if author.elevenlabs_voice_id == "voice-default-dev" and default_voice_id:
-            return default_voice_id
         return author.elevenlabs_voice_id
 
+    language_voices = list(db.scalars(select(Voice).where(Voice.languages.any(code=lang))))
+    if language_voices:
+        return random.choice(language_voices).elevenlabs_id
+
+    default_voices = list(db.scalars(select(Voice).where(Voice.is_default.is_(True))))
+    if default_voices:
+        return random.choice(default_voices).elevenlabs_id
+
+    default_voice_id = get_settings().elevenlabs_default_voice_id
     if default_voice_id:
         return default_voice_id
 
-    voices = list(db.scalars(select(Voice).where(Voice.lang == lang)))
-    if not voices:
-        voices = list(db.scalars(select(Voice).where(Voice.lang == SupportedLanguage.PT)))
-    if not voices:
-        raise ValueError(f"No voice configured for language '{lang.value}'")
-
-    return random.choice(voices).elevenlabs_id
+    raise ValueError(f"No voice configured for language '{lang}'")
 
 
-def get_audio_source_text(text: Text, lang: SupportedLanguage) -> str:
-    if lang == SupportedLanguage.PT:
+def get_audio_source_text(db: Session, text: Text, lang: str) -> str:
+    if lang == get_source_language(db).code:
         return text.phonetic_content or text.content_pt
 
     translation = next(
@@ -157,7 +158,7 @@ def get_audio_source_text(text: Text, lang: SupportedLanguage) -> str:
 def upsert_audio_file(
     db: Session,
     text: Text,
-    lang: SupportedLanguage,
+    lang: str,
     generated_audio: GeneratedAudio,
     public_url: str,
     manually_uploaded: bool,
@@ -172,7 +173,7 @@ def upsert_audio_file(
         audio_file = AudioFile(text_id=text.id, lang=lang)
         db.add(audio_file)
 
-    audio_file.r2_key = f"audio/{text.id}/{lang.value}.mp3"
+    audio_file.r2_key = f"audio/{text.id}/{lang}.mp3"
     audio_file.public_url = public_url
     audio_file.duration_s = generated_audio.duration_s
     audio_file.voice_id = generated_audio.voice_id

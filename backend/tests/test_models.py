@@ -13,25 +13,32 @@ def test_expected_tables_exist() -> None:
         "audio_generation_job_items",
         "audio_generation_jobs",
         "authors",
+        "languages",
         "points",
         "route_items",
         "routes",
         "texts",
         "translations",
         "voices",
+        "voice_languages",
     }
 
 
-def test_translation_uniqueness_and_non_pt_constraint() -> None:
+def test_translation_uniqueness() -> None:
     translations = Base.metadata.tables["translations"]
     unique_constraints = [c for c in translations.constraints if isinstance(c, UniqueConstraint)]
-    check_constraints = [c for c in translations.constraints if isinstance(c, CheckConstraint)]
-
     assert any(
         {"text_id", "lang"} == {column.name for column in constraint.columns}
         for constraint in unique_constraints
     )
-    assert any("lang != 'pt'" in str(constraint.sqltext) for constraint in check_constraints)
+
+
+def test_voice_languages_has_composite_primary_key() -> None:
+    association = Base.metadata.tables["voice_languages"]
+    assert {column.name for column in association.primary_key.columns} == {
+        "voice_id",
+        "language_code",
+    }
 
 
 def test_route_items_allow_point_or_free_waypoint() -> None:

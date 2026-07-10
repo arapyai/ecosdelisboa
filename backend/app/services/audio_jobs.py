@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.entities import AudioGenerationJob, AudioGenerationJobItem, Text
-from app.models.enums import AudioJobItemStatus, AudioJobStatus, SupportedLanguage
+from app.models.enums import AudioJobItemStatus, AudioJobStatus
 from app.services.elevenlabs import (
     ElevenLabsService,
     get_audio_source_text,
@@ -20,7 +20,7 @@ from app.services.r2 import R2Service
 def create_audio_job(
     db: Session,
     requested_by: str | None,
-    items: list[tuple[UUID, SupportedLanguage]],
+    items: list[tuple[UUID, str]],
 ) -> AudioGenerationJob:
     job = AudioGenerationJob(
         requested_by=requested_by,
@@ -85,9 +85,9 @@ def run_audio_job(
             if text is None:
                 raise ValueError("Text not found")
             voice_id = resolve_voice_id(db, text, item.lang, preferred_voice_id)
-            source_text = get_audio_source_text(text, item.lang)
+            source_text = get_audio_source_text(db, text, item.lang)
             generated = elevenlabs.generate_audio(source_text, voice_id)
-            key = f"audio/{text.id}/{item.lang.value}.mp3"
+            key = f"audio/{text.id}/{item.lang}.mp3"
             public_url = r2.upload_audio(key, generated.content)
             upsert_audio_file(db, text, item.lang, generated, public_url, manually_uploaded=False)
             item.status = AudioJobItemStatus.COMPLETED
