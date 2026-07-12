@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.main import create_app
-from app.models import Base
+from app.models import Base, Language
 from app.services.elevenlabs import ElevenLabsService
 from app.services.llm import LLMTranslationService
 
@@ -33,6 +33,24 @@ def db_session() -> Iterator[Session]:
     Base.metadata.create_all(engine)
 
     with TestingSessionLocal() as session:
+        session.add_all(
+            [
+                Language(
+                    code="pt",
+                    locale="pt-PT",
+                    country_code="PT",
+                    name="Portuguese",
+                    is_active=True,
+                    is_source=True,
+                ),
+                Language(code="en", locale="en-US", country_code="US", name="English"),
+                Language(code="es", locale="es-ES", country_code="ES", name="Spanish"),
+                Language(code="fr", locale="fr-FR", country_code="FR", name="French"),
+                Language(code="de", locale="de-DE", country_code="DE", name="German"),
+                Language(code="zh", locale="zh-CN", country_code="CN", name="Chinese"),
+            ]
+        )
+        session.commit()
         yield session
 
     Base.metadata.drop_all(engine)

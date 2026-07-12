@@ -8,6 +8,8 @@ Esta pasta concentra a documentacao transversal do projeto Lisboa por Outros.
 - `backend_referencia.md`: referencia tecnica do backend e das integracoes
 - `arquitetura.md`: resumo da arquitetura e da estrutura atual do monorepo
 - `importacao_csv_conteudo.md`: modelo de CSV para importacao editorial de pontos e textos
+- `voice_language_seed.csv`: catalogo inicial de linguas e vozes ElevenLabs
+- `runbook_elevenlabs_vozes.md`: configuracao operacional de ElevenLabs, vozes e geracao de audio
 
 ## Como ler
 
@@ -15,6 +17,7 @@ Esta pasta concentra a documentacao transversal do projeto Lisboa por Outros.
 - use `backend_referencia.md` quando precisar de detalhes tecnicos do servidor
 - use `arquitetura.md` para entender a organizacao do monorepo
 - use `importacao_csv_conteudo.md` para preparar planilhas de conteudo para importacao
+- use `runbook_elevenlabs_vozes.md` para colocar sintese de voz e catalogos em operacao
 
 ## Organizacao
 

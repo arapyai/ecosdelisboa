@@ -106,7 +106,9 @@ O modelo de dados do produto gira em torno destas entidades principais:
 - `texts`: textos originais em portugues associados a um ponto e a um autor
 - `translations`: traducoes por lingua com status editorial
 - `audio_files`: audios gerados ou enviados manualmente por texto e lingua
-- `voices`: vozes disponiveis na conta ElevenLabs
+- `languages`: linguas dinamicas, estado ativo e identificacao da lingua-fonte
+- `voices`: vozes disponiveis na conta ElevenLabs, inclusive pools default
+- `voice_languages`: associacao muitos-para-muitos entre vozes e linguas
 - `routes`: percursos publicados ou em rascunho
 - `route_items`: sequencia de pontos e waypoints livres dentro de um percurso
 - `admin_users`: utilizadores autenticados do painel
@@ -129,7 +131,8 @@ Todos os endpoints publicos sao read-only, nao exigem autenticacao e respondem e
 | GET | `/api/v1/routes/{id}` | detalhe do percurso |
 | GET | `/api/v1/routes/{id}/gpx` | export GPX |
 | GET | `/api/v1/routes/{id}/podcast.rss` | feed RSS do percurso |
-| GET | `/api/v1/voices/default` | voz padrao atual |
+| GET | `/api/v1/voices/default` | uma voz sorteada do pool default |
+| GET | `/api/v1/languages` | linguas ativas e lingua-fonte |
 
 ## Painel Administrativo
 
@@ -174,7 +177,8 @@ O painel administrativo e uma aplicacao interna com autenticacao por email e pas
 
 ### Traducao editorial
 
-- o texto original e sempre mantido em portugues
+- o texto original permanece nos campos historicos `content_pt` e `phonetic_content`
+- a lingua-fonte e configuravel sem reescrever o conteudo existente
 - o backend pode gerar traducao automatica via provider LLM, com Claude como padrao
 - toda traducao criada automaticamente entra com status `pending`
 - nenhuma traducao e aprovada automaticamente
@@ -183,9 +187,10 @@ O painel administrativo e uma aplicacao interna com autenticacao por email e pas
 
 ### Geracao de audio
 
-- o audio pode usar voz especifica do autor associado ao texto
-- se nao houver voz do autor, usa a voz padrao configurada
-- audio em PT pode ser gerado diretamente
+- uma voz pode atender varios autores e varias linguas
+- varias vozes podem formar o pool de uma lingua e o pool default
+- a selecao segue override, autor, lingua, defaults e variavel de ambiente
+- audio na lingua-fonte pode ser gerado diretamente
 - audio em outras linguas depende de traducao aprovada
 - jobs em lote reportam progresso por SSE
 - audio pode ser gerado, enviado manualmente, sobrescrito manualmente ou removido por lingua
@@ -209,7 +214,8 @@ O painel administrativo e uma aplicacao interna com autenticacao por email e pas
 | :--- | :--- |
 | ElevenLabs | listar vozes, gerar audio e preview |
 | LLM provider | gerar traducao automatica com contexto literario |
-| Cloudflare R2 | guardar e servir MP3 |
+| Filesystem local | implementacao atual para guardar e servir MP3 |
+| Cloudflare R2 | storage alvo ainda nao implementado |
 | Railway | hospedar API e PostgreSQL |
 
 ## Regras de Negocio Criticas

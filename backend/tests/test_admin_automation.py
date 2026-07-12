@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from app.models.entities import AudioFile, Text, Translation, Voice
-from app.models.enums import ContentType, SupportedLanguage, TranslationStatus
+from app.core.config import get_settings
+from app.models.entities import AudioFile, Language, Text, Translation, Voice
+from app.models.enums import ContentType, TranslationStatus
 from app.services.elevenlabs import resolve_voice_id
 from tests.test_admin_content import auth_header
 from tests.test_api_public import seed_public_data
@@ -24,7 +25,7 @@ def test_translation_review_requires_explicit_status(client, db_session) -> None
     text = db_session.query(Text).filter(Text.point_id == ids["point"].id).one()
     translation = Translation(
         text_id=text.id,
-        lang=SupportedLanguage.ES,
+        lang="es",
         content="No soy nada.",
         status=TranslationStatus.PENDING,
     )
@@ -110,8 +111,10 @@ def test_admin_voice_list_and_lang_assignment(client, db_session) -> None:
 def test_voice_selection_with_lang_fallback(client, db_session) -> None:
     from app.models.entities import Author, Point, Text
 
-    pt_voice = Voice(elevenlabs_id="voice-pt", name="PT Voice", lang=SupportedLanguage.PT)
-    en_voice = Voice(elevenlabs_id="voice-en", name="EN Voice", lang=SupportedLanguage.EN)
+    pt_voice = Voice(elevenlabs_id="voice-pt", name="PT Voice", is_default=True)
+    en_voice = Voice(elevenlabs_id="voice-en", name="EN Voice")
+    pt_voice.languages.append(db_session.get(Language, "pt"))
+    en_voice.languages.append(db_session.get(Language, "en"))
     db_session.add_all([pt_voice, en_voice])
     db_session.commit()
 
@@ -125,16 +128,16 @@ def test_voice_selection_with_lang_fallback(client, db_session) -> None:
     db_session.commit()
     db_session.refresh(text)
 
-    en_id = resolve_voice_id(db_session, text, SupportedLanguage.EN)
+    en_id = resolve_voice_id(db_session, text, "en")
     assert en_id == "voice-en"
 
-    fr_id = resolve_voice_id(db_session, text, SupportedLanguage.FR)
+    fr_id = resolve_voice_id(db_session, text, "fr")
     assert fr_id == "voice-pt"
 
     preferred = resolve_voice_id(
         db_session,
         text,
-        SupportedLanguage.PT,
+        "pt",
         preferred_voice_id="custom",
     )
     assert preferred == "custom"
@@ -143,13 +146,14 @@ def test_voice_selection_with_lang_fallback(client, db_session) -> None:
 def test_random_voice_selection(client, db_session) -> None:
     from app.models.entities import Author, Point, Text
 
-    db_session.add_all(
-        [
-            Voice(elevenlabs_id="v1", name="V1", lang=SupportedLanguage.PT),
-            Voice(elevenlabs_id="v2", name="V2", lang=SupportedLanguage.PT),
-            Voice(elevenlabs_id="v3", name="V3", lang=SupportedLanguage.PT),
-        ]
-    )
+    voices = [
+        Voice(elevenlabs_id="v1", name="V1"),
+        Voice(elevenlabs_id="v2", name="V2"),
+        Voice(elevenlabs_id="v3", name="V3"),
+    ]
+    for voice in voices:
+        voice.languages.append(db_session.get(Language, "pt"))
+    db_session.add_all(voices)
     db_session.commit()
 
     author = Author(name="Test")
@@ -161,8 +165,39 @@ def test_random_voice_selection(client, db_session) -> None:
     db_session.commit()
     db_session.refresh(text)
 
-    ids = {resolve_voice_id(db_session, text, SupportedLanguage.PT) for _ in range(20)}
+    ids = {resolve_voice_id(db_session, text, "pt") for _ in range(20)}
     assert len(ids) > 1
+
+
+def test_voice_resolution_follows_full_precedence(client, db_session, monkeypatch) -> None:
+    from app.models.entities import Author, Point, Text
+
+    language_voice = Voice(elevenlabs_id="language", name="Language")
+    language_voice.languages.append(db_session.get(Language, "en"))
+    default_voice = Voice(elevenlabs_id="default", name="Default", is_default=True)
+    author = Author(name="Test", elevenlabs_voice_id="author")
+    author_voice = Voice(elevenlabs_id="author", name="Author")
+    point = Point(title_pt="T", lat=38.7, lng=-9.14)
+    text = Text(point=point, author=author, content_pt="T", content_type=ContentType.POETRY)
+    db_session.add_all([language_voice, default_voice, author_voice, author, point, text])
+    db_session.commit()
+
+    assert resolve_voice_id(db_session, text, "en", preferred_voice_id="explicit") == "explicit"
+    assert resolve_voice_id(db_session, text, "en") == "author"
+
+    author.elevenlabs_voice_id = None
+    db_session.commit()
+    assert resolve_voice_id(db_session, text, "en") == "language"
+
+    language_voice.languages = []
+    db_session.commit()
+    assert resolve_voice_id(db_session, text, "en") == "default"
+
+    default_voice.is_default = False
+    db_session.commit()
+    monkeypatch.setenv("ELEVENLABS_DEFAULT_VOICE_ID", "env-default")
+    get_settings.cache_clear()
+    assert resolve_voice_id(db_session, text, "en") == "env-default"
 
 
 def test_generate_audio_with_preferred_voice(client, db_session) -> None:
@@ -178,7 +213,7 @@ def test_generate_audio_with_preferred_voice(client, db_session) -> None:
     assert response.status_code == 200
     audio = (
         db_session.query(AudioFile)
-        .filter(AudioFile.text_id == text.id, AudioFile.lang == SupportedLanguage.EN)
+        .filter(AudioFile.text_id == text.id, AudioFile.lang == "en")
         .one()
     )
     assert audio.voice_id == "custom-voice"
@@ -207,7 +242,7 @@ def test_manual_audio_upload_is_preserved_over_auto_regeneration(client, db_sess
 
     audio_file = (
         db_session.query(AudioFile)
-        .filter(AudioFile.text_id == text.id, AudioFile.lang == SupportedLanguage.EN)
+        .filter(AudioFile.text_id == text.id, AudioFile.lang == "en")
         .one()
     )
     assert audio_file.public_url == "https://audio.example/manual.mp3"
@@ -236,7 +271,7 @@ def test_manual_audio_upload_can_overwrite_and_delete_audio_independently(
     assert second.status_code == 200
     audio_file = (
         db_session.query(AudioFile)
-        .filter(AudioFile.text_id == text.id, AudioFile.lang == SupportedLanguage.PT)
+        .filter(AudioFile.text_id == text.id, AudioFile.lang == "pt")
         .one()
     )
     assert audio_file.public_url == "https://audio.example/second.mp3"
@@ -249,7 +284,7 @@ def test_manual_audio_upload_can_overwrite_and_delete_audio_independently(
     assert delete.json()["data"]["deleted"] is True
     remaining_pt_audio = (
         db_session.query(AudioFile)
-        .filter(AudioFile.text_id == text.id, AudioFile.lang == SupportedLanguage.PT)
+        .filter(AudioFile.text_id == text.id, AudioFile.lang == "pt")
         .count()
     )
     assert remaining_pt_audio == 0

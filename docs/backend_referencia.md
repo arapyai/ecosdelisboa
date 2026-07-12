@@ -90,6 +90,18 @@ Restricao:
 
 - unicidade por `text_id + lang`
 
+#### `languages`
+
+- `code`
+- `locale`
+- `country_code`
+- `name`
+- `is_active`
+- `is_source`
+
+Uma lingua removida e desativada para preservar traducoes, audios e jobs historicos.
+Exatamente uma lingua ativa deve ser marcada como fonte.
+
 #### `audio_files`
 
 - `id`
@@ -112,8 +124,17 @@ Restricao:
 - `elevenlabs_id`
 - `name`
 - `preview_url`
+- `gender`
 - `is_default`
 - `synced_at`
+
+#### `voice_languages`
+
+- `voice_id`
+- `language_code`
+
+Uma voz pode estar associada a varias linguas. O pool default tambem pode conter varias
+vozes.
 
 #### `routes`
 
@@ -171,7 +192,7 @@ Regras:
 | GET | `/api/v1/routes/{id}` | detalhe do percurso |
 | GET | `/api/v1/routes/{id}/gpx` | export de navegacao |
 | GET | `/api/v1/routes/{id}/podcast.rss` | feed de audio |
-| GET | `/api/v1/voices/default` | voz padrao exposta ao app |
+| GET | `/api/v1/voices/default` | uma voz sorteada do pool default |
 
 ## API Admin
 
@@ -199,6 +220,14 @@ Regras:
 - sincronizacao e configuracao de vozes em `/api/v1/admin/voices/*`
 - geracao, upload e jobs de audio em `/api/v1/admin/audio/*`
 
+### Linguas e vozes
+
+- CRUD e ativacao em `/api/v1/admin/languages/*`
+- importacao em `POST /api/v1/admin/languages/import?replace=false`
+- associacao individual em `/api/v1/admin/voices/{voice_id}/languages/{language_code}`
+- pool default em `/api/v1/admin/voices/{voice_id}/default`
+- lista publica de linguas ativas em `GET /api/v1/languages`
+
 ## Exemplo de CSV de Importacao
 
 ```csv
@@ -223,8 +252,11 @@ Fluxo:
 
 1. backend envia texto aprovado para a API da ElevenLabs
 2. recebe o MP3
-3. faz upload para o R2
+3. grava o MP3 no filesystem local configurado
 4. atualiza `audio_files`
+
+A escolha automatica segue: override explicito, voz do autor, pool da lingua, pool default e
+`ELEVENLABS_DEFAULT_VOICE_ID`.
 
 ### Google Gemini
 
@@ -245,14 +277,15 @@ punctuation style and register. Do not modernize or simplify.
 Return only the translated text.
 ```
 
-### Cloudflare R2
+### Storage de audio
 
 Uso:
 
-- armazenar MP3 gerado ou enviado manualmente
-- expor URL publica sem proxy da API
+- a implementacao atual grava em `AUDIO_STORAGE_DIR`
+- a API serve os arquivos pelo prefixo `AUDIO_PUBLIC_BASE_URL`
+- Cloudflare R2 permanece como evolucao planejada
 
-Estrutura de keys esperada:
+Estrutura atual:
 
 ```text
 audio/

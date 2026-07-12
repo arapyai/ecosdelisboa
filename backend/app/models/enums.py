@@ -7,15 +7,6 @@ class ContentType(StrEnum):
     LYRICS = "lyrics"
 
 
-class SupportedLanguage(StrEnum):
-    PT = "pt"
-    EN = "en"
-    ES = "es"
-    FR = "fr"
-    DE = "de"
-    ZH = "zh"
-
-
 class TranslationStatus(StrEnum):
     PENDING = "pending"
     APPROVED = "approved"

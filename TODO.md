@@ -101,8 +101,8 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
   - [ ] criar traducao automatica
   - [ ] listar traducoes
   - [ ] revisar traducao
-- [ ] expor voz padrao publica:
-  - [ ] `GET /api/v1/voices/default`
+- [x] expor voz padrao publica:
+  - [x] `GET /api/v1/voices/default`
 - [ ] encapsular integracao Gemini em service testavel
 
 ### Frontend
@@ -126,18 +126,18 @@ Plano de execucao em 6 semanas para o projeto Lisboa por Outros.
 ### Backend
 
 - [ ] implementar integracao ElevenLabs:
-  - [ ] listar vozes
-  - [ ] sincronizar vozes
-  - [ ] definir voz padrao
-  - [ ] gerar audio
+  - [x] listar vozes
+  - [x] sincronizar vozes
+  - [x] definir pools de vozes default
+  - [x] gerar audio
   - [ ] preview de voz
 - [ ] implementar integracao Cloudflare R2:
   - [ ] upload
   - [ ] substituicao
   - [ ] URL publica
-- [ ] implementar regras de audio manual:
-  - [ ] `manually_uploaded=true` nao sobrescreve em lote
-- [ ] cobrir fluxos de audio com testes
+- [x] implementar regras de audio manual:
+  - [x] `manually_uploaded=true` nao sobrescreve em lote
+- [x] cobrir fluxos de audio com testes
 
 ### Frontend
 
