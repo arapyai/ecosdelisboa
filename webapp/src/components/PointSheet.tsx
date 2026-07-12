@@ -19,7 +19,11 @@ export function PointSheet({ point, lang, onClose, selectedTextId }: Props) {
     : point.texts?.[0];
 
   const authorName = text?.author?.name ?? point.author?.name;
-  const audio = text?.audios?.find((item) => item.lang === lang && item.url) ?? text?.audios?.find((item) => item.url);
+  const availableAudios = text?.audios?.filter((item) => item.url) ?? [];
+  const audio =
+    availableAudios.find((item) => item.lang === lang) ??
+    availableAudios.find((item) => item.lang === 'pt') ??
+    availableAudios[0];
 
   return (
     <aside className="point-sheet" aria-label={localized(point, 'title', lang)}>

@@ -1,5 +1,6 @@
 import {
   ApiClient,
+  type PublicAudioFile,
   type PublicAuthorSummary,
   type PublicDefaultVoice,
   type PublicPointDetail,
@@ -35,6 +36,16 @@ function toAssetUrl(url?: string | null) {
   return `${API_BASE}${url}`;
 }
 
+function normalizeAudio(audio: PublicAudioFile) {
+  return {
+    id: audio.id,
+    lang: audio.lang,
+    url: toAssetUrl(audio.public_url),
+    duration_sec: audio.duration_s ?? undefined,
+    voice_id: audio.voice_id
+  };
+}
+
 async function withMockFallback<T>(call: () => Promise<T>, fallback: T): Promise<{ data: T; isMock: boolean }> {
   try {
     return { data: await call(), isMock: false };
@@ -63,21 +74,11 @@ function normalizePoint(point: Point | PublicPointSummary | PublicPointDetail, l
     source_work: text.source_work,
     source_year: text.source_year,
     content_type: text.content_type,
-    audios: text.audio_files?.map((audio) => ({
-      id: audio.id,
-      lang: audio.lang,
-      url: toAssetUrl(audio.public_url),
-      duration_sec: audio.duration_s ?? undefined
-    })) ?? []
+    audios: text.audio_files?.map(normalizeAudio).filter((audio) => audio.url) ?? []
   }));
 
   const audios = backendPoint.texts?.flatMap((text) =>
-    text.audio_files?.map((audio) => ({
-      id: audio.id,
-      lang: audio.lang,
-      url: toAssetUrl(audio.public_url),
-      duration_sec: audio.duration_s ?? undefined
-    })) ?? []
+    text.audio_files?.map(normalizeAudio).filter((audio) => audio.url) ?? []
   );
 
   return {

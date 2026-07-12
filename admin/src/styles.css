@@ -264,6 +264,22 @@ input[type='checkbox'] {
   padding: 16px;
 }
 
+.audio-editor {
+  margin-bottom: 18px;
+}
+
+.audio-message {
+  margin: 0;
+  color: #315f7d;
+  font-weight: 700;
+}
+
+.admin-audio-player {
+  display: block;
+  width: min(320px, 100%);
+  height: 36px;
+}
+
 .import-panel {
   border: 1px solid #d8d0c4;
   border-radius: 8px;

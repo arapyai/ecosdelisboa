@@ -1,13 +1,17 @@
 import {
   ApiClient,
   isEnvelope,
+  type AdminAudioFile,
   type AdminAuthor,
+  type AdminLanguage,
   type AdminLoginResponse,
   type AdminPoint,
   type AdminRoute,
   type AdminRouteItem,
   type AdminText,
-  type AdminUser
+  type AdminUser,
+  type AdminVoice,
+  type SupportedLanguage
 } from '@ecosdelisboa/shared';
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
@@ -15,6 +19,7 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 
 type Resource = 'authors' | 'points' | 'texts' | 'routes';
+type Section = Resource | 'audio';
 type ResourceItem = AdminAuthor | AdminPoint | AdminText | AdminRoute;
 type DraftValue = string | number | boolean | null | AdminRouteItem[];
 type Draft = Record<string, DraftValue>;
@@ -56,6 +61,21 @@ const autoSyncQueryOptions = {
   refetchOnWindowFocus: true,
   refetchOnReconnect: true
 };
+
+function toQuery(params: Record<string, string | number | undefined | null>) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') search.set(key, String(value));
+  });
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
+function toAssetUrl(url?: string | null) {
+  if (!url) return '';
+  if (/^https?:\/\//.test(url)) return url;
+  return `${API_BASE}${url}`;
+}
 
 async function postCsv<T>(path: string, file: File, token: string): Promise<T> {
   const body = new FormData();
@@ -132,6 +152,20 @@ const resourceLabels: Record<Resource, string> = {
   texts: 'Textos',
   routes: 'Percursos'
 };
+
+const sectionLabels: Record<Section, string> = {
+  ...resourceLabels,
+  audio: 'Áudios'
+};
+
+const fallbackLanguages: AdminLanguage[] = [
+  { code: 'pt', locale: 'pt-PT', country_code: 'PT', name: 'Portuguese', is_active: true, is_source: true },
+  { code: 'en', locale: 'en-US', country_code: 'US', name: 'English', is_active: true, is_source: false },
+  { code: 'es', locale: 'es-ES', country_code: 'ES', name: 'Spanish', is_active: true, is_source: false },
+  { code: 'fr', locale: 'fr-FR', country_code: 'FR', name: 'French', is_active: true, is_source: false },
+  { code: 'de', locale: 'de-DE', country_code: 'DE', name: 'German', is_active: true, is_source: false },
+  { code: 'zh', locale: 'zh-CN', country_code: 'CN', name: 'Chinese', is_active: true, is_source: false }
+];
 
 function fallbackFor(resource: Resource): ResourceItem[] {
   if (resource === 'authors') return mockAuthors;
@@ -245,7 +279,7 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
 }
 
 function Dashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
-  const [resource, setResource] = useState<Resource>('authors');
+  const [section, setSection] = useState<Section>('authors');
   const me = useQuery({
     queryKey: ['me', token],
     queryFn: () => client.get<AdminUser>('/api/v1/admin/auth/me', token),
@@ -265,9 +299,9 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         </div>
         <p>{me.data?.email ?? 'Sessão autenticada'}</p>
         <nav>
-          {(Object.keys(resourceLabels) as Resource[]).map((key) => (
-            <button key={key} className={resource === key ? 'active' : ''} type="button" onClick={() => setResource(key)}>
-              {resourceLabels[key]}
+          {(Object.keys(sectionLabels) as Section[]).map((key) => (
+            <button key={key} className={section === key ? 'active' : ''} type="button" onClick={() => setSection(key)}>
+              {sectionLabels[key]}
             </button>
           ))}
         </nav>
@@ -275,7 +309,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           Sair
         </button>
       </aside>
-      <ResourcePanel token={token} resource={resource} />
+      {section === 'audio' ? <AudioPanel token={token} /> : <ResourcePanel token={token} resource={section} />}
     </main>
   );
 }
@@ -488,6 +522,208 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
       </div>
     </section>
   );
+}
+
+function AudioPanel({ token }: { token: string }) {
+  const queryClient = useQueryClient();
+  const [textId, setTextId] = useState('');
+  const [lang, setLang] = useState<SupportedLanguage>('pt');
+  const [voiceId, setVoiceId] = useState('');
+  const [manualUrl, setManualUrl] = useState('');
+  const [duration, setDuration] = useState('');
+  const [message, setMessage] = useState('');
+
+  const textsQuery = useQuery({
+    queryKey: ['admin-resource', 'texts', token],
+    queryFn: async () => client.get<AdminText[]>('/api/v1/admin/texts', token).catch(() => mockTexts),
+    ...autoSyncQueryOptions
+  });
+  const pointsQuery = useQuery({
+    queryKey: ['admin-options', 'points', token],
+    queryFn: async () => client.get<AdminPoint[]>('/api/v1/admin/points', token).catch(() => mockPoints),
+    ...autoSyncQueryOptions
+  });
+  const authorsQuery = useQuery({
+    queryKey: ['admin-options', 'authors', token],
+    queryFn: async () => client.get<AdminAuthor[]>('/api/v1/admin/authors', token).catch(() => mockAuthors),
+    ...autoSyncQueryOptions
+  });
+  const languagesQuery = useQuery({
+    queryKey: ['admin-languages', token],
+    queryFn: async () => client.get<AdminLanguage[]>('/api/v1/admin/languages?active=true', token).catch(() => fallbackLanguages),
+    ...autoSyncQueryOptions
+  });
+  const voicesQuery = useQuery({
+    queryKey: ['admin-voices', token],
+    queryFn: async () => client.get<AdminVoice[]>('/api/v1/admin/voices', token).catch(() => []),
+    ...autoSyncQueryOptions
+  });
+  const audioQuery = useQuery({
+    queryKey: ['admin-audio', token],
+    queryFn: async () => client.get<AdminAudioFile[]>('/api/v1/admin/audio', token).catch(() => []),
+    ...autoSyncQueryOptions
+  });
+
+  const texts = textsQuery.data ?? mockTexts;
+  const points = pointsQuery.data ?? mockPoints;
+  const authors = authorsQuery.data ?? mockAuthors;
+  const languages = languagesQuery.data ?? fallbackLanguages;
+  const voices = voicesQuery.data ?? [];
+  const audios = audioQuery.data ?? [];
+
+  useEffect(() => {
+    if (!textId && texts.length > 0) setTextId(texts[0].id);
+  }, [textId, texts]);
+
+  useEffect(() => {
+    if (languages.length === 0 || languages.some((language) => language.code === lang)) return;
+    setLang(languages.find((language) => language.is_source)?.code ?? languages[0].code);
+  }, [lang, languages]);
+
+  const generateMutation = useMutation({
+    mutationFn: () => {
+      if (!textId) throw new Error('Selecione um texto antes de gerar áudio.');
+      return client.post<{ status: string; error?: string | null }>(
+        `/api/v1/admin/audio/${textId}/${lang}/generate${toQuery({ voice_id: voiceId })}`,
+        {},
+        token
+      );
+    },
+    onSuccess: (result) => {
+      setMessage(result.error ? `Geração concluída com erro: ${result.error}` : `Geração ${result.status}.`);
+      queryClient.invalidateQueries({ queryKey: ['admin-audio', token] });
+    },
+    onError: (cause) => setMessage(cause instanceof Error ? cause.message : 'Não foi possível gerar o áudio.')
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: () => {
+      if (!textId) throw new Error('Selecione um texto antes de guardar áudio.');
+      if (!manualUrl) throw new Error('Informe a URL pública do áudio.');
+      return client.put<AdminAudioFile>(
+        `/api/v1/admin/audio/${textId}/${lang}/upload`,
+        { public_url: manualUrl, duration_s: duration ? Number(duration) : null, voice_id: voiceId || null },
+        token
+      );
+    },
+    onSuccess: () => {
+      setMessage('Áudio manual guardado.');
+      setManualUrl('');
+      setDuration('');
+      queryClient.invalidateQueries({ queryKey: ['admin-audio', token] });
+    },
+    onError: (cause) => setMessage(cause instanceof Error ? cause.message : 'Não foi possível guardar o áudio.')
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (audio: AdminAudioFile) => client.delete<{ deleted: boolean }>(`/api/v1/admin/audio/${audio.text_id}/${audio.lang}`, token),
+    onSuccess: () => {
+      setMessage('Áudio apagado.');
+      queryClient.invalidateQueries({ queryKey: ['admin-audio', token] });
+    },
+    onError: (cause) => setMessage(cause instanceof Error ? cause.message : 'Não foi possível apagar o áudio.')
+  });
+
+  return (
+    <section className="content-panel">
+      <div className="panel-heading">
+        <div>
+          <span>Áudios</span>
+          <h2>{audios.length} ficheiros</h2>
+          <p>Gere com ElevenLabs ou associe uma URL pública manualmente por texto e língua.</p>
+        </div>
+      </div>
+
+      <section className="editor audio-editor">
+        <h3>Preparar áudio</h3>
+        <div className="field-grid">
+          <label className="textarea-field">
+            Texto
+            <select value={textId} onChange={(event) => setTextId(event.target.value)}>
+              {texts.map((text) => (
+                <option key={text.id} value={text.id}>{audioTextLabel(text, points, authors)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Língua
+            <select value={lang} onChange={(event) => setLang(event.target.value)}>
+              {languages.map((language) => (
+                <option key={language.code} value={language.code}>
+                  {language.code.toUpperCase()} · {language.name}{language.is_source ? ' · fonte' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Voz
+            <select value={voiceId} onChange={(event) => setVoiceId(event.target.value)}>
+              <option value="">Fallback automático</option>
+              {voices.map((voice) => (
+                <option key={voice.id} value={voice.elevenlabs_id}>
+                  {voice.name} · {voice.elevenlabs_id}{voice.languages?.length ? ` · ${voice.languages.join(', ')}` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="textarea-field">
+            URL pública do áudio
+            <input value={manualUrl} onChange={(event) => setManualUrl(event.target.value)} type="url" />
+          </label>
+          <label>
+            Duração s
+            <input min={0} step="any" value={duration} onChange={(event) => setDuration(event.target.value)} type="number" />
+          </label>
+        </div>
+        <div className="form-actions">
+          <button type="button" disabled={!textId || generateMutation.isPending} onClick={() => generateMutation.mutate()}>
+            {generateMutation.isPending ? 'A gerar...' : 'Gerar com IA'}
+          </button>
+          <button type="button" className="secondary-action" disabled={!textId || !manualUrl || uploadMutation.isPending} onClick={() => uploadMutation.mutate()}>
+            {uploadMutation.isPending ? 'A guardar...' : 'Guardar URL manual'}
+          </button>
+        </div>
+        {message ? <p className="audio-message">{message}</p> : null}
+      </section>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Texto</th>
+              <th>Língua</th>
+              <th>Origem</th>
+              <th>Áudio</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {audios.length === 0 ? <tr><td colSpan={5}>Nenhum áudio registado.</td></tr> : null}
+            {audios.map((audio) => {
+              const publicUrl = toAssetUrl(audio.public_url);
+              return (
+                <tr key={audio.id}>
+                  <td>{audioTextLabel(texts.find((text) => text.id === audio.text_id), points, authors)}</td>
+                  <td>{audio.lang.toUpperCase()}</td>
+                  <td>{audio.manually_uploaded ? 'Manual' : 'Gerado'}</td>
+                  <td>{publicUrl ? <audio className="admin-audio-player" controls src={publicUrl} /> : '-'}</td>
+                  <td><button type="button" className="danger" onClick={() => deleteMutation.mutate(audio)}>Apagar</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function audioTextLabel(text: AdminText | undefined, points: AdminPoint[], authors: AdminAuthor[]) {
+  if (!text) return 'Texto não encontrado';
+  const point = points.find((item) => item.id === text.point_id);
+  const author = authors.find((item) => item.id === text.author_id);
+  const title = point?.title_pt ?? text.content_pt.slice(0, 64);
+  return `${title}${author ? ` · ${author.name}` : ''}`;
 }
 
 function CsvImportPanel({ token, onImported }: { token: string; onImported: () => void }) {

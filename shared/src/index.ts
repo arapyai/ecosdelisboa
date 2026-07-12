@@ -1,4 +1,4 @@
-export type SupportedLanguage = 'pt' | 'en' | 'es' | 'fr' | 'de' | 'zh';
+export type SupportedLanguage = string;
 
 export interface EnvelopeMeta {
   page?: number | null;
@@ -99,6 +99,40 @@ export interface PublicDefaultVoice {
   elevenlabs_id: string;
   name?: string;
   preview_url?: string | null;
+  gender?: string | null;
+  languages?: SupportedLanguage[];
+  lang?: SupportedLanguage | null;
+  is_default?: boolean;
+}
+
+export interface AdminLanguage {
+  code: SupportedLanguage;
+  locale: string;
+  country_code?: string | null;
+  name: string;
+  is_active: boolean;
+  is_source: boolean;
+}
+
+export interface AdminVoice {
+  id: string;
+  elevenlabs_id: string;
+  name: string;
+  preview_url?: string | null;
+  gender?: string | null;
+  languages?: SupportedLanguage[];
+  lang?: SupportedLanguage | null;
+  is_default?: boolean;
+}
+
+export interface AdminAudioFile {
+  id: string;
+  text_id: string;
+  lang: SupportedLanguage;
+  public_url?: string | null;
+  duration_s?: number | null;
+  voice_id?: string | null;
+  manually_uploaded?: boolean;
 }
 
 export interface AdminUser {

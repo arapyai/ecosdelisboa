@@ -33,6 +33,7 @@ export interface AudioTrack {
   lang: Lang;
   url: string;
   duration_sec?: number;
+  voice_id?: string | null;
   transcript?: TranscriptCue[];
 }
 

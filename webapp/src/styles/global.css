@@ -148,9 +148,17 @@ a {
   color: #fff;
 }
 
+.onboarding-title {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 2vw, 24px);
+  max-width: min(100%, 1120px);
+}
+
 .brand-mark {
-  width: 88px;
-  height: 88px;
+  width: clamp(72px, 8vw, 104px);
+  height: clamp(72px, 8vw, 104px);
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
   background: transparent;
@@ -165,11 +173,12 @@ a {
 }
 
 .onboarding h1 {
-  max-width: 760px;
+  max-width: none;
   font-size: clamp(44px, 8vw, 92px);
   line-height: 0.95;
-  margin: 28px 0 18px;
+  margin: 0;
   letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .onboarding p {
@@ -767,6 +776,15 @@ a {
 
   .onboarding h1 {
     font-size: 46px;
+  }
+
+  .onboarding-title {
+    gap: 14px;
+  }
+
+  .brand-mark {
+    width: 64px;
+    height: 64px;
   }
 
   .language-switcher {
