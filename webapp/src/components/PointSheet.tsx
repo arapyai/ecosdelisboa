@@ -36,7 +36,7 @@ export function PointSheet({ point, lang, onClose, selectedTextId }: Props) {
       </div>
       <h2>{localized(point, 'title', lang)}</h2>
       <p className="byline">{authorName}</p>
-      {audio ? <AudioPlayer track={audio} label={t(lang, 'listen')} /> : null}
+      {text ? <AudioPlayer track={audio} label={t(lang, 'listen')} unavailableLabel={t(lang, 'audioUnavailable')} /> : null}
       {text ? (
         <div className="text-block">
           <span>{t(lang, 'transcript')}</span>

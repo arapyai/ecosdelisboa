@@ -538,6 +538,10 @@ a {
   background: #fff;
 }
 
+.audio-panel.disabled {
+  color: var(--muted);
+}
+
 .player-button {
   width: 42px;
   height: 42px;
@@ -548,6 +552,12 @@ a {
   display: grid;
   place-items: center;
   cursor: pointer;
+}
+
+.player-button:disabled {
+  background: var(--line);
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
 .player-copy {
