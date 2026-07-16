@@ -10,6 +10,7 @@ Esta pasta concentra a documentacao transversal do projeto Lisboa por Outros.
 - `importacao_csv_conteudo.md`: modelo de CSV para importacao editorial de pontos e textos
 - `voice_language_seed.csv`: catalogo inicial de linguas e vozes ElevenLabs
 - `runbook_elevenlabs_vozes.md`: configuracao operacional de ElevenLabs, vozes e geracao de audio
+- `runbook_audio_storage.md`: upload manual, layout, backup e restore dos MP3
 
 ## Como ler
 
@@ -18,6 +19,7 @@ Esta pasta concentra a documentacao transversal do projeto Lisboa por Outros.
 - use `arquitetura.md` para entender a organizacao do monorepo
 - use `importacao_csv_conteudo.md` para preparar planilhas de conteudo para importacao
 - use `runbook_elevenlabs_vozes.md` para colocar sintese de voz e catalogos em operacao
+- use `runbook_audio_storage.md` para operar o volume persistente e recuperar os MP3
 
 ## Organizacao
 

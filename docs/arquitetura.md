@@ -10,7 +10,7 @@ O projeto Lisboa por Outros e composto por:
 - backend: API FastAPI responsavel por conteudo, autenticacao admin, traducoes e audio
 - persistencia: PostgreSQL com PostGIS
 - integracoes externas: ElevenLabs e provider LLM configuravel
-- storage de audio atual: filesystem local servido pela API; Cloudflare R2 permanece como alvo
+- storage de audio: volume local persistente servido pela API
 
 ## Estrutura de repositorio alvo
 
@@ -54,5 +54,6 @@ O workspace `backend/` concentra tudo que pertence ao servidor:
 - `docs/lisboa_spec_geral.md`: fonte principal de produto e arquitetura
 - `docs/backend_referencia.md`: referencia tecnica do backend e das integracoes
 - `docs/runbook_elevenlabs_vozes.md`: operacao de ElevenLabs, catalogos de vozes e audio
+- `docs/runbook_audio_storage.md`: layout, backup e restore do volume de audio
 - `backend/README.md`: operacao e desenvolvimento do backend
 - `README.md`: leitura rapida da organizacao do monorepo
