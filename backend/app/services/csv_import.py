@@ -9,11 +9,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.entities import Author, Language, Point, Text, Translation
+from app.models.entities import Author, AuthorTranslation, Language, Point, Text, Translation
 from app.models.enums import ContentType, TextOrigin, TranslationStatus
 from app.services.geocoding import geocode_address
 
-TEMPLATE_COLUMNS_BEFORE_TRANSLATIONS = (
+TEMPLATE_COLUMNS_BEFORE_AUTHOR_TRANSLATIONS = (
     "point_name",
     "address",
     "neighborhood",
@@ -23,6 +23,8 @@ TEMPLATE_COLUMNS_BEFORE_TRANSLATIONS = (
     "lng_override",
     "author_name",
     "author_bio_pt",
+)
+TEMPLATE_COLUMNS_BEFORE_TEXT_TRANSLATIONS = (
     "birth_date",
     "death_date",
     "content_pt",
@@ -43,6 +45,7 @@ class ImportPreviewRow:
     title: str
     action: str
     author_action: str
+    author_translation_actions: dict[str, str]
     point_action: str
     text_action: str
     translation_actions: dict[str, str]
@@ -68,6 +71,7 @@ class ImportPlanRow:
     preview: ImportPreviewRow
     author_key: str
     author_id: UUID | None
+    author_translations: dict[str, tuple[UUID | None, str]]
     point_key: str
     point_id: UUID | None
     text_key: str
@@ -76,9 +80,13 @@ class ImportPlanRow:
 
 
 def build_template_csv(language_codes: list[str] | tuple[str, ...] = ("en",)) -> str:
-    translation_columns = tuple(f"content_{code}" for code in language_codes if code != "pt")
+    target_codes = tuple(code for code in language_codes if code != "pt")
+    author_translation_columns = tuple(f"author_bio_{code}" for code in target_codes)
+    translation_columns = tuple(f"content_{code}" for code in target_codes)
     fieldnames = (
-        *TEMPLATE_COLUMNS_BEFORE_TRANSLATIONS,
+        *TEMPLATE_COLUMNS_BEFORE_AUTHOR_TRANSLATIONS,
+        *author_translation_columns,
+        *TEMPLATE_COLUMNS_BEFORE_TEXT_TRANSLATIONS,
         *translation_columns,
         *TEMPLATE_COLUMNS_AFTER_TRANSLATIONS,
     )
@@ -94,6 +102,10 @@ def build_template_csv(language_codes: list[str] | tuple[str, ...] = ("en",)) ->
             "country": "Portugal",
             "author_name": "Fernando Pessoa",
             "author_bio_pt": "Poeta e escritor portugues.",
+            **{
+                column: "Portuguese poet and writer." if column == "author_bio_en" else ""
+                for column in author_translation_columns
+            },
             "birth_date": "1888-06-13",
             "death_date": "1935-11-30",
             "content_pt": "Aqui a cidade tem passos de escritorio, cafe e fantasma.",
@@ -329,6 +341,7 @@ def build_import_plan(
     points = db.scalars(select(Point)).all()
     texts = db.scalars(select(Text)).all()
     translations = db.scalars(select(Translation)).all()
+    author_translations = db.scalars(select(AuthorTranslation)).all()
     active_languages = set(
         db.scalars(select(Language.code).where(Language.is_active.is_(True))).all()
     )
@@ -339,9 +352,24 @@ def build_import_plan(
         if (match := re.fullmatch(r"content_(?P<lang>[a-z]{2,3}(?:-[a-z0-9]{2,8})?)", field))
         and match.group("lang") != source_language
     )
+    author_translation_columns = sorted(
+        match.group("lang")
+        for field in (rows[0].keys() if rows else [])
+        if (
+            match := re.fullmatch(
+                r"author_bio_(?P<lang>[a-z]{2,3}(?:-[a-z0-9]{2,8})?)",
+                field,
+            )
+        )
+        and match.group("lang") != source_language
+    )
 
     author_index: dict[str, tuple[UUID | None, Author | None]] = {
         normalize_lookup(author.name): (author.id, author) for author in authors
+    }
+    author_translation_index = {
+        (normalize_lookup(translation.author.name), translation.lang): translation
+        for translation in author_translations
     }
     point_candidates = [
         PointCandidate(
@@ -386,9 +414,15 @@ def build_import_plan(
         metadata = author_metadata(row, errors)
         content_type = resolve_content_type(clean(row, "content_type"), content, errors)
         translated_contents = {lang: clean(row, f"content_{lang}") for lang in translation_columns}
+        translated_bios = {
+            lang: clean(row, f"author_bio_{lang}") for lang in author_translation_columns
+        }
         for lang, translated_content in translated_contents.items():
             if translated_content and lang not in active_languages:
                 errors.append(f"content_{lang} uses an unknown or inactive language")
+        for lang, translated_bio in translated_bios.items():
+            if translated_bio and lang not in active_languages:
+                errors.append(f"author_bio_{lang} uses an unknown or inactive language")
 
         if not author_name:
             errors.append("author_name is required")
@@ -408,6 +442,33 @@ def build_import_plan(
             author_action = "update"
         if author_key and author_key not in author_index and not errors:
             author_index[author_key] = (None, None)
+
+        author_translation_actions: dict[str, str] = {}
+        planned_author_translations: dict[str, tuple[UUID | None, str]] = {}
+        if author_key and not errors:
+            for lang in author_translation_columns:
+                translated_bio = translated_bios[lang]
+                if not translated_bio:
+                    continue
+                translation_key = (author_key, lang)
+                existing_translation = author_translation_index.get(translation_key)
+                if existing_translation is None and translation_key not in author_translation_index:
+                    translation_action = "create"
+                    translation_id = None
+                    author_translation_index[translation_key] = None
+                elif existing_translation is None:
+                    translation_action = "reuse"
+                    translation_id = None
+                else:
+                    translation_action = (
+                        "reuse"
+                        if existing_translation.bio == translated_bio
+                        and existing_translation.origin == TextOrigin.IMPORT.value
+                        else "update"
+                    )
+                    translation_id = existing_translation.id
+                author_translation_actions[lang] = translation_action
+                planned_author_translations[lang] = (translation_id, translated_bio)
 
         point_action = "error"
         point_key = ""
@@ -530,7 +591,13 @@ def build_import_plan(
             action = (
                 "create"
                 if "create"
-                in {author_action, point_action, text_action, *translation_actions.values()}
+                in {
+                    author_action,
+                    point_action,
+                    text_action,
+                    *author_translation_actions.values(),
+                    *translation_actions.values(),
+                }
                 else "update"
             )
         preview = ImportPreviewRow(
@@ -539,6 +606,7 @@ def build_import_plan(
             title=title,
             action=action,
             author_action=author_action if not errors else "error",
+            author_translation_actions=author_translation_actions,
             point_action=point_action if not errors else "error",
             text_action=text_action if not errors else "error",
             translation_actions=translation_actions,
@@ -553,6 +621,7 @@ def build_import_plan(
                 preview=preview,
                 author_key=author_key,
                 author_id=author_id,
+                author_translations=planned_author_translations,
                 point_key=point_key,
                 point_id=point_id,
                 text_key=text_key,
@@ -584,10 +653,13 @@ def apply_import(
 ) -> dict[str, object]:
     plan = build_import_plan(csv_content, db, geocoder=geocoder)
     author_objects: dict[str, Author] = {}
+    author_translation_objects: dict[tuple[str, str], AuthorTranslation] = {}
     point_objects: dict[str, Point] = {}
     text_objects: dict[str, Text] = {}
     translation_objects: dict[tuple[str, str], Translation] = {}
     authors = _empty_counts()
+    author_translations = _empty_counts()
+    author_translations_by_language: dict[str, dict[str, int]] = {}
     points = {**_empty_counts(), "geocoded": 0}
     texts = _empty_counts()
     translations = _empty_counts()
@@ -616,6 +688,38 @@ def apply_import(
                     changed = True
             authors["updated" if changed else "reused"] += 1
         author_objects[planned.author_key] = author
+
+        for lang, (translation_id, translated_bio) in planned.author_translations.items():
+            translation_key = (planned.author_key, lang)
+            translation = author_translation_objects.get(translation_key)
+            if translation is None:
+                translation = db.get(AuthorTranslation, translation_id) if translation_id else None
+            language_counts = author_translations_by_language.setdefault(lang, _empty_counts())
+            if translation is None:
+                translation = AuthorTranslation(
+                    author_id=author.id,
+                    lang=lang,
+                    bio=translated_bio,
+                    status=TranslationStatus.PENDING,
+                    auto_translated=False,
+                    origin=TextOrigin.IMPORT.value,
+                )
+                db.add(translation)
+                db.flush()
+                translation_action = "created"
+            elif translation.bio != translated_bio or translation.origin != TextOrigin.IMPORT:
+                translation.bio = translated_bio
+                translation.status = TranslationStatus.PENDING
+                translation.auto_translated = False
+                translation.origin = TextOrigin.IMPORT.value
+                translation.reviewed_by = None
+                translation.reviewed_at = None
+                translation_action = "updated"
+            else:
+                translation_action = "reused"
+            author_translations[translation_action] += 1
+            language_counts[translation_action] += 1
+            author_translation_objects[translation_key] = translation
 
         point = point_objects.get(planned.point_key)
         if point is None:
@@ -730,6 +834,10 @@ def apply_import(
         "errors": errors,
         "rows": {"total": len(plan), "imported": imported_rows, "errors": len(errors)},
         "authors": authors,
+        "author_translations": {
+            **author_translations,
+            "by_language": author_translations_by_language,
+        },
         "points": points,
         "texts": texts,
         "translations": {**translations, "by_language": translations_by_language},

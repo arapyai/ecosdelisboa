@@ -10,7 +10,7 @@ from app.core.db import get_db
 from app.models.entities import AudioFile, Point, Text
 from app.models.enums import TranslationStatus
 from app.schemas.common import EnvelopeMeta, envelope
-from app.services.languages import get_active_language, get_source_language
+from app.services.editorial_translations import resolve_language_selection
 
 router = APIRouter(prefix="/api/v1/points", tags=["points"])
 
@@ -99,8 +99,7 @@ def get_point(
     lang: str | None = None,
 ) -> dict[str, object]:
     try:
-        source_language = get_source_language(db).code
-        selected_language = get_active_language(db, lang).code if lang else source_language
+        source_language, selected_language = resolve_language_selection(db, lang)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     point = db.scalar(

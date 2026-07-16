@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.routes.admin_auth import router as admin_auth_router
 from app.api.routes.admin_automation import router as admin_automation_router
 from app.api.routes.admin_content import router as admin_content_router
+from app.api.routes.admin_entity_translations import router as admin_entity_translations_router
 from app.api.routes.admin_import import router as admin_import_router
 from app.api.routes.admin_languages import router as admin_languages_router
 from app.api.routes.health import router as health_router
@@ -17,6 +18,7 @@ api_router.include_router(health_router)
 api_router.include_router(admin_auth_router)
 api_router.include_router(admin_automation_router)
 api_router.include_router(admin_content_router)
+api_router.include_router(admin_entity_translations_router)
 api_router.include_router(admin_import_router)
 api_router.include_router(admin_languages_router)
 api_router.include_router(authors_router)

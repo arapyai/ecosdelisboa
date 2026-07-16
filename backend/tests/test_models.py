@@ -12,11 +12,13 @@ def test_expected_tables_exist() -> None:
         "audio_files",
         "audio_generation_job_items",
         "audio_generation_jobs",
+        "author_translations",
         "authors",
         "languages",
         "points",
         "route_items",
         "routes",
+        "route_translations",
         "texts",
         "translations",
         "voices",
@@ -31,6 +33,25 @@ def test_translation_uniqueness() -> None:
         {"text_id", "lang"} == {column.name for column in constraint.columns}
         for constraint in unique_constraints
     )
+
+
+def test_entity_translation_uniqueness() -> None:
+    expected_constraints = {
+        "author_translations": {"author_id", "lang"},
+        "route_translations": {"route_id", "lang"},
+    }
+
+    for table_name, expected_columns in expected_constraints.items():
+        table = Base.metadata.tables[table_name]
+        unique_constraints = [
+            constraint
+            for constraint in table.constraints
+            if isinstance(constraint, UniqueConstraint)
+        ]
+        assert any(
+            expected_columns == {column.name for column in constraint.columns}
+            for constraint in unique_constraints
+        )
 
 
 def test_voice_languages_has_composite_primary_key() -> None:

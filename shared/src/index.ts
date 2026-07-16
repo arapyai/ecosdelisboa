@@ -28,6 +28,7 @@ export interface PublicAuthorSummary {
   id: string;
   name: string;
   bio_pt?: string | null;
+  bio?: string | null;
   birth_year?: number | null;
   death_year?: number | null;
   photo_url?: string | null;
@@ -86,6 +87,8 @@ export interface PublicRoute {
   id: string;
   title_pt: string;
   description_pt?: string | null;
+  title: string;
+  description?: string | null;
   cover_image_url?: string | null;
   difficulty?: string | null;
   is_published?: boolean;
@@ -194,6 +197,30 @@ export interface AdminRoute {
   estimated_distance_m?: number | null;
   estimated_duration_s?: number | null;
   items?: AdminRouteItem[];
+}
+
+export type TranslationStatus = 'pending' | 'approved' | 'rejected';
+export type TextOrigin = 'manual' | 'automatic' | 'import';
+
+export interface AdminEditorialTranslation {
+  id: string;
+  lang: SupportedLanguage;
+  status: TranslationStatus;
+  auto_translated: boolean;
+  origin: TextOrigin;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+}
+
+export interface AdminAuthorTranslation extends AdminEditorialTranslation {
+  author_id: string;
+  bio: string;
+}
+
+export interface AdminRouteTranslation extends AdminEditorialTranslation {
+  route_id: string;
+  title: string;
+  description?: string | null;
 }
 
 type RequestBody = Record<string, unknown> | Array<unknown>;

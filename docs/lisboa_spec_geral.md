@@ -105,6 +105,8 @@ O modelo de dados do produto gira em torno destas entidades principais:
 - `points`: lugares literarios georreferenciados, sem autoria direta
 - `texts`: textos originais em portugues associados a um ponto e a um autor
 - `translations`: traducoes por lingua com status editorial
+- `author_translations`: biografias traduzidas por autor e lingua, com o mesmo status editorial
+- `route_translations`: titulos e descricoes traduzidos por percurso e lingua
 - `audio_files`: audios gerados ou enviados manualmente por texto e lingua
 - `languages`: linguas dinamicas, estado ativo e identificacao da lingua-fonte
 - `voices`: vozes disponiveis na conta ElevenLabs, inclusive pools default
