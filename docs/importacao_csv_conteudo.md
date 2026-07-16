@@ -31,7 +31,7 @@ Os dois `POST`s recebem multipart com o arquivo no campo `file`.
 ## Colunas principais
 
 ```csv
-point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,author_bio_pt,birth_date,death_date,content_pt,content_en,content_type,source_work,source_year
+point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,author_bio_pt,author_bio_en,birth_date,death_date,content_pt,content_en,content_type,source_work,source_year
 ```
 
 ### Cabeçalhos obrigatórios
@@ -84,14 +84,18 @@ importador quando não possuem um mapeamento documentado.
 
 ## Traduções no mesmo arquivo
 
-Traduções usam o formato `content_<código-do-idioma>`:
+Traduções usam os formatos `content_<código-do-idioma>` e
+`author_bio_<código-do-idioma>`:
 
 ```csv
 content_pt,content_en,content_es,content_fr
+author_bio_pt,author_bio_en,author_bio_es,author_bio_fr
 ```
 
 - `content_pt` é o original obrigatório e é salvo em `texts`;
 - cada outra coluna não vazia é salva em `translations`;
+- `author_bio_pt` permanece em `authors` e cada `author_bio_<idioma>` não vazio é salvo em
+  `author_translations`;
 - o código deve existir e estar ativo na gestão de idiomas;
 - traduções importadas ficam com `status=pending`, `auto_translated=false` e `origin=import`;
 - uma coluna vazia não cria nem remove tradução;
@@ -99,8 +103,10 @@ content_pt,content_en,content_es,content_fr
   volta seu estado para `pending`;
 - importar nunca chama o LLM e nunca gera áudio.
 
-O arquivo versionado inclui `content_en` como exemplo. O endpoint de template acrescenta uma
-coluna para cada idioma ativo, e o parser aceita qualquer idioma ativo no formato acima.
+O arquivo versionado inclui `content_en` e `author_bio_en` como exemplos. O endpoint de template
+acrescenta as duas colunas para cada idioma ativo, e o parser aceita qualquer idioma ativo nos
+formatos acima. Percursos não pertencem a este CSV de conteúdo; suas traduções usam os endpoints
+administrativos próprios.
 
 ## Correspondência e deduplicação
 
@@ -144,7 +150,7 @@ Cada linha informa:
 
 - `action`: compatibilidade resumida (`create`, `update` ou `error`);
 - `author_action`, `point_action`, `text_action`;
-- `translation_actions`, indexado pelo código do idioma;
+- `author_translation_actions` e `translation_actions`, indexados pelo código do idioma;
 - `geocoded`, `lat` e `lng` resolvidos;
 - `errors`, com os bloqueios da linha.
 
@@ -159,6 +165,12 @@ acrescenta contadores detalhados:
 {
   "rows": {"total": 2, "imported": 2, "errors": 0},
   "authors": {"created": 1, "updated": 0, "reused": 1},
+  "author_translations": {
+    "created": 1,
+    "updated": 0,
+    "reused": 0,
+    "by_language": {"en": {"created": 1, "updated": 0, "reused": 0}}
+  },
   "points": {"created": 1, "updated": 0, "reused": 1, "geocoded": 1},
   "texts": {"created": 2, "updated": 0, "reused": 0},
   "translations": {
@@ -174,6 +186,6 @@ acrescenta contadores detalhados:
 
 - salvar em UTF-8; arquivos com BOM também são aceitos;
 - colocar entre aspas textos com vírgulas ou quebras de linha;
-- não alterar o prefixo `content_` das traduções;
+- não alterar os prefixos `content_` e `author_bio_` das traduções;
 - sempre executar o preview antes da confirmação;
 - corrigir linhas com erro no arquivo e gerar um novo preview.

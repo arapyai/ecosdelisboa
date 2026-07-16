@@ -123,6 +123,10 @@ class Author(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         back_populates="author",
         cascade="all, delete-orphan",
     )
+    translations: Mapped[list[AuthorTranslation]] = relationship(
+        back_populates="author",
+        cascade="all, delete-orphan",
+    )
 
 
 class Point(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
@@ -230,6 +234,65 @@ class Route(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
 
     items: Mapped[list[RouteItem]] = relationship(
         back_populates="route", cascade="all, delete-orphan", order_by="RouteItem.position"
+    )
+    translations: Mapped[list[RouteTranslation]] = relationship(
+        back_populates="route",
+        cascade="all, delete-orphan",
+    )
+
+
+class AuthorTranslation(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "author_translations"
+
+    author_id: Mapped[UUID] = mapped_column(
+        ForeignKey("authors.id", ondelete="CASCADE"), nullable=False
+    )
+    lang: Mapped[str] = mapped_column(
+        String(16), ForeignKey("languages.code", ondelete="RESTRICT"), nullable=False
+    )
+    bio: Mapped[str] = mapped_column(SAText, nullable=False)
+    status: Mapped[TranslationStatus] = mapped_column(
+        value_enum(TranslationStatus, "translation_status"),
+        default=TranslationStatus.PENDING,
+        nullable=False,
+    )
+    auto_translated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    origin: Mapped[str] = mapped_column(String(16), default=TextOrigin.MANUAL.value, nullable=False)
+    reviewed_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    author: Mapped[Author] = relationship(back_populates="translations")
+
+    __table_args__ = (
+        UniqueConstraint("author_id", "lang", name="uq_author_translations_author_lang"),
+    )
+
+
+class RouteTranslation(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "route_translations"
+
+    route_id: Mapped[UUID] = mapped_column(
+        ForeignKey("routes.id", ondelete="CASCADE"), nullable=False
+    )
+    lang: Mapped[str] = mapped_column(
+        String(16), ForeignKey("languages.code", ondelete="RESTRICT"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(SAText, nullable=True)
+    status: Mapped[TranslationStatus] = mapped_column(
+        value_enum(TranslationStatus, "translation_status"),
+        default=TranslationStatus.PENDING,
+        nullable=False,
+    )
+    auto_translated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    origin: Mapped[str] = mapped_column(String(16), default=TextOrigin.MANUAL.value, nullable=False)
+    reviewed_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    route: Mapped[Route] = relationship(back_populates="translations")
+
+    __table_args__ = (
+        UniqueConstraint("route_id", "lang", name="uq_route_translations_route_lang"),
     )
 
 

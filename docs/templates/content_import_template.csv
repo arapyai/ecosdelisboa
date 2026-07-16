@@ -1,2 +1,2 @@
-point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,author_bio_pt,birth_date,death_date,content_pt,content_en,content_type,source_work,source_year
-Chiado,Largo do Chiado,Chiado,Lisboa,Portugal,,,Fernando Pessoa,Poeta e escritor portugues.,1888-06-13,1935-11-30,"Aqui a cidade tem passos de escritorio, cafe e fantasma.","Here the city has footsteps of office, cafe and ghost.",prose,Fragmento demonstrativo,2026
+point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,author_bio_pt,author_bio_en,birth_date,death_date,content_pt,content_en,content_type,source_work,source_year
+Chiado,Largo do Chiado,Chiado,Lisboa,Portugal,,,Fernando Pessoa,Poeta e escritor portugues.,Portuguese poet and writer.,1888-06-13,1935-11-30,"Aqui a cidade tem passos de escritorio, cafe e fantasma.","Here the city has footsteps of office, cafe and ghost.",prose,Fragmento demonstrativo,2026

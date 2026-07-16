@@ -119,12 +119,12 @@ tests/
 - `GET /health`
 - `GET /api/v1/points`
 - `GET /api/v1/points/{id}`
-- `GET /api/v1/authors`
-- `GET /api/v1/authors/{id}`
-- `GET /api/v1/routes`
-- `GET /api/v1/routes/{id}`
-- `GET /api/v1/routes/{id}/gpx`
-- `GET /api/v1/routes/{id}/podcast.rss`
+- `GET /api/v1/authors[?lang=en]`
+- `GET /api/v1/authors/{id}[?lang=en]`
+- `GET /api/v1/routes[?lang=en]`
+- `GET /api/v1/routes/{id}[?lang=en]`
+- `GET /api/v1/routes/{id}/gpx[?lang=en]`
+- `GET /api/v1/routes/{id}/podcast.rss[?lang=en]`
 - `GET /api/v1/voices/default` (sorteia uma voz do pool default)
 - `GET /api/v1/languages`
 
@@ -135,6 +135,7 @@ tests/
 - Importacao CSV de textos, autores, pontos e traducoes em `/api/v1/admin/points/import/*`, com
   template baixavel em `/api/v1/admin/points/import/template`
 - Traducoes em `/api/v1/admin/translations/*`
+- Traducoes de autores e rotas em `/api/v1/admin/{authors|routes}/{id}/translations/*`
 - Vozes em `/api/v1/admin/voices/*`
 - Linguas e importacao do catalogo em `/api/v1/admin/languages/*`
 - Audio e jobs em `/api/v1/admin/audio/*`

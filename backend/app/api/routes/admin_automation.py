@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -12,9 +11,10 @@ from app.api.deps import get_current_admin
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.models.entities import AdminUser, AudioFile, Text, Translation, Voice
-from app.models.enums import TextOrigin, TranslationStatus
+from app.models.enums import TranslationStatus
 from app.schemas.common import EnvelopeMeta, envelope
 from app.services.audio_jobs import create_audio_job, run_audio_job, stream_job_events
+from app.services.editorial_translations import mark_manual_translation
 from app.services.elevenlabs import ElevenLabsService
 from app.services.languages import (
     get_active_language,
@@ -139,11 +139,11 @@ def upsert_translation(
         db.add(translation)
     translation.content = payload.content
     translation.phonetic_content = payload.phonetic_content
-    translation.status = payload.status
-    translation.auto_translated = False
-    translation.origin = TextOrigin.MANUAL
-    translation.reviewed_by = current_admin.email
-    translation.reviewed_at = datetime.now(UTC)
+    mark_manual_translation(
+        translation,
+        status=payload.status,
+        reviewer=current_admin.email,
+    )
     db.commit()
     db.refresh(translation)
     return envelope(
@@ -174,11 +174,11 @@ def review_translation(
         raise HTTPException(status_code=404, detail="Translation not found")
     translation.content = payload.content
     translation.phonetic_content = payload.phonetic_content
-    translation.status = payload.status
-    translation.auto_translated = False
-    translation.origin = TextOrigin.MANUAL
-    translation.reviewed_by = current_admin.email
-    translation.reviewed_at = datetime.now(UTC)
+    mark_manual_translation(
+        translation,
+        status=payload.status,
+        reviewer=current_admin.email,
+    )
     db.commit()
     db.refresh(translation)
     return envelope(

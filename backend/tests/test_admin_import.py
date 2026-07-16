@@ -1,7 +1,7 @@
 import csv
 import io
 
-from app.models.entities import Author, Point, Text, Translation
+from app.models.entities import Author, AuthorTranslation, Point, Text, Translation
 from app.models.enums import TextOrigin, TranslationStatus
 from app.services.csv_import import apply_import, preview_import
 from app.services.geocoding import GeocodingResult
@@ -100,6 +100,7 @@ def test_csv_template_is_downloadable_and_matches_the_parser(client, db_session)
     rows = list(csv.DictReader(io.StringIO(response.text)))
     assert rows[0]["content_pt"]
     assert rows[0]["content_en"]
+    assert rows[0]["author_bio_en"]
 
 
 def test_import_creates_translations_from_content_language_columns(client, db_session) -> None:
@@ -137,6 +138,43 @@ def test_import_creates_translations_from_content_language_columns(client, db_se
     assert translation.origin == TextOrigin.IMPORT
     assert repeated.json()["data"]["translations"]["reused"] == 1
     assert db_session.query(Translation).count() == 1
+
+
+def test_import_creates_author_translations_from_language_columns(client, db_session) -> None:
+    headers = auth_header(client, db_session)
+    csv_content = CSV_CONTENT.replace(
+        b"author_name,content_pt",
+        b"author_name,author_bio_en,content_pt",
+    ).replace(
+        b"Fernando Pessoa,Nao sou nada.",
+        b"Fernando Pessoa,Portuguese poet.,Nao sou nada.",
+    )
+
+    response = client.post(
+        "/api/v1/admin/points/import/confirm",
+        headers=headers,
+        files={"file": ("points.csv", csv_content, "text/csv")},
+    )
+    repeated = client.post(
+        "/api/v1/admin/points/import/confirm",
+        headers=headers,
+        files={"file": ("points.csv", csv_content, "text/csv")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["author_translations"] == {
+        "created": 1,
+        "updated": 0,
+        "reused": 0,
+        "by_language": {"en": {"created": 1, "updated": 0, "reused": 0}},
+    }
+    translation = db_session.query(AuthorTranslation).one()
+    assert translation.bio == "Portuguese poet."
+    assert translation.status == TranslationStatus.PENDING
+    assert translation.auto_translated is False
+    assert translation.origin == TextOrigin.IMPORT
+    assert repeated.json()["data"]["author_translations"]["reused"] == 1
+    assert db_session.query(AuthorTranslation).count() == 1
 
 
 def test_import_rejects_translation_for_inactive_or_unknown_language(

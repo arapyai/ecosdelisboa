@@ -90,6 +90,16 @@ Restricao:
 
 - unicidade por `text_id + lang`
 
+#### `author_translations` e `route_translations`
+
+Autores e percursos seguem o mesmo contrato editorial de `translations`: idioma, `status`,
+`auto_translated`, `origin`, revisor e data de revisão. As tabelas guardam respectivamente a
+biografia do autor e o título/descrição do percurso, com unicidade por entidade + idioma.
+
+Os campos `authors.bio_pt`, `routes.title_pt` e `routes.description_pt` continuam sendo a fonte
+canônica e o fallback. Nome, datas, foto, voz e demais campos comuns não são duplicados nas
+traduções.
+
 #### `languages`
 
 - `code`
@@ -186,12 +196,12 @@ Regras:
 | GET | `/health` | healthcheck |
 | GET | `/api/v1/points` | filtros por localizacao, idioma e autor dos textos |
 | GET | `/api/v1/points/{id}` | inclui autores derivados dos textos, textos e audios |
-| GET | `/api/v1/authors` | lista de autores |
-| GET | `/api/v1/authors/{id}` | detalhe do autor |
-| GET | `/api/v1/routes` | apenas publicados |
-| GET | `/api/v1/routes/{id}` | detalhe do percurso |
-| GET | `/api/v1/routes/{id}/gpx` | export de navegacao |
-| GET | `/api/v1/routes/{id}/podcast.rss` | feed de audio |
+| GET | `/api/v1/authors?lang=en` | lista de autores; biografia aprovada ou fallback em português |
+| GET | `/api/v1/authors/{id}?lang=en` | detalhe do autor com o mesmo fallback |
+| GET | `/api/v1/routes?lang=en` | apenas publicados; título e descrição localizados |
+| GET | `/api/v1/routes/{id}?lang=en` | detalhe do percurso localizado |
+| GET | `/api/v1/routes/{id}/gpx?lang=en` | export de navegacao com título localizado |
+| GET | `/api/v1/routes/{id}/podcast.rss?lang=en` | feed com título e descrição localizados |
 | GET | `/api/v1/voices/default` | uma voz sorteada do pool default |
 
 ## API Admin
@@ -207,6 +217,8 @@ Regras:
 - CRUD de pontos em `/api/v1/admin/points`
 - CRUD de textos em `/api/v1/admin/texts`
 - CRUD de percursos em `/api/v1/admin/routes`
+- traduções de autor em `/api/v1/admin/authors/{id}/translations[/{lang}]`
+- traduções de percurso em `/api/v1/admin/routes/{id}/translations[/{lang}]`
 
 ### Importacao CSV
 
@@ -215,7 +227,7 @@ Regras:
 - `POST /api/v1/admin/points/import/confirm`
 
 O CSV cria ou reutiliza autores, pontos e textos, faz geocoding quando necessário e aceita
-traduções nas colunas `content_<código-do-idioma>`. O contrato completo está em
+traduções nas colunas `content_<código-do-idioma>` e `author_bio_<código-do-idioma>`. O contrato completo está em
 `docs/importacao_csv_conteudo.md`.
 
 ### Traducao e audio
