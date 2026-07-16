@@ -7,6 +7,12 @@ class ContentType(StrEnum):
     LYRICS = "lyrics"
 
 
+class TextOrigin(StrEnum):
+    MANUAL = "manual"
+    IMPORT = "import"
+    AUTOMATIC = "automatic"
+
+
 class TranslationStatus(StrEnum):
     PENDING = "pending"
     APPROVED = "approved"

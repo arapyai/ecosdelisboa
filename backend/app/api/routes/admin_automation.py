@@ -12,7 +12,7 @@ from app.api.deps import get_current_admin
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.models.entities import AdminUser, AudioFile, Text, Translation, Voice
-from app.models.enums import TranslationStatus
+from app.models.enums import TextOrigin, TranslationStatus
 from app.schemas.common import EnvelopeMeta, envelope
 from app.services.audio_jobs import create_audio_job, run_audio_job, stream_job_events
 from app.services.elevenlabs import ElevenLabsService
@@ -141,6 +141,7 @@ def upsert_translation(
     translation.phonetic_content = payload.phonetic_content
     translation.status = payload.status
     translation.auto_translated = False
+    translation.origin = TextOrigin.MANUAL
     translation.reviewed_by = current_admin.email
     translation.reviewed_at = datetime.now(UTC)
     db.commit()
@@ -154,6 +155,7 @@ def upsert_translation(
             "phonetic_content": translation.phonetic_content,
             "status": translation.status.value,
             "auto_translated": translation.auto_translated,
+            "origin": translation.origin,
             "reviewed_by": translation.reviewed_by,
         },
         EnvelopeMeta(),
@@ -173,6 +175,8 @@ def review_translation(
     translation.content = payload.content
     translation.phonetic_content = payload.phonetic_content
     translation.status = payload.status
+    translation.auto_translated = False
+    translation.origin = TextOrigin.MANUAL
     translation.reviewed_by = current_admin.email
     translation.reviewed_at = datetime.now(UTC)
     db.commit()
@@ -222,6 +226,7 @@ def list_translations(
                 "text_id": str(item.text_id),
                 "lang": item.lang,
                 "status": item.status.value,
+                "origin": item.origin,
                 "reviewed_by": item.reviewed_by,
             }
             for item in translations
