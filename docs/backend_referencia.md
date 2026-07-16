@@ -210,8 +210,13 @@ Regras:
 
 ### Importacao CSV
 
+- `GET /api/v1/admin/points/import/template`
 - `POST /api/v1/admin/points/import/preview`
 - `POST /api/v1/admin/points/import/confirm`
+
+O CSV cria ou reutiliza autores, pontos e textos, faz geocoding quando necessário e aceita
+traduções nas colunas `content_<código-do-idioma>`. O contrato completo está em
+`docs/importacao_csv_conteudo.md`.
 
 ### Traducao e audio
 
