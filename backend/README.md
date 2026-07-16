@@ -182,8 +182,12 @@ Backup e restore do banco e do volume de áudio estão documentados em
 ### Jobs e SSE
 - Jobs de geracao de audio sao persistidos na base.
 - Progresso pode ser consumido por `text/event-stream`.
-- A execução ainda acontece dentro da requisição que cria o job; processamento realmente
-  assíncrono permanece pendente.
+- `POST /api/v1/admin/audio/jobs` apenas valida e enfileira o lote, retornando `pending`.
+- Um worker interno do mesmo serviço processa a fila fora da requisição e compartilha o volume
+  local da API.
+- Jobs interrompidos em `running` são recuperados no próximo startup; itens concluídos não são
+  repetidos.
+- `AUDIO_WORKER_ENABLED` liga o consumidor e `AUDIO_WORKER_POLL_INTERVAL_S` controla o polling.
 
 ### Linguas e vozes
 

@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     audio_storage_dir: str = "media"
     audio_public_base_url: str = "/media"
     audio_upload_max_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+    audio_worker_enabled: bool = True
+    audio_worker_poll_interval_s: float = Field(default=1.0, gt=0)
 
 
 @lru_cache

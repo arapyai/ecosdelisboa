@@ -187,6 +187,7 @@ Regras:
 - `id`
 - `status`
 - `requested_by`
+- `preferred_voice_id`
 - `total`
 - `processed`
 - `succeeded`
@@ -240,6 +241,10 @@ traduções nas colunas `content_<código-do-idioma>` e `author_bio_<código-do-
 - revisao de traducao em `/api/v1/admin/translations/{translation_id}/review`
 - sincronizacao e configuracao de vozes em `/api/v1/admin/voices/*`
 - geracao, upload e jobs de audio em `/api/v1/admin/audio/*`
+
+Criar um job em lote retorna imediatamente com `status=pending`. O worker interno do backend
+processa a fila persistida fora da requisição, e o endpoint SSE lê o progresso gravado no banco.
+Jobs interrompidos em `running` são recuperados no startup sem repetir itens concluídos.
 
 O upload real usa multipart:
 

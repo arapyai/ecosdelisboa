@@ -44,8 +44,10 @@ das capacidades editoriais mais recentes na interface administrativa — mapa/ge
 edição multilíngue, import/export unificado e áudio dentro da edição de texto — continua no
 roadmap e não deve ser inferida apenas pela existência da API.
 
-Jobs de áudio e SSE possuem modelo e endpoints, mas o processamento ainda ocorre no ciclo da
-requisição. A execução realmente assíncrona permanece planejada.
+Jobs de áudio usam o banco como fila durável. Um worker em thread própria, iniciado junto com a
+API, processa os itens fora do ciclo da requisição e grava progresso para o SSE. API e worker
+permanecem no mesmo serviço para compartilhar o volume local de MP3; jobs interrompidos são
+retomados no startup.
 
 ## Nomes técnicos legados
 

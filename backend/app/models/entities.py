@@ -332,6 +332,7 @@ class AudioGenerationJob(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         nullable=False,
     )
     requested_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    preferred_voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     processed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     succeeded: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -343,6 +344,8 @@ class AudioGenerationJob(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     items: Mapped[list[AudioGenerationJobItem]] = relationship(
         back_populates="job", cascade="all, delete-orphan"
     )
+
+    __table_args__ = (Index("ix_audio_generation_jobs_status_created_at", "status", "created_at"),)
 
 
 class AudioGenerationJobItem(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):

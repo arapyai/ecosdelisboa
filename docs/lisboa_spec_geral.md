@@ -46,7 +46,7 @@ contenha uma fundação Expo.
 | --- | --- | --- |
 | PWA (`webapp/`) | experiência pública | base funcional entregue; validação, conteúdo e polimento no roadmap |
 | Admin (`admin/`) | operação editorial | CRUD/importação/áudio iniciais entregues; nova UX multilíngue e de mapas no roadmap |
-| Backend (`backend/`) | API, regras e integrações | contratos principais implementados; jobs realmente assíncronos pendentes |
+| Backend (`backend/`) | API, regras e integrações | contratos principais e worker durável de áudio implementados |
 | Mobile (`mobile/`) | Android e iOS | fundação Expo; desenvolvimento funcional pós-MVP |
 
 O estado detalhado e as datas pertencem ao
@@ -161,8 +161,10 @@ de deduplicação e todas as colunas estão em `importacao_csv_conteudo.md`.
 - `manually_uploaded=true` impede sobrescrita por lotes automáticos, mas não impede nova
   substituição manual nem remoção explícita.
 
-Modelos de job e SSE existem, porém a geração em lote ainda roda dentro da requisição HTTP. O
-processamento fora do ciclo da requisição é uma entrega pendente.
+O endpoint de lote cria o job e responde imediatamente com estado `pending`. Um worker interno
+do serviço reivindica jobs de forma atômica, persiste cada resultado e alimenta o SSE com
+progresso real. Após restart, itens que estavam `running` voltam à fila, enquanto resultados já
+concluídos são preservados.
 
 ### Percursos
 
