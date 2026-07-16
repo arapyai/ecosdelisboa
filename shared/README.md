@@ -1,3 +1,5 @@
 # Shared
 
-Tipos basicos e cliente HTTP minimo compartilhavel entre `webapp/`, `mobile/` e `admin/`.
+Tipos de domínio e cliente HTTP compartilhados por `webapp/`, `admin/` e `mobile/`. Mantenha
+aqui somente contratos realmente reutilizados; regras editoriais e persistência pertencem ao
+backend.

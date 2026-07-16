@@ -66,9 +66,11 @@ Nota:
 - `point_id`
 - `author_id`
 - `content_pt`
+- `phonetic_content`
 - `source_work`
 - `source_year`
 - `content_type`
+- `origin`
 
 Relacoes:
 
@@ -81,8 +83,10 @@ Relacoes:
 - `text_id`
 - `lang`
 - `content`
+- `phonetic_content`
 - `status`
 - `auto_translated`
+- `origin`
 - `reviewed_by`
 - `reviewed_at`
 
@@ -265,7 +269,9 @@ Chiado,Largo do Chiado,Chiado,Lisboa,Portugal,,,Fernando Pessoa,"Aqui a cidade t
 Terreiro do Paco,Praca do Comercio,Baixa,Lisboa,Portugal,38.7076,-9.1365,Fernando Pessoa,"O rio abre a cidade como uma pagina larga.",poetry,Fragmento demonstrativo,2026
 ```
 
-Na importacao, `point_name/address/neighborhood` definem ou atualizam o ponto; `author_name` define o autor do texto criado ou atualizado para aquele ponto. `lat_override/lng_override` podem ficar vazios para pontos existentes; para criar um ponto novo, ambos devem ser preenchidos.
+Na importação, `point_name/address/neighborhood` resolvem o ponto e `author_name` resolve o autor
+do texto. `lat_override/lng_override` podem ficar vazios quando existe endereço suficiente para
+geocoding; quando preenchidos, os dois valores devem ser enviados juntos.
 
 ## Integracoes Externas
 
@@ -275,7 +281,7 @@ Uso:
 
 - listar vozes disponiveis
 - gerar audio por `voice_id`
-- fazer preview de voz
+- expor a URL de preview recebida no catálogo de vozes
 
 Fluxo:
 
@@ -287,11 +293,11 @@ Fluxo:
 A escolha automatica segue: override explicito, voz do autor, pool da lingua, pool default e
 `ELEVENLABS_DEFAULT_VOICE_ID`.
 
-### Google Gemini
+### Provider de tradução
 
-Uso:
-
-- gerar traducao automatica de texto literario com contexto do autor e da obra
+O provider é selecionado por `TRANSLATION_LLM_PROVIDER`; Claude é o padrão atual. A integração
+aceita endpoint, modelo e credencial configuráveis para não acoplar o domínio editorial a um
+único fornecedor.
 
 Regras:
 
@@ -344,6 +350,9 @@ Uso:
 - hospedar API
 - fornecer PostgreSQL gerido
 - gerir variaveis de ambiente e deploy
+
+Os MP3 precisam de um volume persistente montado em `AUDIO_STORAGE_DIR`. Cloudflare R2 não faz
+parte da arquitetura atual.
 
 ## Regras de Implementacao
 

@@ -1,29 +1,26 @@
-# Web App
+# PWA pública
 
-PWA em React/Vite para Ecos de Lisboa.
+Experiência pública do Lisboa por Outros em React 19 e Vite. Inclui mapa, pontos, autores,
+percursos, reprodução de áudio, seleção de idioma e suporte de cache offline. A validação offline
+real e o polimento de lançamento permanecem acompanhados no GitHub Project.
 
-## Requisitos
+O nome de pacote `@ecosdelisboa/webapp` é um identificador técnico legado.
 
-- Node.js
-- npm
+## Desenvolvimento
 
-## Instalar
+Na raiz do monorepo:
 
 ```bash
 npm install
+npm run webapp:dev
+npm run webapp:build
 ```
 
-## Rodar em desenvolvimento
+## Scripts do workspace
 
-```bash
-npm run dev
-```
-
-## Scripts
-
-- `npm run dev`: inicia o servidor Vite de desenvolvimento.
-- `npm run build`: valida TypeScript e cria o build de producao.
-- `npm run preview`: serve o build de producao localmente.
-- `npm run lint`: roda ESLint.
-- `npm run storybook`: inicia o Storybook.
-- `npm run build-storybook`: cria o build estatico do Storybook.
+- `npm run dev`: Vite de desenvolvimento;
+- `npm run build`: TypeScript e build de produção;
+- `npm run preview`: serve o build localmente;
+- `npm run lint`: ESLint;
+- `npm run storybook`: catálogo de componentes;
+- `npm run build-storybook`: build estático do Storybook.
