@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.entities import Text, Translation
-from app.models.enums import TranslationStatus
+from app.models.enums import TextOrigin, TranslationStatus
 from app.services.http_client import open_url
 from app.services.languages import get_source_language
 
@@ -130,6 +130,7 @@ def request_translation(
             content=content,
             status=TranslationStatus.PENDING,
             auto_translated=True,
+            origin=TextOrigin.AUTOMATIC,
         )
         db.add(translation)
         db.flush()
@@ -138,6 +139,7 @@ def request_translation(
     existing.content = content
     existing.status = TranslationStatus.PENDING
     existing.auto_translated = True
+    existing.origin = TextOrigin.AUTOMATIC
     existing.reviewed_by = None
     existing.reviewed_at = None
     db.flush()

@@ -132,7 +132,8 @@ tests/
 - `POST /api/v1/admin/auth/login`
 - `GET /api/v1/admin/auth/me`
 - CRUD de autores, pontos, textos e rotas em `/api/v1/admin/*`
-- Importacao CSV em `/api/v1/admin/points/import/*`
+- Importacao CSV de textos, autores, pontos e traducoes em `/api/v1/admin/points/import/*`, com
+  template baixavel em `/api/v1/admin/points/import/template`
 - Traducoes em `/api/v1/admin/translations/*`
 - Vozes em `/api/v1/admin/voices/*`
 - Linguas e importacao do catalogo em `/api/v1/admin/languages/*`

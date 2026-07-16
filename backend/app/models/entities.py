@@ -30,6 +30,7 @@ from app.models.enums import (
     AudioJobItemStatus,
     AudioJobStatus,
     ContentType,
+    TextOrigin,
     TranslationStatus,
 )
 from app.models.sqltypes import GeometryPoint4326
@@ -153,6 +154,7 @@ class Text(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     content_type: Mapped[ContentType] = mapped_column(
         value_enum(ContentType, "content_type"), nullable=False
     )
+    origin: Mapped[str] = mapped_column(String(16), default=TextOrigin.MANUAL.value, nullable=False)
 
     point: Mapped[Point] = relationship(back_populates="texts")
     author: Mapped[Author] = relationship(back_populates="texts")
@@ -182,6 +184,9 @@ class Translation(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         nullable=False,
     )
     auto_translated: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    origin: Mapped[str] = mapped_column(
+        String(16), default=TextOrigin.AUTOMATIC.value, nullable=False
+    )
     reviewed_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

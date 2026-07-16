@@ -94,6 +94,7 @@ def serialize_text(text: Text) -> dict[str, object]:
         "source_work": text.source_work,
         "source_year": text.source_year,
         "content_type": text.content_type.value,
+        "origin": text.origin,
     }
 
 
