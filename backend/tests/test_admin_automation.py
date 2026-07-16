@@ -1,11 +1,16 @@
 from pathlib import Path
 
+import pytest
+
 from app.core.config import get_settings
 from app.models.entities import AudioFile, Language, Text, Translation, Voice
 from app.models.enums import ContentType, TranslationStatus
 from app.services.elevenlabs import resolve_voice_id
 from tests.test_admin_content import auth_header
 from tests.test_api_public import seed_public_data
+
+MP3_ONE = b"ID3\x04\x00\x00\x00\x00\x00\x00first-audio"
+MP3_TWO = b"ID3\x04\x00\x00\x00\x00\x00\x00second-audio"
 
 
 def test_translation_workflow_stays_pending_until_review(client, db_session) -> None:
@@ -218,14 +223,21 @@ def test_generate_audio_with_preferred_voice(client, db_session) -> None:
     )
     assert audio.voice_id == "custom-voice"
     assert audio.public_url == f"/media/audio/{text.id}/en.mp3"
-    assert Path(f"media/audio/{text.id}/en.mp3").read_bytes() == b"I am nothing."
+    audio_path = Path(get_settings().audio_storage_dir) / f"audio/{text.id}/en.mp3"
+    assert audio_path.read_bytes() == b"I am nothing."
 
     media_response = client.get(audio.public_url)
     assert media_response.status_code == 200
     assert media_response.content == b"I am nothing."
 
 
-def test_manual_audio_upload_is_preserved_over_auto_regeneration(client, db_session) -> None:
+def test_manual_audio_upload_is_preserved_over_auto_regeneration(
+    client,
+    db_session,
+    monkeypatch,
+) -> None:
+    from app.api.routes import admin_automation
+
     headers = auth_header(client, db_session)
     ids = seed_public_data(db_session)
     text = db_session.query(Text).filter(Text.point_id == ids["point"].id).one()
@@ -233,9 +245,26 @@ def test_manual_audio_upload_is_preserved_over_auto_regeneration(client, db_sess
     upload = client.put(
         f"/api/v1/admin/audio/{text.id}/en/upload",
         headers=headers,
-        json={"public_url": "https://audio.example/manual.mp3", "voice_id": "manual"},
+        files={"file": ("narration.mp3", MP3_ONE, "audio/mpeg")},
     )
     assert upload.status_code == 200
+    upload_data = upload.json()["data"]
+    assert upload_data["text_id"] == str(text.id)
+    assert upload_data["lang"] == "en"
+    assert upload_data["public_url"] == f"/media/audio/manual/{text.id}/en.mp3"
+    assert upload_data["duration_s"] is None
+    assert upload_data["voice_id"] is None
+    assert upload_data["generated_at"] is None
+    assert upload_data["manually_uploaded"] is True
+    media_response = client.get(upload_data["public_url"])
+    assert media_response.status_code == 200
+    assert media_response.content == MP3_ONE
+
+    class UnexpectedElevenLabsCall:
+        def generate_audio(self, *_args, **_kwargs):
+            raise AssertionError("manual audio must skip ElevenLabs generation")
+
+    monkeypatch.setattr(admin_automation, "elevenlabs_service", UnexpectedElevenLabsCall())
 
     generate = client.post(f"/api/v1/admin/audio/{text.id}/en/generate", headers=headers)
     assert generate.status_code == 200
@@ -245,8 +274,15 @@ def test_manual_audio_upload_is_preserved_over_auto_regeneration(client, db_sess
         .filter(AudioFile.text_id == text.id, AudioFile.lang == "en")
         .one()
     )
-    assert audio_file.public_url == "https://audio.example/manual.mp3"
+    assert audio_file.public_url == f"/media/audio/manual/{text.id}/en.mp3"
+    assert audio_file.r2_key == f"audio/manual/{text.id}/en.mp3"
     assert audio_file.manually_uploaded is True
+    assert audio_file.voice_id is None
+    assert audio_file.generated_at is None
+    assert (
+        Path(get_settings().audio_storage_dir) / f"audio/manual/{text.id}/en.mp3"
+    ).read_bytes() == MP3_ONE
+    assert not (Path(get_settings().audio_storage_dir) / f"audio/{text.id}/en.mp3").exists()
 
 
 def test_manual_audio_upload_can_overwrite_and_delete_audio_independently(
@@ -256,15 +292,20 @@ def test_manual_audio_upload_can_overwrite_and_delete_audio_independently(
     ids = seed_public_data(db_session)
     text = db_session.query(Text).filter(Text.point_id == ids["point"].id).one()
 
+    generated = client.post(f"/api/v1/admin/audio/{text.id}/pt/generate", headers=headers)
+    generated_path = Path(get_settings().audio_storage_dir) / f"audio/{text.id}/pt.mp3"
+    assert generated.status_code == 200
+    assert generated_path.exists()
+
     first = client.put(
         f"/api/v1/admin/audio/{text.id}/pt/upload",
         headers=headers,
-        json={"public_url": "https://audio.example/first.mp3", "voice_id": "manual-1"},
+        files={"file": ("../../first.mp3", MP3_ONE, "audio/mpeg")},
     )
     second = client.put(
         f"/api/v1/admin/audio/{text.id}/pt/upload",
         headers=headers,
-        json={"public_url": "https://audio.example/second.mp3", "voice_id": "manual-2"},
+        files={"file": ("second.mp3", MP3_TWO, "audio/mp3")},
     )
 
     assert first.status_code == 200
@@ -274,9 +315,13 @@ def test_manual_audio_upload_can_overwrite_and_delete_audio_independently(
         .filter(AudioFile.text_id == text.id, AudioFile.lang == "pt")
         .one()
     )
-    assert audio_file.public_url == "https://audio.example/second.mp3"
-    assert audio_file.voice_id == "manual-2"
-    assert audio_file.r2_key is None
+    assert audio_file.public_url == f"/media/audio/manual/{text.id}/pt.mp3"
+    assert audio_file.voice_id is None
+    assert audio_file.r2_key == f"audio/manual/{text.id}/pt.mp3"
+    manual_path = Path(get_settings().audio_storage_dir) / audio_file.r2_key
+    assert manual_path.read_bytes() == MP3_TWO
+    assert list(manual_path.parent.iterdir()) == [manual_path]
+    assert not generated_path.exists()
 
     delete = client.delete(f"/api/v1/admin/audio/{text.id}/pt", headers=headers)
 
@@ -288,6 +333,61 @@ def test_manual_audio_upload_can_overwrite_and_delete_audio_independently(
         .count()
     )
     assert remaining_pt_audio == 0
+    assert not manual_path.exists()
+    assert not manual_path.parent.exists()
+
+
+@pytest.mark.parametrize(
+    ("filename", "content_type", "content", "expected_status"),
+    [
+        ("audio.wav", "audio/mpeg", MP3_ONE, 400),
+        ("audio.mp3", "audio/wav", MP3_ONE, 415),
+        ("audio.mp3", "audio/mpeg", b"not-an-mp3", 400),
+        ("audio.mp3", "audio/mpeg", b"", 400),
+    ],
+)
+def test_manual_audio_upload_validates_file(
+    client,
+    db_session,
+    filename,
+    content_type,
+    content,
+    expected_status,
+) -> None:
+    headers = auth_header(client, db_session)
+    ids = seed_public_data(db_session)
+    text = db_session.query(Text).filter(Text.point_id == ids["point"].id).one()
+
+    response = client.put(
+        f"/api/v1/admin/audio/{text.id}/pt/upload",
+        headers=headers,
+        files={"file": (filename, content, content_type)},
+    )
+
+    assert response.status_code == expected_status
+    assert db_session.query(AudioFile).filter_by(text_id=text.id, lang="pt").count() == 0
+
+
+def test_manual_audio_upload_enforces_configured_size_limit(
+    client,
+    db_session,
+    monkeypatch,
+) -> None:
+    from app.api.routes import admin_automation
+
+    headers = auth_header(client, db_session)
+    ids = seed_public_data(db_session)
+    text = db_session.query(Text).filter(Text.point_id == ids["point"].id).one()
+    monkeypatch.setattr(admin_automation.settings, "audio_upload_max_bytes", 8)
+
+    response = client.put(
+        f"/api/v1/admin/audio/{text.id}/pt/upload",
+        headers=headers,
+        files={"file": ("audio.mp3", MP3_ONE, "audio/mpeg")},
+    )
+
+    assert response.status_code == 413
+    assert db_session.query(AudioFile).filter_by(text_id=text.id, lang="pt").count() == 0
 
 
 def test_audio_job_runs_and_sse_reports_completion(client, db_session) -> None:
