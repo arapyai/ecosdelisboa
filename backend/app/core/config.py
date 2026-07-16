@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     elevenlabs_default_voice_id: str | None = None
     audio_storage_dir: str = "media"
     audio_public_base_url: str = "/media"
+    audio_upload_max_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
 
 
 @lru_cache

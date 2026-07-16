@@ -237,6 +237,18 @@ traduções nas colunas `content_<código-do-idioma>` e `author_bio_<código-do-
 - sincronizacao e configuracao de vozes em `/api/v1/admin/voices/*`
 - geracao, upload e jobs de audio em `/api/v1/admin/audio/*`
 
+O upload real usa multipart:
+
+```text
+PUT /api/v1/admin/audio/{text_id}/{lang}/upload
+Content-Type: multipart/form-data
+file=<arquivo.mp3>
+```
+
+O idioma precisa estar ativo. O backend valida extensão, MIME type, assinatura MP3 e o limite
+`AUDIO_UPLOAD_MAX_BYTES`; grava o arquivo e atualiza o único registro `audio_files` daquele
+`text_id + lang`.
+
 ### Linguas e vozes
 
 - CRUD e ativacao em `/api/v1/admin/languages/*`
@@ -300,7 +312,7 @@ Uso:
 
 - a implementacao atual grava em `AUDIO_STORAGE_DIR`
 - a API serve os arquivos pelo prefixo `AUDIO_PUBLIC_BASE_URL`
-- Cloudflare R2 permanece como evolucao planejada
+- o diretório deve estar em volume persistente nos ambientes publicados
 
 Estrutura atual:
 
@@ -310,7 +322,20 @@ audio/
     pt.mp3
     en.mp3
     es.mp3
+  manual/
+    {text_id}/
+      pt.mp3
+      en.mp3
 ```
+
+Arquivos gerados mantêm o caminho histórico. Uploads manuais usam o prefixo `audio/manual/`,
+mas conservam o mesmo nome determinístico por texto e idioma. Repetir um upload sobrescreve a
+mesma chave; trocar de gerado para manual remove o arquivo gerado anterior somente depois de a
+base apontar para o novo arquivo.
+
+O campo `audio_files.r2_key` mantém o nome histórico por compatibilidade, mas atualmente guarda
+a chave relativa dentro do filesystem local. O procedimento conjunto de backup e restore está
+em `docs/runbook_audio_storage.md`.
 
 ### Railway
 

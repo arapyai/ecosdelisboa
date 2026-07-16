@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from app.core.config import get_settings
 from app.models.entities import AudioFile, Language, Text, Translation, Voice
 from app.models.enums import TranslationStatus
 from app.services.languages import parse_language_catalog
@@ -172,9 +173,21 @@ def test_inactive_language_is_rejected_by_translation_and_audio(client, db_sessi
 
     translation = client.post(f"/api/v1/admin/translations/{text.id}/fr", headers=headers)
     audio = client.post(f"/api/v1/admin/audio/{text.id}/fr/generate", headers=headers)
+    upload = client.put(
+        f"/api/v1/admin/audio/{text.id}/fr/upload",
+        headers=headers,
+        files={
+            "file": (
+                "audio.mp3",
+                b"ID3\x04\x00\x00\x00\x00\x00\x00manual-audio",
+                "audio/mpeg",
+            )
+        },
+    )
 
     assert translation.status_code == 400
     assert audio.status_code == 400
+    assert upload.status_code == 400
 
 
 def test_configured_source_language_controls_audio_source_text(client, db_session) -> None:
@@ -186,7 +199,7 @@ def test_configured_source_language_controls_audio_source_text(client, db_sessio
     response = client.post(f"/api/v1/admin/audio/{text.id}/en/generate", headers=headers)
 
     assert response.status_code == 200
-    audio_path = Path(f"media/audio/{text.id}/en.mp3")
+    audio_path = Path(get_settings().audio_storage_dir) / f"audio/{text.id}/en.mp3"
     assert audio_path.read_bytes() == b"Nao sou nada."
 
 

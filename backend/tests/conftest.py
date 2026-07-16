@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.db import get_db
 from app.main import create_app
 from app.models import Base, Language
+from app.services.audio_storage import AudioStorage
 from app.services.elevenlabs import ElevenLabsService
 from app.services.llm import LLMTranslationService
 
@@ -57,7 +58,14 @@ def db_session() -> Iterator[Session]:
 
 
 @pytest.fixture
-def client(db_session: Session) -> Iterator[TestClient]:
+def client(
+    db_session: Session,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[TestClient]:
+    audio_storage_dir = tmp_path / "media"
+    monkeypatch.setenv("AUDIO_STORAGE_DIR", str(audio_storage_dir))
+    get_settings.cache_clear()
     app = create_app()
 
     def override_get_db() -> Iterator[Session]:
@@ -67,6 +75,11 @@ def client(db_session: Session) -> Iterator[TestClient]:
 
     admin_automation.translation_service = LLMTranslationService(api_key="")
     admin_automation.elevenlabs_service = ElevenLabsService(api_key="")
+    admin_automation.settings = get_settings()
+    admin_automation.audio_storage = AudioStorage(
+        storage_dir=str(audio_storage_dir),
+        public_base_url=admin_automation.settings.audio_public_base_url,
+    )
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
         yield test_client

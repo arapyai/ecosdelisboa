@@ -159,9 +159,16 @@ tests/
 - Resolve a voz por override explicito, autor, pool da lingua, pool default e variavel de ambiente.
 - Uma voz pode atender varias linguas e varios autores.
 - Varias vozes podem compor o pool default.
-- Upload manual preservado contra regeneracao automatica.
-- Upload manual pode sobrescrever o audio de uma lingua de forma independente.
+- Upload manual recebe MP3 multipart em `PUT /api/v1/admin/audio/{text_id}/{lang}/upload`.
+- Upload manual fica em `audio/manual/{text_id}/{lang}.mp3` e pode sobrescrever o áudio da
+  língua sem acumular versões antigas.
+- Ao substituir áudio gerado por manual, o arquivo gerado anterior é removido.
+- Upload manual é preservado contra regeneração automática, sem chamar a ElevenLabs.
 - Audio pode ser removido por texto e lingua para permitir nova geracao ou novo upload.
+- O limite padrão de upload é 25 MiB e pode ser alterado por `AUDIO_UPLOAD_MAX_BYTES`.
+
+Backup e restore do banco e do volume de áudio estão documentados em
+`../docs/runbook_audio_storage.md`.
 
 ### Jobs e SSE
 - Jobs de geracao de audio sao persistidos na base.

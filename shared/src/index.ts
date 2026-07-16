@@ -135,6 +135,7 @@ export interface AdminAudioFile {
   public_url?: string | null;
   duration_s?: number | null;
   voice_id?: string | null;
+  generated_at?: string | null;
   manually_uploaded?: boolean;
 }
 

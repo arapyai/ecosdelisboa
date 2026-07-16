@@ -38,7 +38,7 @@ O produto e composto por quatro superficies principais:
 | Backend | FastAPI em Python 3.12 |
 | Base de dados | PostgreSQL 16 com PostGIS |
 | Infra principal | Railway |
-| Storage de audio | Cloudflare R2 |
+| Storage de audio | Volume local persistente |
 | Sintese de voz | ElevenLabs |
 | Traducao automatica | LLM provider configuravel, padrao Claude |
 | Modelo editorial | revisao humana obrigatoria para traducoes |
@@ -63,7 +63,7 @@ Backend API (FastAPI)
         +--> PostgreSQL + PostGIS
         +--> ElevenLabs
         +--> LLM provider (Claude por padrao)
-        +--> Cloudflare R2
+        +--> volume local persistente de audio
 ```
 
 ## Estrutura do Monorepo
@@ -93,7 +93,7 @@ No estado atual, `backend/` e `docs/` ja estao organizados como workspaces separ
 | Admin UI | React 18 + Vite + TanStack Query | SPA interna |
 | Audio | ElevenLabs | voz por autor com fallback |
 | Traducao | LLM provider configuravel | traducao assistida com contexto literario |
-| Storage | Cloudflare R2 | armazenamento de MP3 |
+| Storage | Volume local persistente | armazenamento de MP3 |
 | CI/CD | GitHub Actions + Railway | testes e deploy |
 | Observabilidade | Railway Metrics + Sentry | logs e erros |
 
@@ -217,7 +217,6 @@ O painel administrativo e uma aplicacao interna com autenticacao por email e pas
 | ElevenLabs | listar vozes, gerar audio e preview |
 | LLM provider | gerar traducao automatica com contexto literario |
 | Filesystem local | implementacao atual para guardar e servir MP3 |
-| Cloudflare R2 | storage alvo ainda nao implementado |
 | Railway | hospedar API e PostgreSQL |
 
 ## Regras de Negocio Criticas

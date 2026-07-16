@@ -8,13 +8,13 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.entities import AudioGenerationJob, AudioGenerationJobItem, Text
 from app.models.enums import AudioJobItemStatus, AudioJobStatus
+from app.services.audio_storage import AudioStorage, generated_audio_key
 from app.services.elevenlabs import (
     ElevenLabsService,
     get_audio_source_text,
     resolve_voice_id,
     upsert_audio_file,
 )
-from app.services.r2 import R2Service
 
 
 def create_audio_job(
@@ -50,7 +50,7 @@ def run_audio_job(
     db: Session,
     job_id: UUID,
     elevenlabs: ElevenLabsService,
-    r2: R2Service,
+    storage: AudioStorage,
     preferred_voice_id: str | None = None,
 ) -> AudioGenerationJob:
     job = db.scalar(
@@ -84,12 +84,36 @@ def run_audio_job(
             )
             if text is None:
                 raise ValueError("Text not found")
+            manual_audio = next(
+                (
+                    audio
+                    for audio in text.audio_files
+                    if audio.lang == item.lang and audio.manually_uploaded
+                ),
+                None,
+            )
+            if manual_audio is not None:
+                item.status = AudioJobItemStatus.COMPLETED
+                job.succeeded += 1
+                job.processed += 1
+                db.commit()
+                continue
             voice_id = resolve_voice_id(db, text, item.lang, preferred_voice_id)
             source_text = get_audio_source_text(db, text, item.lang)
             generated = elevenlabs.generate_audio(source_text, voice_id)
-            key = f"audio/{text.id}/{item.lang}.mp3"
-            public_url = r2.upload_audio(key, generated.content)
-            upsert_audio_file(db, text, item.lang, generated, public_url, manually_uploaded=False)
+            key = generated_audio_key(text.id, item.lang)
+            public_url = storage.upload_audio(key, generated.content)
+            audio_file = upsert_audio_file(
+                db,
+                text,
+                item.lang,
+                generated,
+                key,
+                public_url,
+                manually_uploaded=False,
+            )
+            if audio_file.manually_uploaded:
+                storage.delete_audio(key)
             item.status = AudioJobItemStatus.COMPLETED
             job.succeeded += 1
         except ValueError as exc:

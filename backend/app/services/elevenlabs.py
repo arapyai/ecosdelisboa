@@ -160,6 +160,7 @@ def upsert_audio_file(
     text: Text,
     lang: str,
     generated_audio: GeneratedAudio,
+    storage_key: str,
     public_url: str,
     manually_uploaded: bool,
 ) -> AudioFile:
@@ -173,7 +174,7 @@ def upsert_audio_file(
         audio_file = AudioFile(text_id=text.id, lang=lang)
         db.add(audio_file)
 
-    audio_file.r2_key = f"audio/{text.id}/{lang}.mp3"
+    audio_file.r2_key = storage_key
     audio_file.public_url = public_url
     audio_file.duration_s = generated_audio.duration_s
     audio_file.voice_id = generated_audio.voice_id

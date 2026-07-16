@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -14,6 +14,8 @@ from app.models.entities import AdminUser, AudioFile, Text, Translation, Voice
 from app.models.enums import TranslationStatus
 from app.schemas.common import EnvelopeMeta, envelope
 from app.services.audio_jobs import create_audio_job, run_audio_job, stream_job_events
+from app.services.audio_storage import AudioStorage, manual_audio_key
+from app.services.audio_uploads import validate_mp3_upload
 from app.services.editorial_translations import mark_manual_translation
 from app.services.elevenlabs import ElevenLabsService
 from app.services.languages import (
@@ -22,14 +24,13 @@ from app.services.languages import (
     normalize_language_code,
 )
 from app.services.llm import LLMTranslationService, request_translation
-from app.services.r2 import R2Service
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-automation"])
 
 translation_service = LLMTranslationService()
 elevenlabs_service = ElevenLabsService()
 settings = get_settings()
-r2_service = R2Service(
+audio_storage = AudioStorage(
     storage_dir=settings.audio_storage_dir,
     public_base_url=settings.audio_public_base_url,
 )
@@ -45,12 +46,6 @@ class TranslationUpsertRequest(BaseModel):
     content: str
     phonetic_content: str | None = None
     status: TranslationStatus = TranslationStatus.PENDING
-
-
-class AudioUploadRequest(BaseModel):
-    public_url: str
-    duration_s: float | None = None
-    voice_id: str | None = None
 
 
 class AudioJobRequest(BaseModel):
@@ -90,6 +85,19 @@ def serialize_voice(voice: Voice) -> dict[str, object]:
         "languages": languages,
         "lang": languages[0] if len(languages) == 1 else None,
         "is_default": voice.is_default,
+    }
+
+
+def serialize_audio_file(audio_file: AudioFile) -> dict[str, object]:
+    return {
+        "id": str(audio_file.id),
+        "text_id": str(audio_file.text_id),
+        "lang": audio_file.lang,
+        "public_url": audio_file.public_url,
+        "duration_s": audio_file.duration_s,
+        "voice_id": audio_file.voice_id,
+        "generated_at": (audio_file.generated_at.isoformat() if audio_file.generated_at else None),
+        "manually_uploaded": audio_file.manually_uploaded,
     }
 
 
@@ -344,7 +352,7 @@ def generate_audio(
     lang = resolve_active_language(db, lang)
     text = get_text_or_404(db, text_id)
     job = create_audio_job(db, requested_by=None, items=[(text.id, lang)])
-    run_audio_job(db, job.id, elevenlabs_service, r2_service, preferred_voice_id=voice_id)
+    run_audio_job(db, job.id, elevenlabs_service, audio_storage, preferred_voice_id=voice_id)
     audio_file = db.scalar(
         select(AudioFile).where(AudioFile.text_id == text.id, AudioFile.lang == lang)
     )
@@ -353,46 +361,65 @@ def generate_audio(
             "job_id": str(job.id),
             "status": job.status.value,
             "error": job.last_error,
-            "audio": {
-                "lang": audio_file.lang if audio_file else lang,
-                "public_url": audio_file.public_url if audio_file else None,
-                "manually_uploaded": audio_file.manually_uploaded if audio_file else False,
-            },
+            "audio": serialize_audio_file(audio_file) if audio_file else None,
         },
         EnvelopeMeta(),
     )
 
 
 @router.put("/audio/{text_id}/{lang}/upload")
-def upload_audio(
+async def upload_audio(
     text_id: UUID,
     lang: str,
-    payload: AudioUploadRequest,
+    file: Annotated[UploadFile, File(description="MP3 file for this text and language")],
     _: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
     lang = resolve_active_language(db, lang)
     text = get_text_or_404(db, text_id)
+    content = await file.read(settings.audio_upload_max_bytes + 1)
+    await file.close()
+    try:
+        validate_mp3_upload(
+            filename=file.filename,
+            content_type=file.content_type,
+            content=content,
+            max_bytes=settings.audio_upload_max_bytes,
+        )
+    except TypeError as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
+    except OverflowError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     audio_file = db.scalar(
         select(AudioFile).where(AudioFile.text_id == text.id, AudioFile.lang == lang)
     )
+    previous_key = audio_file.r2_key if audio_file else None
+    storage_key = manual_audio_key(text.id, lang)
+    public_url = audio_storage.upload_audio(storage_key, content)
     if audio_file is None:
         audio_file = AudioFile(text_id=text.id, lang=lang)
         db.add(audio_file)
-    audio_file.r2_key = None
-    audio_file.public_url = payload.public_url
-    audio_file.duration_s = payload.duration_s
-    audio_file.voice_id = payload.voice_id
+    audio_file.r2_key = storage_key
+    audio_file.public_url = public_url
+    audio_file.duration_s = None
+    audio_file.voice_id = None
     audio_file.manually_uploaded = True
     audio_file.generated_at = None
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        if previous_key != storage_key:
+            audio_storage.delete_audio(storage_key)
+        raise
     db.refresh(audio_file)
+    if previous_key and previous_key != storage_key:
+        audio_storage.delete_audio(previous_key)
     return envelope(
-        {
-            "id": str(audio_file.id),
-            "public_url": audio_file.public_url,
-            "manually_uploaded": audio_file.manually_uploaded,
-        },
+        serialize_audio_file(audio_file),
         EnvelopeMeta(),
     )
 
@@ -412,7 +439,7 @@ def delete_audio(
     if audio_file is None:
         raise HTTPException(status_code=404, detail="Audio not found")
     if audio_file.r2_key:
-        r2_service.delete_audio(audio_file.r2_key)
+        audio_storage.delete_audio(audio_file.r2_key)
     db.delete(audio_file)
     db.commit()
     return envelope({"deleted": True}, EnvelopeMeta())
@@ -425,16 +452,7 @@ def list_audio_status(
 ) -> dict[str, object]:
     audio_files = db.scalars(select(AudioFile).order_by(AudioFile.created_at.desc())).all()
     return envelope(
-        [
-            {
-                "id": str(audio.id),
-                "text_id": str(audio.text_id),
-                "lang": audio.lang,
-                "public_url": audio.public_url,
-                "manually_uploaded": audio.manually_uploaded,
-            }
-            for audio in audio_files
-        ],
+        [serialize_audio_file(audio) for audio in audio_files],
         EnvelopeMeta(total=len(audio_files)),
     )
 
@@ -450,7 +468,7 @@ def create_and_run_audio_job(
     ]
     first_voice_id: str | None = payload.items[0].get("voice_id") if payload.items else None
     job = create_audio_job(db, current_admin.email, items)
-    run_audio_job(db, job.id, elevenlabs_service, r2_service, preferred_voice_id=first_voice_id)
+    run_audio_job(db, job.id, elevenlabs_service, audio_storage, preferred_voice_id=first_voice_id)
     return envelope(
         {
             "job_id": str(job.id),

@@ -27,6 +27,7 @@ ELEVENLABS_TIMEOUT_S=60
 ELEVENLABS_DEFAULT_VOICE_ID=
 AUDIO_STORAGE_DIR=media
 AUDIO_PUBLIC_BASE_URL=/media
+AUDIO_UPLOAD_MAX_BYTES=26214400
 ```
 
 `ELEVENLABS_DEFAULT_VOICE_ID` e opcional e representa o ultimo fallback. Ele so e usado
@@ -308,10 +309,16 @@ Para linguas diferentes da fonte, os itens sem traducao aprovada falham individu
 
 ## 14. Onde os arquivos ficam
 
-Hoje o backend grava em disco local, apesar do nome historico `R2Service`:
+O backend grava os áudios gerados em disco local:
 
 ```text
 ${AUDIO_STORAGE_DIR}/audio/{text_id}/{lang}.mp3
+```
+
+Uploads manuais usam a mesma identidade de texto e idioma, isolados por prefixo:
+
+```text
+${AUDIO_STORAGE_DIR}/audio/manual/{text_id}/{lang}.mp3
 ```
 
 Com os defaults:
@@ -326,10 +333,23 @@ A API publica o arquivo em:
 ${AUDIO_PUBLIC_BASE_URL}/audio/{text_id}/{lang}.mp3
 ```
 
-Cloudflare R2 continua sendo a arquitetura alvo, mas ainda nao e a implementacao ativa.
-Em deploy com filesystem efemero, os arquivos locais podem desaparecer numa nova implantacao.
+`AUDIO_STORAGE_DIR` precisa estar montado em volume persistente. O procedimento de backup e
+restore fica em `docs/runbook_audio_storage.md`.
 
-## 15. Diagnostico rapido
+## 15. Subir ou substituir um MP3 manual
+
+```bash
+curl -sS -X PUT "$API/api/v1/admin/audio/$TEXT_UUID/en/upload" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@./narracao-en.mp3;type=audio/mpeg" | jq
+```
+
+O backend ignora o nome original para fins de storage, valida o arquivo e atualiza
+simultaneamente o registro `audio_files` daquele texto e idioma. Um segundo upload sobrescreve
+a mesma chave; não cria arquivos versionados. Se havia áudio gerado, ele é removido após a base
+passar a apontar para o arquivo manual.
+
+## 16. Diagnostico rapido
 
 ### `401 invalid_api_key`
 
