@@ -307,6 +307,10 @@ curl -sS -X POST "$API/api/v1/admin/audio/jobs" \
 
 Para linguas diferentes da fonte, os itens sem traducao aprovada falham individualmente.
 
+Na implementação atual, criar o job também processa os itens dentro da mesma requisição HTTP.
+O registro persistido e o endpoint SSE existem, mas ainda não há worker assíncrono; evite lotes
+grandes até essa evolução ser entregue.
+
 ## 14. Onde os arquivos ficam
 
 O backend grava os áudios gerados em disco local:

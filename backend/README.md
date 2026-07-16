@@ -37,6 +37,9 @@ Variaveis principais:
 - `ADMIN_INITIAL_EMAIL`
 - `ADMIN_INITIAL_PASSWORD`
 - `CORS_ORIGINS`
+- `TRANSLATION_LLM_PROVIDER`, `TRANSLATION_LLM_MODEL` e credencial do provider
+- `ELEVENLABS_API_KEY` e configuracao de voz
+- `AUDIO_STORAGE_DIR`, `AUDIO_PUBLIC_BASE_URL` e `AUDIO_UPLOAD_MAX_BYTES`
 
 ## Desenvolvimento
 
@@ -144,10 +147,16 @@ tests/
 
 ### CSV
 - Preview de importacao antes de confirmar.
-- Idempotencia por titulo do ponto + autor do texto.
-- Criacao automatica de autor minimo quando necessario.
-- Formato esperado: `point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,content_pt,content_type,source_work,source_year`.
-- `lat_override` e `lng_override` podem ficar vazios para pontos existentes; para pontos novos, ambos sao obrigatorios.
+- Template baixavel e gerado a partir dos idiomas ativos.
+- Criação ou reutilização de autores, pontos, textos e traduções fornecidas.
+- Correspondência segura de pontos por nome, endereço e proximidade, com geocoding quando
+  necessário.
+- Idempotência de textos por ponto, autor e fonte; sem fonte, o conteúdo participa da identidade.
+- Traduções opcionais em `content_<idioma>` e `author_bio_<idioma>`.
+- Importação não dispara tradução automática nem áudio.
+
+O contrato completo, inclusive regras de deduplicação, está em
+`../docs/importacao_csv_conteudo.md`.
 
 ### Traducoes
 - Gera traducao automatica com status `pending`.
@@ -173,6 +182,8 @@ Backup e restore do banco e do volume de áudio estão documentados em
 ### Jobs e SSE
 - Jobs de geracao de audio sao persistidos na base.
 - Progresso pode ser consumido por `text/event-stream`.
+- A execução ainda acontece dentro da requisição que cria o job; processamento realmente
+  assíncrono permanece pendente.
 
 ### Linguas e vozes
 
@@ -199,8 +210,8 @@ fica em `../docs/runbook_elevenlabs_vozes.md`.
 
 ## Qualidade
 - Suite com testes unitarios e de integracao.
-- Cobertura atual acima do minimo exigido de 70%.
+- `pytest` aplica o limite mínimo de cobertura de 70% configurado em `pyproject.toml`.
 
 ## Notas
 - A especificacao geral do projeto fica em `../docs/lisboa_spec_geral.md`.
-- As integracoes externas atuais estao encapsuladas em services testaveis e prontas para substituicao por clientes reais.
+- Os detalhes técnicos e operacionais ficam em `../docs/backend_referencia.md` e nos runbooks.

@@ -1,186 +1,141 @@
-# Infrastructure
+# Infraestrutura
 
-Backend hosting, environments, and how the frontend connects to the API.
+Referência dos ambientes publicados e da configuração compartilhada. Valores de secrets e
+alterações operacionais continuam tendo como fonte de verdade os painéis das plataformas e o
+password manager.
 
-## Environments
+## Ambientes e branches
 
-The backend runs on [Railway](https://railway.app) under the `ecos-de-lisboa` project. Two environments:
+| Ambiente Railway | Branch | Uso |
+| --- | --- | --- |
+| `development` | `development` | integração e validação ativa |
+| produção | `main` | publicação estável |
 
-| Environment | Git branch | Purpose |
-|-------------|------------|---------|
-| `master`      | `master` / `main` | Production |
-| `development` | `develop`         | Active development, auto-deploys on push |
+API e banco são isolados por ambiente. Não copie banco, volume ou secrets entre eles sem um
+procedimento explícito de migração.
 
-Each environment has its own backend service and its own Postgres database. They are fully isolated — data in `development` never touches `master`.
+## URLs publicadas
 
-## Public URLs
+DNS é gerido no Cloudflare. Cloudflare é usado para DNS, não para storage de áudio.
 
-DNS for `literarymap.org` is managed in Cloudflare.
+| Superfície | URL |
+| --- | --- |
+| API de desenvolvimento | `https://api-dev.lisbon.literarymap.org` |
+| API de produção | `https://api.lisbon.literarymap.org` |
+| PWA pública | `https://lisbon.literarymap.org` |
+| Admin | `https://admin.lisbon.literarymap.org` |
 
-### Backend (Railway)
+Os nomes de domínio são identificadores legados da infraestrutura. O produto se chama Lisboa
+por Outros.
 
-| Environment | Public URL | Railway fallback |
-|---|---|---|
-| `development` | `https://api-dev.lisbon.literarymap.org` | `https://ecosdelisboa-development.up.railway.app` |
-| `master` | `https://api.lisbon.literarymap.org` | Railway-generated `*.up.railway.app` |
-
-Swagger docs at `/docs`, OpenAPI schema at `/openapi.json`.
-
-### Frontend (Netlify)
-
-| Surface | Public URL | Netlify fallback |
-|---|---|---|
-| Webapp (public) | `https://lisbon.literarymap.org` | `https://lisbon-literary-map.netlify.app` |
-| Admin (internal) | `https://admin.lisbon.literarymap.org` | `https://lisbon-literary-map-admin.netlify.app` |
-
-### Adding a new environment / service URL
-
-1. Railway / Netlify → service → add custom domain
-2. Cloudflare → DNS → add CNAME → target = the platform's CNAME target → Proxy status `DNS only`
-3. Wait for the platform to provision the SSL certificate
-
-## Frontend setup
-
-Put the API URL in your local `.env`:
-
-```env
-VITE_API_BASE_URL=https://ecosdelisboa-development.up.railway.app
-```
-
-
-### CORS
-
-The backend's `CORS_ORIGINS` environment variable controls which frontend origins can call the API. Currently allowlisted in `development`:
-
-- `http://localhost:5173` (Vite default)
-
-If you run the frontend on a different port (3000, 19006, …) or deploy it to a hosted URL (Vercel, Netlify, …), ask infra to add that origin to `CORS_ORIGINS`. Format is a JSON array:
-
-```
-CORS_ORIGINS=["http://localhost:5173","http://localhost:3000","https://your-frontend.vercel.app"]
-```
-
-CORS only cares about the URL in your browser's address bar — your physical network/location is irrelevant.
-
-### Sanity check
-
-From your machine:
+Swagger fica em `/docs` e o schema OpenAPI em `/openapi.json`. Para um sanity check:
 
 ```bash
-curl https://ecosdelisboa-development.up.railway.app/docs
+curl https://api-dev.lisbon.literarymap.org/health
 ```
 
-A 200 with HTML body means the API is reachable. A CORS error in the browser console means your origin isn't allowlisted yet.
+As quatro URLs acima responderam HTTP 200 na revisão de 16/07/2026. Isso confirma alcance, não
+substitui smoke tests de autenticação, banco, CORS, áudio e fluxos editoriais.
 
-## Backend service configuration
+## Frontends
 
-For reference (managed in Railway, not in code):
+PWA e admin são publicados no Netlify. Localmente, configure a API no `.env` do workspace:
 
-- **Start command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- **Source:** GitHub repo `ecosdelisboa`, branch per environment
-- **Auto-deploy:** enabled on the tracked branch
-- **`DATABASE_URL`:** injected by Railway from the linked Postgres service
-- **`CORS_ORIGINS`:** set manually per environment
-
-## Logs and retention policy
-
-### Where logs live
-
-Railway captures everything the backend writes to `stdout` / `stderr`. View them at: Railway → backend service → **Deployments → [most recent deploy]**, or the **Observability** tab.
-
-### Retention
-
-- Hobby / Trial plan: **7 days** (current)
-- Pro plan: 30 days
-- After retention expires, logs are permanently deleted
-
-### What must NOT appear in logs
-
-- Passwords, tokens, API keys, JWTs
-- Full request bodies (may contain PII)
-- Full email addresses in error messages (hash or use domain only)
-- Payment / card data
-
-### What may (and should) appear
-
-- Errors and stack traces
-- Request IDs for correlation
-- Basic metrics (latency, status code)
-- Startup messages
-
-### When 7 days is not enough
-
-Configure a log drain at Railway → **Settings → Observability → Log Drains**, pointing to one of:
-
-- [Better Stack](https://betterstack.com) — 3 GB/month free
-- [Axiom](https://axiom.co) — 500 MB/month free
-
-Not required while traffic and incident volume stay low.
-
-### Responsibilities
-
-- Backend dev: ensure no PII / secrets are written to logs
-- Infra: monitor usage, decide when to enable an external log drain
-
-## Secrets policy
-
-Where secrets live:
-
-- Railway env vars (production runtime)
-- Password manager (Bitwarden or equivalent) — single source of truth
-
-Distinct values for `development` and `master` whenever feasible.
-
-### Generation
-
-Use `openssl rand -base64 48` (or the PowerShell equivalent below) to generate strong values.
-
-```powershell
-$bytes = New-Object byte[] 48
-[Security.Cryptography.RNGCryptoServiceProvider]::Create().GetBytes($bytes)
-[Convert]::ToBase64String($bytes)
+```env
+VITE_API_BASE_URL=https://api-dev.lisbon.literarymap.org
 ```
 
-### Rotation
+O app Expo usa:
 
-- Scheduled: every 90 days for all secrets
-- Immediate if: leak suspected, exposure in logs, plan or account change
+```env
+EXPO_PUBLIC_API_BASE_URL=https://api-dev.lisbon.literarymap.org
+```
 
-### Current inventory
+## CORS
 
-- `ADMIN_SECRET_KEY` — Railway dev/master (distinct) + password manager
-- `ADMIN_INITIAL_PASSWORD` — Railway dev/master (distinct) + password manager
-- `SENTRY_DSN` — Railway dev/master (same) + password manager
-- `GEMINI_API_KEY` — Railway dev/master (same) + password manager
+`CORS_ORIGINS` é uma lista JSON de origens completas permitidas pelo backend:
 
-## Gemini quotas (free tier)
+```env
+CORS_ORIGINS=["http://localhost:5173","http://localhost:5174","https://lisbon.literarymap.org","https://admin.lisbon.literarymap.org"]
+```
 
-Model: `gemini-2.0-flash`.
+Inclua cada porta local e cada domínio publicado que chama a API. Mudanças devem ser aplicadas
+no ambiente correto do Railway e validadas no navegador.
 
-| Limit | Value |
-|---|---|
-| Requests per minute (RPM) | 15 |
-| Tokens per minute (TPM) | 1,000,000 |
-| Requests per day (RPD) | 1,500 |
-| Daily reset | Midnight Pacific (08:00 Lisbon, 04:00 São Paulo) |
-| Scope | Per GCP project (not per API key) |
+## Backend no Railway
 
-## Deploy failure alerts
+Configuração esperada por serviço:
 
-A Make.com scenario receives webhooks from Railway and Netlify on deploy failures and sends an email to the dev team.
+- diretório-fonte `backend/`;
+- start command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`;
+- `DATABASE_URL` ligado ao PostgreSQL do mesmo ambiente;
+- `AUDIO_STORAGE_DIR` apontando para um volume persistente;
+- `AUDIO_PUBLIC_BASE_URL` configurando o prefixo público dos MP3;
+- deploy automático acompanhando a branch do ambiente.
 
-- **Make scenario:** `deploy-failures` (account `lisbonliterarymap@gmail.com`)
-- **Webhook URL:** stored in password manager (`ecos-de-lisboa / Make webhook`)
-- **Sources:**
-  - Railway → Project Settings → Webhooks → events `Deploy Failed`, `Deploy Crashed`
-  - Netlify (each project) → Build & deploy → Deploy notifications → HTTP POST request → event `Deploy failed`
-- **Email recipients:** dev team
-- **Email content:** project name, environment, branch, commit, link to deploy
+## Variáveis
 
-To add a new recipient, edit the To field in the Make Gmail module.
-To rotate the webhook URL, recreate the webhook in Make and update both Railway and all Netlify projects.
+O contrato completo e os defaults não sensíveis ficam em `backend/.env.example`. Em Railway,
+configure ao menos os grupos aplicáveis:
 
-## Who to ping
+| Grupo | Variáveis principais |
+| --- | --- |
+| aplicação | `ENVIRONMENT`, `DATABASE_URL`, `CORS_ORIGINS` |
+| admin | `ADMIN_SECRET_KEY`, `ADMIN_INITIAL_EMAIL`, `ADMIN_INITIAL_PASSWORD` |
+| geocoding | `GEOCODING_BASE_URL`, `GEOCODING_USER_AGENT` e credencial opcional |
+| tradução | `TRANSLATION_LLM_PROVIDER`, `TRANSLATION_LLM_MODEL`, `TRANSLATION_LLM_API_KEY` ou `ANTHROPIC_API_KEY` |
+| voz | `ELEVENLABS_API_KEY`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_DEFAULT_VOICE_ID` |
+| áudio | `AUDIO_STORAGE_DIR`, `AUDIO_PUBLIC_BASE_URL`, `AUDIO_UPLOAD_MAX_BYTES` |
 
-- Backend / Railway / database access → infra (Joel)
-- Adding a new frontend origin to CORS → infra (Joel)
+Não mantenha uma tabela de quotas de provider neste repositório: limites e preços mudam. Use o
+painel e a documentação oficial do provider configurado quando precisar dimensionar uma carga.
+
+## Secrets
+
+- secrets de runtime ficam nas variáveis do Railway;
+- a cópia recuperável fica no password manager;
+- desenvolvimento e produção devem usar valores distintos para credenciais administrativas;
+- nunca registre tokens, URLs de webhook secretas ou senhas nos docs;
+- faça rotação imediatamente após suspeita de exposição e valide os consumidores depois.
+
+Para gerar uma chave aleatória:
+
+```bash
+openssl rand -base64 48
+```
+
+## Áudio persistente
+
+O volume esperado é pequeno, portanto o projeto usa storage local persistente. R2 foi
+descartado do escopo atual.
+
+- monte um volume no caminho de `AUDIO_STORAGE_DIR`;
+- não use filesystem efêmero do deploy;
+- monitore espaço em disco;
+- faça backup coordenado do banco e do diretório;
+- teste restore em ambiente não produtivo.
+
+Layout, backup e restore estão em `runbook_audio_storage.md`.
+
+## Logs e alertas
+
+Railway coleta `stdout` e `stderr`. Consulte Deployments/Observability para logs e métricas. A
+retenção depende do plano vigente e deve ser conferida no painel, sem números fixos neste doc.
+
+Nunca grave passwords, tokens, API keys, JWTs, corpos completos de requisição ou dados pessoais
+desnecessários. Erros, stack traces, request IDs, status e latência podem ser registrados desde
+que não exponham conteúdo sensível.
+
+Alertas de falha de deploy podem ser ligados por webhooks do Railway e Netlify ao canal adotado
+pela equipe. A URL do webhook pertence ao password manager, não ao repositório.
+
+## Checklist de mudança
+
+Ao alterar domínio, branch ou variável:
+
+1. aplique no ambiente correto;
+2. valide healthcheck e OpenAPI;
+3. valide CORS a partir da PWA e do admin;
+4. execute um smoke test de leitura e, quando aplicável, de escrita autenticada;
+5. confira persistência do banco e do volume após novo deploy;
+6. atualize este documento se o contrato estável mudou.

@@ -1,29 +1,32 @@
-# Documentacao Geral
+# Documentação
 
-Esta pasta concentra a documentacao transversal do projeto Lisboa por Outros.
+Esta pasta concentra decisões transversais, contratos e procedimentos do Lisboa por Outros.
 
 ## Documentos principais
 
-- `lisboa_spec_geral.md`: guia geral do projeto e especificacao tecnica de referencia
-- `backend_referencia.md`: referencia tecnica do backend e das integracoes
-- `arquitetura.md`: resumo da arquitetura e da estrutura atual do monorepo
-- `importacao_csv_conteudo.md`: modelo de CSV para importacao editorial de pontos e textos
-- `voice_language_seed.csv`: catalogo inicial de linguas e vozes ElevenLabs
-- `runbook_elevenlabs_vozes.md`: configuracao operacional de ElevenLabs, vozes e geracao de audio
-- `runbook_audio_storage.md`: upload manual, layout, backup e restore dos MP3
+- `lisboa_spec_geral.md`: produto, decisões e estado funcional consolidado;
+- `arquitetura.md`: componentes, limites e fontes de verdade;
+- `backend_referencia.md`: modelo, endpoints e regras do backend;
+- `importacao_csv_conteudo.md`: contrato do CSV editorial e deduplicação;
+- `infrastructure.md`: ambientes, deploy, variáveis e operação;
+- `runbook_elevenlabs_vozes.md`: configuração de vozes e geração de áudio;
+- `runbook_audio_storage.md`: layout, backup e restore dos MP3;
+- `voice_language_seed.csv`: catálogo inicial importável de idiomas e vozes.
 
 ## Como ler
 
-- comece por `lisboa_spec_geral.md` para entender o produto, a arquitetura e as regras principais
-- use `backend_referencia.md` quando precisar de detalhes tecnicos do servidor
-- use `arquitetura.md` para entender a organizacao do monorepo
-- use `importacao_csv_conteudo.md` para preparar planilhas de conteudo para importacao
-- use `runbook_elevenlabs_vozes.md` para colocar sintese de voz e catalogos em operacao
-- use `runbook_audio_storage.md` para operar o volume persistente e recuperar os MP3
+- comece pela spec para entender produto, decisões e o que está ou não entregue;
+- use a referência do backend ou a OpenAPI para contratos;
+- use o documento de importação para preparar planilhas;
+- use infraestrutura e runbooks para operar ambientes e integrações;
+- use o [GitHub Project](https://github.com/orgs/arapyai/projects/1) para estado, datas e responsáveis.
 
 ## Organizacao
 
-Materiais especificos de implementacao devem ficar no workspace correspondente.
+Material específico de implementação deve ficar no workspace correspondente. Não mantenha
+checklists de roadmap nesta pasta: elas pertencem ao GitHub Project.
 
-- documentacao de backend: `backend/README.md`
-- documentacao global de produto, arquitetura e organizacao do repositorio: `docs/`
+- backend: `backend/README.md`;
+- PWA: `webapp/README.md`;
+- admin: `admin/README.md`;
+- mobile: `mobile/README.md`.
