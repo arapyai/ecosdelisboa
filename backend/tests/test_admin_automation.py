@@ -390,7 +390,10 @@ def test_manual_audio_upload_enforces_configured_size_limit(
     assert db_session.query(AudioFile).filter_by(text_id=text.id, lang="pt").count() == 0
 
 
-def test_audio_job_runs_and_sse_reports_completion(client, db_session) -> None:
+def test_audio_job_creation_keeps_contract_and_returns_pending(client, db_session) -> None:
+    from app.api.routes import admin_automation
+    from app.services.audio_jobs import claim_next_audio_job, process_audio_job
+
     headers = auth_header(client, db_session)
     ids = seed_public_data(db_session)
     text = db_session.query(Text).filter(Text.point_id == ids["point"].id).one()
@@ -398,11 +401,26 @@ def test_audio_job_runs_and_sse_reports_completion(client, db_session) -> None:
     response = client.post(
         "/api/v1/admin/audio/jobs",
         headers=headers,
-        json={"items": [{"text_id": str(text.id), "lang": "en"}]},
+        json={"items": [{"text_id": str(text.id), "lang": "en", "voice_id": "chosen"}]},
     )
 
     assert response.status_code == 200
-    job_id = response.json()["data"]["job_id"]
+    payload = response.json()["data"]
+    assert payload["status"] == "pending"
+    assert payload["processed"] == 0
+    assert payload["total"] == 1
+
+    job_id = payload["job_id"]
+    claimed_job_id = claim_next_audio_job(db_session)
+    assert str(claimed_job_id) == job_id
+    completed = process_audio_job(
+        db_session,
+        claimed_job_id,
+        admin_automation.elevenlabs_service,
+        admin_automation.audio_storage,
+    )
+    assert completed.status.value == "completed"
+    assert completed.preferred_voice_id == "chosen"
 
     events = client.get(f"/api/v1/admin/audio/jobs/{job_id}/events", headers=headers)
     assert events.status_code == 200

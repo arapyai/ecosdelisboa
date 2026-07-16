@@ -66,7 +66,7 @@ def client(
     audio_storage_dir = tmp_path / "media"
     monkeypatch.setenv("AUDIO_STORAGE_DIR", str(audio_storage_dir))
     get_settings.cache_clear()
-    app = create_app()
+    app = create_app(start_audio_worker=False)
 
     def override_get_db() -> Iterator[Session]:
         yield db_session

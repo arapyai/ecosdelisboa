@@ -13,7 +13,7 @@ from app.core.db import get_db
 from app.models.entities import AdminUser, AudioFile, Text, Translation, Voice
 from app.models.enums import TranslationStatus
 from app.schemas.common import EnvelopeMeta, envelope
-from app.services.audio_jobs import create_audio_job, run_audio_job, stream_job_events
+from app.services.audio_jobs import create_audio_job, process_audio_job, stream_job_events
 from app.services.audio_storage import AudioStorage, manual_audio_key
 from app.services.audio_uploads import validate_mp3_upload
 from app.services.editorial_translations import mark_manual_translation
@@ -351,8 +351,14 @@ def generate_audio(
 ) -> dict[str, object]:
     lang = resolve_active_language(db, lang)
     text = get_text_or_404(db, text_id)
-    job = create_audio_job(db, requested_by=None, items=[(text.id, lang)])
-    run_audio_job(db, job.id, elevenlabs_service, audio_storage, preferred_voice_id=voice_id)
+    job = create_audio_job(
+        db,
+        requested_by=None,
+        items=[(text.id, lang)],
+        preferred_voice_id=voice_id,
+        start_immediately=True,
+    )
+    process_audio_job(db, job.id, elevenlabs_service, audio_storage)
     audio_file = db.scalar(
         select(AudioFile).where(AudioFile.text_id == text.id, AudioFile.lang == lang)
     )
@@ -458,7 +464,7 @@ def list_audio_status(
 
 
 @router.post("/audio/jobs")
-def create_and_run_audio_job(
+def create_audio_generation_job(
     payload: AudioJobRequest,
     current_admin: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
@@ -467,8 +473,12 @@ def create_and_run_audio_job(
         (UUID(item["text_id"]), resolve_active_language(db, item["lang"])) for item in payload.items
     ]
     first_voice_id: str | None = payload.items[0].get("voice_id") if payload.items else None
-    job = create_audio_job(db, current_admin.email, items)
-    run_audio_job(db, job.id, elevenlabs_service, audio_storage, preferred_voice_id=first_voice_id)
+    job = create_audio_job(
+        db,
+        current_admin.email,
+        items,
+        preferred_voice_id=first_voice_id,
+    )
     return envelope(
         {
             "job_id": str(job.id),
@@ -487,4 +497,7 @@ def stream_audio_job_events(
     _: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> Response:
-    return StreamingResponse(stream_job_events(db, job_id), media_type="text/event-stream")
+    return StreamingResponse(
+        stream_job_events(db, job_id, settings.audio_worker_poll_interval_s),
+        media_type="text/event-stream",
+    )

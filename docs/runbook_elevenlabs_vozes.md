@@ -307,9 +307,9 @@ curl -sS -X POST "$API/api/v1/admin/audio/jobs" \
 
 Para linguas diferentes da fonte, os itens sem traducao aprovada falham individualmente.
 
-Na implementação atual, criar o job também processa os itens dentro da mesma requisição HTTP.
-O registro persistido e o endpoint SSE existem, mas ainda não há worker assíncrono; evite lotes
-grandes até essa evolução ser entregue.
+O `POST` retorna o job em `pending`; o worker interno do backend processa os itens fora da
+requisição. O progresso fica persistido e pode ser acompanhado pelo endpoint SSE. Se o serviço
+reiniciar, itens interrompidos voltam à fila e itens já concluídos são preservados.
 
 ## 14. Onde os arquivos ficam
 

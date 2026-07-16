@@ -85,7 +85,7 @@ configure ao menos os grupos aplicáveis:
 | geocoding | `GEOCODING_BASE_URL`, `GEOCODING_USER_AGENT` e credencial opcional |
 | tradução | `TRANSLATION_LLM_PROVIDER`, `TRANSLATION_LLM_MODEL`, `TRANSLATION_LLM_API_KEY` ou `ANTHROPIC_API_KEY` |
 | voz | `ELEVENLABS_API_KEY`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_DEFAULT_VOICE_ID` |
-| áudio | `AUDIO_STORAGE_DIR`, `AUDIO_PUBLIC_BASE_URL`, `AUDIO_UPLOAD_MAX_BYTES` |
+| áudio | `AUDIO_STORAGE_DIR`, `AUDIO_PUBLIC_BASE_URL`, `AUDIO_UPLOAD_MAX_BYTES`, `AUDIO_WORKER_ENABLED` |
 
 Não mantenha uma tabela de quotas de provider neste repositório: limites e preços mudam. Use o
 painel e a documentação oficial do provider configurado quando precisar dimensionar uma carga.
@@ -114,6 +114,9 @@ descartado do escopo atual.
 - monitore espaço em disco;
 - faça backup coordenado do banco e do diretório;
 - teste restore em ambiente não produtivo.
+
+O worker de áudio roda dentro do mesmo serviço da API para acessar esse volume. Não crie um
+segundo serviço Railway para o worker enquanto os MP3 estiverem em storage local.
 
 Layout, backup e restore estão em `runbook_audio_storage.md`.
 
