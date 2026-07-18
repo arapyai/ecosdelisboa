@@ -233,9 +233,13 @@ def list_translations(
                 "id": str(item.id),
                 "text_id": str(item.text_id),
                 "lang": item.lang,
+                "content": item.content,
+                "phonetic_content": item.phonetic_content,
                 "status": item.status.value,
+                "auto_translated": item.auto_translated,
                 "origin": item.origin,
                 "reviewed_by": item.reviewed_by,
+                "reviewed_at": item.reviewed_at.isoformat() if item.reviewed_at else None,
             }
             for item in translations
         ],

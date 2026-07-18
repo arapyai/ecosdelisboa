@@ -204,6 +204,19 @@ export interface AdminRoute {
 export type TranslationStatus = 'pending' | 'approved' | 'rejected';
 export type TextOrigin = 'manual' | 'automatic' | 'import';
 
+export interface AdminTranslation {
+  id: string;
+  text_id: string;
+  lang: SupportedLanguage;
+  content?: string | null;
+  phonetic_content?: string | null;
+  status: TranslationStatus;
+  auto_translated?: boolean;
+  origin?: TextOrigin;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+}
+
 export interface AdminEditorialTranslation {
   id: string;
   lang: SupportedLanguage;
@@ -226,6 +239,17 @@ export interface AdminRouteTranslation extends AdminEditorialTranslation {
 }
 
 type RequestBody = Record<string, unknown> | Array<unknown>;
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly path: string
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
 
 export class ApiClient {
   constructor(private readonly baseUrl = '') {}
@@ -257,7 +281,7 @@ export class ApiClient {
     });
 
     if (!response.ok) {
-      throw new Error(`API request failed: ${path}`);
+      throw new ApiError(`API request failed: ${path}`, response.status, path);
     }
 
     const payload = (await response.json()) as T | ApiEnvelope<T>;

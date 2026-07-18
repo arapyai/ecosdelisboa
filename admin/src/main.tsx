@@ -1,5 +1,6 @@
 import {
   ApiClient,
+  ApiError,
   isEnvelope,
   type AdminAudioFile,
   type AdminAuthor,
@@ -9,9 +10,11 @@ import {
   type AdminRoute,
   type AdminRouteItem,
   type AdminText,
+  type AdminTranslation,
   type AdminUser,
   type AdminVoice,
-  type SupportedLanguage
+  type SupportedLanguage,
+  type TranslationStatus
 } from '@ecosdelisboa/shared';
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import maplibregl from 'maplibre-gl';
@@ -21,7 +24,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import './styles.css';
 
 type Resource = 'authors' | 'points' | 'texts' | 'routes';
-type Section = Resource | 'audio' | 'csv';
+type Section = Resource | 'audio' | 'csv' | 'translations';
 type ResourceItem = AdminAuthor | AdminPoint | AdminText | AdminRoute;
 type DraftValue = string | number | boolean | null | AdminRouteItem[];
 type Draft = Record<string, DraftValue>;
@@ -68,6 +71,24 @@ const autoSyncQueryOptions = {
   refetchOnReconnect: true
 };
 
+function isAuthError(cause: unknown) {
+  return cause instanceof ApiError && (cause.status === 401 || cause.status === 403);
+}
+
+function fallbackUnlessAuth<T>(cause: unknown, fallback: T, onAuthExpired: () => void): T {
+  if (isAuthError(cause)) {
+    onAuthExpired();
+    throw cause;
+  }
+  return fallback;
+}
+
+function redirectIfAuthError(cause: unknown, onAuthExpired: () => void) {
+  if (!isAuthError(cause)) return false;
+  onAuthExpired();
+  return true;
+}
+
 function toQuery(params: Record<string, string | number | undefined | null>) {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -97,11 +118,24 @@ async function postCsv<T>(path: string, file: File, token: string): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`Falha ao enviar CSV: ${path}`);
+    throw new ApiError(`Falha ao enviar CSV: ${path}`, response.status, path);
   }
 
   const payload = (await response.json()) as T;
   return isEnvelope(payload) ? payload.data : payload;
+}
+
+async function fetchCsvTemplate(token: string) {
+  const path = '/api/v1/admin/points/import/template';
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  if (!response.ok) {
+    throw new ApiError('Não foi possível baixar o modelo CSV.', response.status, path);
+  }
+
+  return response.blob();
 }
 
 const mockAuthors: AdminAuthor[] = [
@@ -141,6 +175,21 @@ const mockTexts: AdminText[] = [
   }
 ];
 
+const mockTranslations: AdminTranslation[] = [
+  {
+    id: 'translation-chiado-en',
+    text_id: 'text-chiado',
+    lang: 'en',
+    content: 'Here the city has footsteps of office, cafe and ghost.',
+    phonetic_content: null,
+    status: 'approved',
+    auto_translated: false,
+    origin: 'manual',
+    reviewed_by: 'admin@example.com',
+    reviewed_at: null
+  }
+];
+
 const mockRoutes: AdminRoute[] = [
   {
     id: 'route-baixa',
@@ -166,6 +215,7 @@ const sectionLabels: Record<Section, string> = {
   points: resourceLabels.points,
   texts: resourceLabels.texts,
   routes: resourceLabels.routes,
+  translations: 'Traduções',
   audio: 'Áudios',
 };
 
@@ -230,6 +280,7 @@ function AdminApp() {
 
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
+    queryClient.clear();
     setToken('');
   }
 
@@ -241,7 +292,7 @@ function AdminApp() {
 }
 
 function Login({ onLogin }: { onLogin: (token: string) => void }) {
-  const [email, setEmail] = useState('admin@example.com');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const mutation = useMutation({
@@ -298,6 +349,10 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
     retry: false
   });
 
+  useEffect(() => {
+    if (isAuthError(me.error)) onLogout();
+  }, [me.error, onLogout]);
+
   return (
     <main className="admin-shell">
       <aside className="sidebar">
@@ -320,14 +375,25 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           Sair
         </button>
       </aside>
-      {section === 'audio' ? <AudioPanel token={token} /> : null}
-      {section === 'csv' ? <CsvPanel token={token} /> : null}
-      {section !== 'audio' && section !== 'csv' ? <ResourcePanel token={token} resource={section} /> : null}
+      {section === 'translations' ? <TranslationsPanel token={token} onAuthExpired={onLogout} /> : null}
+      {section === 'audio' ? <AudioPanel token={token} onAuthExpired={onLogout} /> : null}
+      {section === 'csv' ? <CsvPanel token={token} onAuthExpired={onLogout} /> : null}
+      {section !== 'audio' && section !== 'csv' && section !== 'translations' ? (
+        <ResourcePanel token={token} resource={section} onAuthExpired={onLogout} />
+      ) : null}
     </main>
   );
 }
 
-function ResourcePanel({ token, resource }: { token: string; resource: Resource }) {
+function ResourcePanel({
+  token,
+  resource,
+  onAuthExpired
+}: {
+  token: string;
+  resource: Resource;
+  onAuthExpired: () => void;
+}) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<ResourceItem | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft(resource));
@@ -349,7 +415,8 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
       try {
         setIsLocal(false);
         return await client.get<ResourceItem[]>(`/api/v1/admin/${resource}`, token);
-      } catch {
+      } catch (cause) {
+        fallbackUnlessAuth(cause, null, onAuthExpired);
         setIsLocal(true);
         return fallbackFor(resource);
       }
@@ -362,8 +429,8 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
     queryFn: async () => {
       try {
         return await client.get<AdminAuthor[]>('/api/v1/admin/authors', token);
-      } catch {
-        return mockAuthors;
+      } catch (cause) {
+        return fallbackUnlessAuth(cause, mockAuthors, onAuthExpired);
       }
     },
     ...autoSyncQueryOptions
@@ -374,8 +441,8 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
     queryFn: async () => {
       try {
         return await client.get<AdminPoint[]>('/api/v1/admin/points', token);
-      } catch {
-        return mockPoints;
+      } catch (cause) {
+        return fallbackUnlessAuth(cause, mockPoints, onAuthExpired);
       }
     },
     ...autoSyncQueryOptions
@@ -416,6 +483,9 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
       invalidateRelatedQueries();
       setEditing(null);
       setDraft(emptyDraft(resource));
+    },
+    onError: (cause) => {
+      redirectIfAuthError(cause, onAuthExpired);
     }
   });
 
@@ -430,6 +500,9 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
       );
       removeRelationshipOption(id);
       invalidateRelatedQueries();
+    },
+    onError: (cause) => {
+      redirectIfAuthError(cause, onAuthExpired);
     }
   });
 
@@ -573,7 +646,7 @@ function TextFilters({
   );
 }
 
-function CsvPanel({ token }: { token: string }) {
+function CsvPanel({ token, onAuthExpired }: { token: string; onAuthExpired: () => void }) {
   const queryClient = useQueryClient();
   const [downloadError, setDownloadError] = useState('');
 
@@ -587,20 +660,21 @@ function CsvPanel({ token }: { token: string }) {
 
   async function downloadTemplate() {
     setDownloadError('');
-    const response = await fetch(`${API_BASE}/api/v1/admin/points/import/template`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!response.ok) {
+    try {
+      const blob = await fetchCsvTemplate(token);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'content_import_template.csv';
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      if (isAuthError(cause)) {
+        onAuthExpired();
+        return;
+      }
       setDownloadError('Não foi possível baixar o modelo CSV.');
-      return;
     }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'content_import_template.csv';
-    anchor.click();
-    URL.revokeObjectURL(url);
   }
 
   return (
@@ -616,7 +690,7 @@ function CsvPanel({ token }: { token: string }) {
         </button>
       </div>
       {downloadError ? <p className="import-error standalone-error">{downloadError}</p> : null}
-      <CsvImportPanel token={token} onImported={invalidateImportQueries} />
+      <CsvImportPanel token={token} onAuthExpired={onAuthExpired} onImported={invalidateImportQueries} />
     </section>
   );
 }
@@ -639,7 +713,304 @@ function filterResourceItems(
   });
 }
 
-function AudioPanel({ token }: { token: string }) {
+function TranslationsPanel({ token, onAuthExpired }: { token: string; onAuthExpired: () => void }) {
+  const queryClient = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState('');
+  const [langFilter, setLangFilter] = useState('');
+  const [editing, setEditing] = useState<AdminTranslation | null>(null);
+  const [textId, setTextId] = useState('');
+  const [lang, setLang] = useState<SupportedLanguage>('en');
+  const [content, setContent] = useState('');
+  const [phoneticContent, setPhoneticContent] = useState('');
+  const [status, setStatus] = useState<TranslationStatus>('pending');
+  const [message, setMessage] = useState('');
+
+  const translationsQuery = useQuery({
+    queryKey: ['admin-translations', token, statusFilter, langFilter],
+    queryFn: async () => {
+      const query = toQuery({ status: statusFilter, lang: langFilter });
+      return client
+        .get<AdminTranslation[]>(`/api/v1/admin/translations${query}`, token)
+        .catch((cause) => fallbackUnlessAuth(cause, mockTranslations, onAuthExpired));
+    },
+    ...autoSyncQueryOptions
+  });
+  const textsQuery = useQuery({
+    queryKey: ['admin-resource', 'texts', token],
+    queryFn: async () =>
+      client
+        .get<AdminText[]>('/api/v1/admin/texts', token)
+        .catch((cause) => fallbackUnlessAuth(cause, mockTexts, onAuthExpired)),
+    ...autoSyncQueryOptions
+  });
+  const pointsQuery = useQuery({
+    queryKey: ['admin-options', 'points', token],
+    queryFn: async () =>
+      client
+        .get<AdminPoint[]>('/api/v1/admin/points', token)
+        .catch((cause) => fallbackUnlessAuth(cause, mockPoints, onAuthExpired)),
+    ...autoSyncQueryOptions
+  });
+  const authorsQuery = useQuery({
+    queryKey: ['admin-options', 'authors', token],
+    queryFn: async () =>
+      client
+        .get<AdminAuthor[]>('/api/v1/admin/authors', token)
+        .catch((cause) => fallbackUnlessAuth(cause, mockAuthors, onAuthExpired)),
+    ...autoSyncQueryOptions
+  });
+  const languagesQuery = useQuery({
+    queryKey: ['admin-languages', token],
+    queryFn: async () =>
+      client
+        .get<AdminLanguage[]>('/api/v1/admin/languages?active=true', token)
+        .catch((cause) => fallbackUnlessAuth(cause, fallbackLanguages, onAuthExpired)),
+    ...autoSyncQueryOptions
+  });
+
+  const translations = translationsQuery.data ?? mockTranslations;
+  const texts = textsQuery.data ?? mockTexts;
+  const points = pointsQuery.data ?? mockPoints;
+  const authors = authorsQuery.data ?? mockAuthors;
+  const languages = languagesQuery.data ?? fallbackLanguages;
+  const targetLanguages = languages.filter((language) => !language.is_source);
+  const filteredTranslations = useMemo(
+    () =>
+      translations.filter((translation) => {
+        const matchesLang = !langFilter || translation.lang === langFilter;
+        const matchesStatus = !statusFilter || translation.status === statusFilter;
+        return matchesLang && matchesStatus;
+      }),
+    [langFilter, statusFilter, translations]
+  );
+
+  useEffect(() => {
+    if (!textId && texts.length > 0) setTextId(texts[0].id);
+  }, [textId, texts]);
+
+  useEffect(() => {
+    if (targetLanguages.length === 0 || targetLanguages.some((language) => language.code === lang)) return;
+    setLang(targetLanguages[0].code);
+  }, [lang, targetLanguages]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      if (!textId) throw new Error('Selecione um texto antes de guardar a tradução.');
+      if (!lang) throw new Error('Selecione uma língua antes de guardar a tradução.');
+      return client.put<AdminTranslation>(
+        `/api/v1/admin/translations/${textId}/${lang}/manual`,
+        {
+          content,
+          phonetic_content: phoneticContent || null,
+          status
+        },
+        token
+      );
+    },
+    onSuccess: () => {
+      setMessage('Tradução guardada.');
+      clearEditor();
+      queryClient.invalidateQueries({ queryKey: ['admin-translations', token] });
+    },
+    onError: (cause) => {
+      if (redirectIfAuthError(cause, onAuthExpired)) return;
+      setMessage(cause instanceof Error ? cause.message : 'Não foi possível guardar.');
+    }
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: () => {
+      if (!textId) throw new Error('Selecione um texto antes de gerar a tradução.');
+      if (!lang) throw new Error('Selecione uma língua antes de gerar a tradução.');
+      return client.post<AdminTranslation>(`/api/v1/admin/translations/${textId}/${lang}`, {}, token);
+    },
+    onSuccess: (translation) => {
+      setEditing(translation);
+      setContent(translation.content ?? '');
+      setPhoneticContent(translation.phonetic_content ?? '');
+      setStatus(translation.status);
+      setMessage('Tradução gerada. Reveja antes de aprovar.');
+      queryClient.invalidateQueries({ queryKey: ['admin-translations', token] });
+    },
+    onError: (cause) => {
+      if (redirectIfAuthError(cause, onAuthExpired)) return;
+      setMessage(cause instanceof Error ? cause.message : 'Não foi possível gerar.');
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (translationId: string) =>
+      client.delete<{ deleted: boolean }>(`/api/v1/admin/translations/${translationId}`, token),
+    onSuccess: () => {
+      setMessage('Tradução apagada.');
+      clearEditor();
+      queryClient.invalidateQueries({ queryKey: ['admin-translations', token] });
+    },
+    onError: (cause) => {
+      if (redirectIfAuthError(cause, onAuthExpired)) return;
+      setMessage(cause instanceof Error ? cause.message : 'Não foi possível apagar.');
+    }
+  });
+
+  function editTranslation(translation: AdminTranslation) {
+    setEditing(translation);
+    setTextId(translation.text_id);
+    setLang(translation.lang);
+    setContent(translation.content ?? '');
+    setPhoneticContent(translation.phonetic_content ?? '');
+    setStatus(translation.status);
+    setMessage('');
+  }
+
+  function clearEditor() {
+    setEditing(null);
+    setContent('');
+    setPhoneticContent('');
+    setStatus('pending');
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    saveMutation.mutate();
+  }
+
+  return (
+    <section className="content-panel">
+      <div className="panel-heading">
+        <div>
+          <span>Traduções</span>
+          <h2>{filteredTranslations.length} registos</h2>
+          <p>Crie, gere e reveja traduções dos textos literários por língua.</p>
+        </div>
+      </div>
+
+      <section className="filter-panel">
+        <label>
+          Língua
+          <select value={langFilter} onChange={(event) => setLangFilter(event.target.value)}>
+            <option value="">Todas</option>
+            {languages.map((language) => (
+              <option key={language.code} value={language.code}>
+                {language.code.toUpperCase()} · {language.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Estado
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="">Todos</option>
+            {translationStatusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+
+      <form className="editor" onSubmit={submit}>
+        <h3>{editing ? 'Editar tradução' : 'Criar tradução'}</h3>
+        <div className="field-grid">
+          <label className="textarea-field">
+            Texto original
+            <select value={textId} onChange={(event) => setTextId(event.target.value)}>
+              {texts.map((text) => (
+                <option key={text.id} value={text.id}>{audioTextLabel(text, points, authors)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Língua
+            <select value={lang} onChange={(event) => setLang(event.target.value)}>
+              {targetLanguages.map((language) => (
+                <option key={language.code} value={language.code}>
+                  {language.code.toUpperCase()} · {language.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Estado
+            <select value={status} onChange={(event) => setStatus(event.target.value as TranslationStatus)}>
+              {translationStatusOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="textarea-field">
+            Conteúdo traduzido
+            <textarea value={content} onChange={(event) => setContent(event.target.value)} />
+          </label>
+          <label className="textarea-field">
+            Conteúdo fonético
+            <textarea value={phoneticContent} onChange={(event) => setPhoneticContent(event.target.value)} />
+          </label>
+        </div>
+        <div className="form-actions">
+          <button type="submit" disabled={!textId || !lang || saveMutation.isPending}>
+            {saveMutation.isPending ? 'A guardar...' : 'Guardar'}
+          </button>
+          <button
+            type="button"
+            className="secondary-action"
+            disabled={!textId || !lang || generateMutation.isPending}
+            onClick={() => generateMutation.mutate()}
+          >
+            {generateMutation.isPending ? 'A gerar...' : 'Gerar com IA'}
+          </button>
+          <button type="button" className="secondary-action" onClick={clearEditor}>
+            Limpar
+          </button>
+        </div>
+        {message ? <p className="audio-message">{message}</p> : null}
+      </form>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Texto</th>
+              <th>Língua</th>
+              <th>Estado</th>
+              <th>Origem</th>
+              <th>Conteúdo</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredTranslations.length === 0 ? <tr><td colSpan={6}>Nenhuma tradução registada.</td></tr> : null}
+            {filteredTranslations.map((translation) => (
+              <tr key={translation.id}>
+                <td>{audioTextLabel(texts.find((text) => text.id === translation.text_id), points, authors)}</td>
+                <td>{translation.lang.toUpperCase()}</td>
+                <td>{translationStatusLabel(translation.status)}</td>
+                <td>{originLabel(translation.origin ?? 'manual')}</td>
+                <td>{translation.content ? translation.content.slice(0, 100) : '-'}</td>
+                <td>
+                  <div className="row-actions">
+                    <button type="button" onClick={() => editTranslation(translation)}>
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => deleteMutation.mutate(translation.id)}
+                    >
+                      Apagar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function AudioPanel({ token, onAuthExpired }: { token: string; onAuthExpired: () => void }) {
   const queryClient = useQueryClient();
   const [textId, setTextId] = useState('');
   const [lang, setLang] = useState<SupportedLanguage>('pt');
@@ -650,32 +1021,50 @@ function AudioPanel({ token }: { token: string }) {
 
   const textsQuery = useQuery({
     queryKey: ['admin-resource', 'texts', token],
-    queryFn: async () => client.get<AdminText[]>('/api/v1/admin/texts', token).catch(() => mockTexts),
+    queryFn: async () =>
+      client
+        .get<AdminText[]>('/api/v1/admin/texts', token)
+        .catch((cause) => fallbackUnlessAuth(cause, mockTexts, onAuthExpired)),
     ...autoSyncQueryOptions
   });
   const pointsQuery = useQuery({
     queryKey: ['admin-options', 'points', token],
-    queryFn: async () => client.get<AdminPoint[]>('/api/v1/admin/points', token).catch(() => mockPoints),
+    queryFn: async () =>
+      client
+        .get<AdminPoint[]>('/api/v1/admin/points', token)
+        .catch((cause) => fallbackUnlessAuth(cause, mockPoints, onAuthExpired)),
     ...autoSyncQueryOptions
   });
   const authorsQuery = useQuery({
     queryKey: ['admin-options', 'authors', token],
-    queryFn: async () => client.get<AdminAuthor[]>('/api/v1/admin/authors', token).catch(() => mockAuthors),
+    queryFn: async () =>
+      client
+        .get<AdminAuthor[]>('/api/v1/admin/authors', token)
+        .catch((cause) => fallbackUnlessAuth(cause, mockAuthors, onAuthExpired)),
     ...autoSyncQueryOptions
   });
   const languagesQuery = useQuery({
     queryKey: ['admin-languages', token],
-    queryFn: async () => client.get<AdminLanguage[]>('/api/v1/admin/languages?active=true', token).catch(() => fallbackLanguages),
+    queryFn: async () =>
+      client
+        .get<AdminLanguage[]>('/api/v1/admin/languages?active=true', token)
+        .catch((cause) => fallbackUnlessAuth(cause, fallbackLanguages, onAuthExpired)),
     ...autoSyncQueryOptions
   });
   const voicesQuery = useQuery({
     queryKey: ['admin-voices', token],
-    queryFn: async () => client.get<AdminVoice[]>('/api/v1/admin/voices', token).catch(() => []),
+    queryFn: async () =>
+      client
+        .get<AdminVoice[]>('/api/v1/admin/voices', token)
+        .catch((cause) => fallbackUnlessAuth(cause, [], onAuthExpired)),
     ...autoSyncQueryOptions
   });
   const audioQuery = useQuery({
     queryKey: ['admin-audio', token],
-    queryFn: async () => client.get<AdminAudioFile[]>('/api/v1/admin/audio', token).catch(() => []),
+    queryFn: async () =>
+      client
+        .get<AdminAudioFile[]>('/api/v1/admin/audio', token)
+        .catch((cause) => fallbackUnlessAuth(cause, [], onAuthExpired)),
     ...autoSyncQueryOptions
   });
 
@@ -708,7 +1097,10 @@ function AudioPanel({ token }: { token: string }) {
       setMessage(result.error ? `Geração concluída com erro: ${result.error}` : `Geração ${result.status}.`);
       queryClient.invalidateQueries({ queryKey: ['admin-audio', token] });
     },
-    onError: (cause) => setMessage(cause instanceof Error ? cause.message : 'Não foi possível gerar o áudio.')
+    onError: (cause) => {
+      if (redirectIfAuthError(cause, onAuthExpired)) return;
+      setMessage(cause instanceof Error ? cause.message : 'Não foi possível gerar o áudio.');
+    }
   });
 
   const uploadMutation = useMutation({
@@ -727,7 +1119,10 @@ function AudioPanel({ token }: { token: string }) {
       setDuration('');
       queryClient.invalidateQueries({ queryKey: ['admin-audio', token] });
     },
-    onError: (cause) => setMessage(cause instanceof Error ? cause.message : 'Não foi possível guardar o áudio.')
+    onError: (cause) => {
+      if (redirectIfAuthError(cause, onAuthExpired)) return;
+      setMessage(cause instanceof Error ? cause.message : 'Não foi possível guardar o áudio.');
+    }
   });
 
   const deleteMutation = useMutation({
@@ -736,7 +1131,10 @@ function AudioPanel({ token }: { token: string }) {
       setMessage('Áudio apagado.');
       queryClient.invalidateQueries({ queryKey: ['admin-audio', token] });
     },
-    onError: (cause) => setMessage(cause instanceof Error ? cause.message : 'Não foi possível apagar o áudio.')
+    onError: (cause) => {
+      if (redirectIfAuthError(cause, onAuthExpired)) return;
+      setMessage(cause instanceof Error ? cause.message : 'Não foi possível apagar o áudio.');
+    }
   });
 
   return (
@@ -841,7 +1239,15 @@ function audioTextLabel(text: AdminText | undefined, points: AdminPoint[], autho
   return `${title}${author ? ` · ${author.name}` : ''}`;
 }
 
-function CsvImportPanel({ token, onImported }: { token: string; onImported: () => void }) {
+function CsvImportPanel({
+  token,
+  onAuthExpired,
+  onImported
+}: {
+  token: string;
+  onAuthExpired: () => void;
+  onImported: () => void;
+}) {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ImportPreviewRow[]>([]);
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -857,7 +1263,13 @@ function CsvImportPanel({ token, onImported }: { token: string; onImported: () =
       setResult(null);
       setError('');
     },
-    onError: (cause) => setError(cause instanceof Error ? cause.message : 'Não foi possível gerar o preview.')
+    onError: (cause) => {
+      if (isAuthError(cause)) {
+        onAuthExpired();
+        return;
+      }
+      setError(cause instanceof Error ? cause.message : 'Não foi possível gerar o preview.');
+    }
   });
 
   const confirmMutation = useMutation({
@@ -871,7 +1283,13 @@ function CsvImportPanel({ token, onImported }: { token: string; onImported: () =
       setError('');
       onImported();
     },
-    onError: (cause) => setError(cause instanceof Error ? cause.message : 'Não foi possível confirmar a importação.')
+    onError: (cause) => {
+      if (isAuthError(cause)) {
+        onAuthExpired();
+        return;
+      }
+      setError(cause instanceof Error ? cause.message : 'Não foi possível confirmar a importação.');
+    }
   });
 
   const hasBlockingErrors = preview.some((row) => row.errors.length > 0);
@@ -1326,6 +1744,12 @@ const difficultyOptions: FieldOption[] = [
   { value: 'hard', label: 'Difícil' }
 ];
 
+const translationStatusOptions: Array<{ value: TranslationStatus; label: string }> = [
+  { value: 'pending', label: 'Pendente' },
+  { value: 'approved', label: 'Aprovada' },
+  { value: 'rejected', label: 'Rejeitada' }
+];
+
 function relationOptions(items: Array<{ id: string; name?: string; title_pt?: string }>, emptyLabel: string): FieldOption[] {
   return [
     { value: '', label: emptyLabel },
@@ -1359,6 +1783,12 @@ function originLabel(origin: string) {
   if (origin === 'import') return 'CSV';
   if (origin === 'automatic') return 'Automático';
   return 'Manual';
+}
+
+function translationStatusLabel(status: TranslationStatus) {
+  if (status === 'approved') return 'Aprovada';
+  if (status === 'rejected') return 'Rejeitada';
+  return 'Pendente';
 }
 
 function draftFromItem(resource: Resource, item: ResourceItem): Draft {
