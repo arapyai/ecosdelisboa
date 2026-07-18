@@ -177,6 +177,7 @@ export interface AdminText {
   source_work?: string | null;
   source_year?: number | null;
   content_type: ContentType;
+  origin?: TextOrigin;
 }
 
 export interface AdminRouteItem {

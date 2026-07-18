@@ -14,12 +14,14 @@ import {
   type SupportedLanguage
 } from '@ecosdelisboa/shared';
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import maplibregl from 'maplibre-gl';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import './styles.css';
 
 type Resource = 'authors' | 'points' | 'texts' | 'routes';
-type Section = Resource | 'audio';
+type Section = Resource | 'audio' | 'csv';
 type ResourceItem = AdminAuthor | AdminPoint | AdminText | AdminRoute;
 type DraftValue = string | number | boolean | null | AdminRouteItem[];
 type Draft = Record<string, DraftValue>;
@@ -54,6 +56,10 @@ type FieldContext = {
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY ?? '';
+const ADMIN_MAP_STYLE_URL = MAPTILER_KEY
+  ? `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_KEY}`
+  : 'https://demotiles.maplibre.org/style.json';
 const client = new ApiClient(API_BASE);
 const queryClient = new QueryClient();
 const TOKEN_KEY = 'ecosdelisboa.admin.token';
@@ -130,7 +136,8 @@ const mockTexts: AdminText[] = [
     content_pt: 'Aqui a cidade tem passos de escritório, café e fantasma.',
     source_work: 'Fragmento demonstrativo',
     source_year: 2026,
-    content_type: 'prose'
+    content_type: 'prose',
+    origin: 'manual'
   }
 ];
 
@@ -154,8 +161,12 @@ const resourceLabels: Record<Resource, string> = {
 };
 
 const sectionLabels: Record<Section, string> = {
-  ...resourceLabels,
-  audio: 'Áudios'
+  csv: 'CSV',
+  authors: resourceLabels.authors,
+  points: resourceLabels.points,
+  texts: resourceLabels.texts,
+  routes: resourceLabels.routes,
+  audio: 'Áudios',
 };
 
 const fallbackLanguages: AdminLanguage[] = [
@@ -309,7 +320,9 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           Sair
         </button>
       </aside>
-      {section === 'audio' ? <AudioPanel token={token} /> : <ResourcePanel token={token} resource={section} />}
+      {section === 'audio' ? <AudioPanel token={token} /> : null}
+      {section === 'csv' ? <CsvPanel token={token} /> : null}
+      {section !== 'audio' && section !== 'csv' ? <ResourcePanel token={token} resource={section} /> : null}
     </main>
   );
 }
@@ -319,11 +332,15 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
   const [editing, setEditing] = useState<ResourceItem | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft(resource));
   const [isLocal, setIsLocal] = useState(false);
+  const [textSearch, setTextSearch] = useState('');
+  const [textOrigin, setTextOrigin] = useState('');
 
   useEffect(() => {
     setEditing(null);
     setDraft(emptyDraft(resource));
     setIsLocal(false);
+    setTextSearch('');
+    setTextOrigin('');
   }, [resource]);
 
   const query = useQuery({
@@ -365,7 +382,11 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
   });
 
   const items = query.data ?? fallbackFor(resource);
-  const metrics = useMemo(() => items.length, [items.length]);
+  const filteredItems = useMemo(
+    () => filterResourceItems(resource, items, { textSearch, textOrigin }),
+    [items, resource, textOrigin, textSearch]
+  );
+  const metrics = useMemo(() => filteredItems.length, [filteredItems.length]);
   const fieldContext = useMemo<FieldContext>(
     () => ({
       authors: authorsQuery.data ?? mockAuthors,
@@ -441,14 +462,6 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
     }
   }
 
-  function invalidateImportQueries() {
-    queryClient.invalidateQueries({ queryKey: ['admin-resource', 'authors', token] });
-    queryClient.invalidateQueries({ queryKey: ['admin-resource', 'points', token] });
-    queryClient.invalidateQueries({ queryKey: ['admin-resource', 'texts', token] });
-    queryClient.invalidateQueries({ queryKey: ['admin-options', 'authors', token] });
-    queryClient.invalidateQueries({ queryKey: ['admin-options', 'points', token] });
-  }
-
   function edit(item: ResourceItem) {
     setEditing(item);
     setDraft(draftFromItem(resource, item));
@@ -469,7 +482,14 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
         </div>
       </div>
 
-      {resource === 'points' ? <CsvImportPanel token={token} onImported={invalidateImportQueries} /> : null}
+      {resource === 'texts' ? (
+        <TextFilters
+          origin={textOrigin}
+          search={textSearch}
+          onOrigin={setTextOrigin}
+          onSearch={setTextSearch}
+        />
+      ) : null}
 
       <form className="editor" onSubmit={submit}>
         <h3>{editing ? 'Editar' : 'Criar'} {resourceLabels[resource].toLowerCase()}</h3>
@@ -500,7 +520,7 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
+            {filteredItems.map((item) => (
               <tr key={item.id}>
                 {columnsFor(resource).map((column) => (
                   <td key={column}>{formatCell(item, column)}</td>
@@ -522,6 +542,101 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
       </div>
     </section>
   );
+}
+
+function TextFilters({
+  search,
+  origin,
+  onSearch,
+  onOrigin
+}: {
+  search: string;
+  origin: string;
+  onSearch: (value: string) => void;
+  onOrigin: (value: string) => void;
+}) {
+  return (
+    <section className="filter-panel">
+      <label>
+        Filtrar conteúdo
+        <input value={search} onChange={(event) => onSearch(event.target.value)} type="search" />
+      </label>
+      <label>
+        Alterado manualmente
+        <select value={origin} onChange={(event) => onOrigin(event.target.value)}>
+          <option value="">Todos</option>
+          <option value="manual">Sim</option>
+          <option value="not_manual">Não</option>
+        </select>
+      </label>
+    </section>
+  );
+}
+
+function CsvPanel({ token }: { token: string }) {
+  const queryClient = useQueryClient();
+  const [downloadError, setDownloadError] = useState('');
+
+  function invalidateImportQueries() {
+    queryClient.invalidateQueries({ queryKey: ['admin-resource', 'authors', token] });
+    queryClient.invalidateQueries({ queryKey: ['admin-resource', 'points', token] });
+    queryClient.invalidateQueries({ queryKey: ['admin-resource', 'texts', token] });
+    queryClient.invalidateQueries({ queryKey: ['admin-options', 'authors', token] });
+    queryClient.invalidateQueries({ queryKey: ['admin-options', 'points', token] });
+  }
+
+  async function downloadTemplate() {
+    setDownloadError('');
+    const response = await fetch(`${API_BASE}/api/v1/admin/points/import/template`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      setDownloadError('Não foi possível baixar o modelo CSV.');
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'content_import_template.csv';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <section className="content-panel">
+      <div className="panel-heading">
+        <div>
+          <span>CSV</span>
+          <h2>Importação de conteúdo</h2>
+          <p>Use esta área para validar e importar pontos, autores e textos em lote.</p>
+        </div>
+        <button type="button" className="secondary-action" onClick={() => void downloadTemplate()}>
+          Baixar modelo CSV
+        </button>
+      </div>
+      {downloadError ? <p className="import-error standalone-error">{downloadError}</p> : null}
+      <CsvImportPanel token={token} onImported={invalidateImportQueries} />
+    </section>
+  );
+}
+
+function filterResourceItems(
+  resource: Resource,
+  items: ResourceItem[],
+  filters: { textSearch: string; textOrigin: string }
+) {
+  if (resource !== 'texts') return items;
+  const normalizedSearch = filters.textSearch.trim().toLowerCase();
+  return items.filter((item) => {
+    const text = item as AdminText;
+    const matchesSearch = !normalizedSearch || text.content_pt.toLowerCase().includes(normalizedSearch);
+    const origin = text.origin ?? 'manual';
+    const matchesOrigin =
+      !filters.textOrigin ||
+      (filters.textOrigin === 'not_manual' ? origin !== 'manual' : origin === filters.textOrigin);
+    return matchesSearch && matchesOrigin;
+  });
 }
 
 function AudioPanel({ token }: { token: string }) {
@@ -854,6 +969,7 @@ function ResourceFields({
   onDraft: (draft: Draft) => void;
 }) {
   const fields = fieldsFor(resource, context);
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
 
   useEffect(() => {
     const nextDraft = { ...draft };
@@ -885,65 +1001,82 @@ function ResourceFields({
   }, [context.authorsReady, context.points, context.pointsReady, draft, fields, onDraft]);
 
   return (
-    <div className="field-grid">
-      {fields.map((field) =>
-        field.type === 'route-items' ? (
-          <div key={field.name} className={fieldClassName(field)}>
-            <span>{field.label}</span>
-            <RouteItemsEditor
-              items={routeItemsFromDraft(draft[field.name])}
-              points={context.points}
-              onChange={(items) => onDraft({ ...draft, [field.name]: items })}
-            />
-          </div>
-        ) : (
-          <label key={field.name} className={fieldClassName(field)}>
-          {field.type === 'checkbox' ? (
-            <>
-              <input
-                checked={Boolean(draft[field.name])}
-                onChange={(event) => onDraft({ ...draft, [field.name]: event.target.checked })}
-                type="checkbox"
+    <>
+      <div className="field-grid">
+        {fields.map((field) =>
+          field.type === 'route-items' ? (
+            <div key={field.name} className={fieldClassName(field)}>
+              <span>{field.label}</span>
+              <RouteItemsEditor
+                items={routeItemsFromDraft(draft[field.name])}
+                points={context.points}
+                onChange={(items) => onDraft({ ...draft, [field.name]: items })}
               />
-              <span>{field.label}</span>
-            </>
+            </div>
           ) : (
-            <>
-              <span>{field.label}</span>
-              {field.type === 'textarea' ? (
-                <textarea
-                  value={String(draft[field.name] ?? '')}
-                  placeholder={field.placeholder}
-                  onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })}
-                />
-              ) : field.type === 'select' ? (
-                <select
-                  value={String(draft[field.name] ?? '')}
-                  onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })}
-                >
-                  {selectOptions(field, draft).map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              ) : (
+            <label key={field.name} className={fieldClassName(field)}>
+            {field.type === 'checkbox' ? (
+              <>
                 <input
-                  value={String(draft[field.name] ?? '')}
-                  onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })}
-                  type={field.type}
-                  min={field.min}
-                  max={field.max}
-                  step={field.step}
-                  placeholder={field.placeholder}
+                  checked={Boolean(draft[field.name])}
+                  onChange={(event) => onDraft({ ...draft, [field.name]: event.target.checked })}
+                  type="checkbox"
                 />
-              )}
-            </>
-          )}
-          </label>
-        )
-      )}
-    </div>
+                <span>{field.label}</span>
+              </>
+            ) : (
+              <>
+                <span>{field.label}</span>
+                {field.type === 'textarea' ? (
+                  <textarea
+                    value={String(draft[field.name] ?? '')}
+                    placeholder={field.placeholder}
+                    onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })}
+                  />
+                ) : field.type === 'select' ? (
+                  <select
+                    value={String(draft[field.name] ?? '')}
+                    onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })}
+                  >
+                    {selectOptions(field, draft).map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={String(draft[field.name] ?? '')}
+                    onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })}
+                    type={field.type}
+                    min={field.min}
+                    max={field.max}
+                    step={field.step}
+                    placeholder={field.placeholder}
+                  />
+                )}
+              </>
+            )}
+            </label>
+          )
+        )}
+      </div>
+      {resource === 'points' ? (
+        <div className="location-actions">
+          <button type="button" className="secondary-action" onClick={() => setLocationPickerOpen(true)}>
+            Selecionar no mapa
+          </button>
+        </div>
+      ) : null}
+      {locationPickerOpen ? (
+        <LocationPickerDialog
+          lat={Number(draft.lat)}
+          lng={Number(draft.lng)}
+          onClose={() => setLocationPickerOpen(false)}
+          onSelect={(lat, lng) => onDraft({ ...draft, lat, lng })}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -993,6 +1126,87 @@ function fieldClassName(field: FieldConfig) {
   if (field.type === 'checkbox') return 'checkbox-field';
   if (field.type === 'textarea' || field.type === 'route-items') return 'textarea-field';
   return undefined;
+}
+
+function LocationPickerDialog({
+  lat,
+  lng,
+  onClose,
+  onSelect
+}: {
+  lat: number;
+  lng: number;
+  onClose: () => void;
+  onSelect: (lat: number, lng: number) => void;
+}) {
+  const currentLat = Number.isFinite(lat) ? lat : 38.7223;
+  const currentLng = Number.isFinite(lng) ? lng : -9.1393;
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markerRef = useRef<maplibregl.Marker | null>(null);
+  const onSelectRef = useRef(onSelect);
+
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const map = new maplibregl.Map({
+      attributionControl: false,
+      center: [currentLng, currentLat],
+      container: containerRef.current,
+      style: ADMIN_MAP_STYLE_URL,
+      zoom: 14
+    });
+    const marker = new maplibregl.Marker({ color: '#c45732', draggable: true })
+      .setLngLat([currentLng, currentLat])
+      .addTo(map);
+
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    marker.on('dragend', () => {
+      const nextLocation = marker.getLngLat();
+      onSelectRef.current(Number(nextLocation.lat.toFixed(6)), Number(nextLocation.lng.toFixed(6)));
+    });
+    map.on('click', (event) => {
+      marker.setLngLat(event.lngLat);
+      onSelectRef.current(Number(event.lngLat.lat.toFixed(6)), Number(event.lngLat.lng.toFixed(6)));
+    });
+
+    mapRef.current = map;
+    markerRef.current = marker;
+
+    return () => {
+      marker.remove();
+      map.remove();
+      markerRef.current = null;
+      mapRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    markerRef.current?.setLngLat([currentLng, currentLat]);
+    mapRef.current?.easeTo({ center: [currentLng, currentLat], duration: 250 });
+  }, [currentLat, currentLng]);
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <section className="location-dialog" role="dialog" aria-modal="true" aria-label="Selecionar localização">
+        <div className="dialog-heading">
+          <div>
+            <span>Localização</span>
+            <h3>Selecionar coordenadas</h3>
+          </div>
+          <button type="button" className="secondary-action" onClick={onClose}>Fechar</button>
+        </div>
+        <div ref={containerRef} className="coordinate-map" />
+        <p className="coordinate-readout">
+          Clique no mapa ou arraste o marcador. Lat {currentLat.toFixed(6)} · Lng {currentLng.toFixed(6)}
+        </p>
+      </section>
+    </div>
+  );
 }
 
 function RouteItemsEditor({
@@ -1129,15 +1343,22 @@ function selectOptions(field: FieldConfig, draft: Draft): FieldOption[] {
 function columnsFor(resource: Resource) {
   if (resource === 'authors') return ['name', 'bio_pt', 'birth_year'];
   if (resource === 'points') return ['title_pt', 'neighborhood', 'lat', 'lng'];
-  if (resource === 'texts') return ['content_pt', 'author_id', 'source_work', 'content_type'];
+  if (resource === 'texts') return ['content_pt', 'origin', 'author_id', 'source_work', 'content_type'];
   return ['title_pt', 'is_published', 'estimated_distance_m', 'estimated_duration_s'];
 }
 
 function formatCell(item: ResourceItem, column: string) {
   const value = (item as unknown as Record<string, unknown>)[column];
+  if (column === 'origin') return originLabel(String(value || 'manual'));
   if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
   if (value === null || value === undefined || value === '') return '-';
   return String(value).slice(0, 100);
+}
+
+function originLabel(origin: string) {
+  if (origin === 'import') return 'CSV';
+  if (origin === 'automatic') return 'Automático';
+  return 'Manual';
 }
 
 function draftFromItem(resource: Resource, item: ResourceItem): Draft {

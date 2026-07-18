@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import get_current_admin
 from app.core.db import get_db
 from app.models.entities import AdminUser, Author, Point, Route, RouteItem, Text
-from app.models.enums import ContentType
+from app.models.enums import ContentType, TextOrigin
 from app.schemas.common import EnvelopeMeta, envelope
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-content"])
@@ -266,6 +266,7 @@ def create_text(
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
     text = Text(**payload.model_dump())
+    text.origin = TextOrigin.MANUAL.value
     db.add(text)
     db.commit()
     db.refresh(text)
@@ -284,6 +285,7 @@ def update_text(
         raise HTTPException(status_code=404, detail="Text not found")
     for field, value in payload.model_dump().items():
         setattr(text, field, value)
+    text.origin = TextOrigin.MANUAL.value
     db.commit()
     db.refresh(text)
     return envelope(serialize_text(text), EnvelopeMeta())

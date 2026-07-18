@@ -41,6 +41,19 @@ button:disabled {
   color: #16211f;
 }
 
+.secondary-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  border: 1px solid #d8d0c4;
+  border-radius: 8px;
+  background: #fffaf1;
+  color: #16211f;
+  font-weight: 800;
+  padding: 0 12px;
+  text-decoration: none;
+}
+
 .danger {
   background: #c45732;
 }
@@ -264,6 +277,81 @@ input[type='checkbox'] {
   padding: 16px;
 }
 
+.filter-panel {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 320px);
+  gap: 12px;
+  align-items: end;
+  border: 1px solid #d8d0c4;
+  border-radius: 8px;
+  background: #fffaf1;
+  margin-bottom: 18px;
+  padding: 16px;
+}
+
+.location-actions {
+  margin-top: 12px;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(22, 33, 31, 0.42);
+}
+
+.location-dialog {
+  width: min(720px, 100%);
+  border: 1px solid #d8d0c4;
+  border-radius: 8px;
+  background: #fffaf1;
+  padding: 16px;
+  box-shadow: 0 24px 60px rgba(22, 33, 31, 0.24);
+}
+
+.dialog-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dialog-heading h3 {
+  margin: 8px 0 0;
+}
+
+.coordinate-map {
+  position: relative;
+  width: 100%;
+  height: min(54vh, 430px);
+  min-height: 340px;
+  overflow: hidden;
+  border: 1px solid #d8d0c4;
+  border-radius: 8px;
+  background: #dbe9f0;
+  cursor: crosshair;
+}
+
+.coordinate-map .maplibregl-canvas {
+  outline: none;
+}
+
+.coordinate-map .maplibregl-ctrl button {
+  min-height: 29px;
+  border-radius: 0;
+  padding: 0;
+}
+
+.coordinate-readout {
+  margin: 10px 0 0;
+  color: #69736e;
+  font-weight: 700;
+}
+
 .audio-editor {
   margin-bottom: 18px;
 }
@@ -311,6 +399,10 @@ input[type='checkbox'] {
 
 .import-error {
   color: #9e3a20;
+}
+
+.standalone-error {
+  margin-bottom: 12px;
 }
 
 .import-summary {
@@ -412,7 +504,8 @@ tr:last-child td {
   }
 
   .import-heading,
-  .import-actions {
+  .import-actions,
+  .filter-panel {
     grid-template-columns: 1fr;
   }
 
