@@ -16,6 +16,23 @@ npm run webapp:dev
 npm run webapp:build
 ```
 
+## Configuração de cidade
+
+O webapp lê a identidade e localização base da cidade por variáveis `VITE_*`. Se alguma delas não
+existir, o fallback continua sendo Lisboa.
+
+```env
+VITE_APP_NAME=Lisbon Literary Map
+VITE_CITY_NAME=Lisboa
+VITE_CITY_SLUG=lisboa
+VITE_CITY_DEFAULT_LAT=38.7223
+VITE_CITY_DEFAULT_LNG=-9.1393
+VITE_MAP_CENTER_LAT=38.7223
+VITE_MAP_CENTER_LNG=-9.1393
+VITE_MAP_ZOOM=12.2
+VITE_MAP_DEFAULT_RADIUS=1500
+```
+
 ## Scripts do workspace
 
 - `npm run dev`: Vite de desenvolvimento;
