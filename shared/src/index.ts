@@ -174,6 +174,7 @@ export interface AdminText {
   point_id: string;
   author_id: string;
   content_pt: string;
+  phonetic_content?: string | null;
   source_work?: string | null;
   source_year?: number | null;
   content_type: ContentType;

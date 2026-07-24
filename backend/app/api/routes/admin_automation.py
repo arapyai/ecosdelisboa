@@ -11,7 +11,7 @@ from app.api.deps import get_current_admin
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.models.entities import AdminUser, AudioFile, Text, Translation, Voice
-from app.models.enums import TranslationStatus
+from app.models.enums import TextOrigin, TranslationStatus
 from app.schemas.common import EnvelopeMeta, envelope
 from app.services.audio_jobs import create_audio_job, process_audio_job, stream_job_events
 from app.services.audio_storage import AudioStorage, manual_audio_key
@@ -101,6 +101,21 @@ def serialize_audio_file(audio_file: AudioFile) -> dict[str, object]:
     }
 
 
+def serialize_translation(translation: Translation) -> dict[str, object]:
+    return {
+        "id": str(translation.id),
+        "text_id": str(translation.text_id),
+        "lang": translation.lang,
+        "content": translation.content,
+        "phonetic_content": translation.phonetic_content,
+        "status": translation.status.value,
+        "auto_translated": translation.auto_translated,
+        "origin": translation.origin,
+        "reviewed_by": translation.reviewed_by,
+        "reviewed_at": translation.reviewed_at.isoformat() if translation.reviewed_at else None,
+    }
+
+
 @router.post("/translations/{text_id}/{lang}")
 def trigger_translation(
     text_id: UUID,
@@ -116,13 +131,7 @@ def trigger_translation(
     db.commit()
     db.refresh(translation)
     return envelope(
-        {
-            "id": str(translation.id),
-            "text_id": str(translation.text_id),
-            "lang": translation.lang,
-            "content": translation.content,
-            "status": translation.status.value,
-        },
+        serialize_translation(translation),
         EnvelopeMeta(),
     )
 
@@ -155,17 +164,7 @@ def upsert_translation(
     db.commit()
     db.refresh(translation)
     return envelope(
-        {
-            "id": str(translation.id),
-            "text_id": str(translation.text_id),
-            "lang": translation.lang,
-            "content": translation.content,
-            "phonetic_content": translation.phonetic_content,
-            "status": translation.status.value,
-            "auto_translated": translation.auto_translated,
-            "origin": translation.origin,
-            "reviewed_by": translation.reviewed_by,
-        },
+        serialize_translation(translation),
         EnvelopeMeta(),
     )
 
@@ -190,11 +189,7 @@ def review_translation(
     db.commit()
     db.refresh(translation)
     return envelope(
-        {
-            "id": str(translation.id),
-            "status": translation.status.value,
-            "reviewed_by": translation.reviewed_by,
-        },
+        serialize_translation(translation),
         EnvelopeMeta(),
     )
 
@@ -219,6 +214,8 @@ def list_translations(
     db: Annotated[Session, Depends(get_db)],
     status: TranslationStatus | None = None,
     lang: str | None = None,
+    origin: TextOrigin | None = None,
+    text_id: UUID | None = None,
 ) -> dict[str, object]:
     query = select(Translation).order_by(Translation.created_at.desc())
     if status is not None:
@@ -226,23 +223,13 @@ def list_translations(
     if lang is not None:
         lang = normalize_language_code(lang)
         query = query.where(Translation.lang == lang)
+    if origin is not None:
+        query = query.where(Translation.origin == origin.value)
+    if text_id is not None:
+        query = query.where(Translation.text_id == text_id)
     translations = db.scalars(query).all()
     return envelope(
-        [
-            {
-                "id": str(item.id),
-                "text_id": str(item.text_id),
-                "lang": item.lang,
-                "content": item.content,
-                "phonetic_content": item.phonetic_content,
-                "status": item.status.value,
-                "auto_translated": item.auto_translated,
-                "origin": item.origin,
-                "reviewed_by": item.reviewed_by,
-                "reviewed_at": item.reviewed_at.isoformat() if item.reviewed_at else None,
-            }
-            for item in translations
-        ],
+        [serialize_translation(item) for item in translations],
         EnvelopeMeta(total=len(translations)),
     )
 

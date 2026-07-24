@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5174",
     "build": "tsc && vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 4174"
+    "preview": "vite preview --host 0.0.0.0 --port 4174",
+    "test": "node --test src/*.test.ts"
   },
   "dependencies": {
     "@ecosdelisboa/shared": "file:../shared",

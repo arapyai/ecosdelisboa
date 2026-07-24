@@ -13,6 +13,7 @@ import {
   type AdminTranslation,
   type AdminUser,
   type AdminVoice,
+  type TextOrigin,
   type SupportedLanguage,
   type TranslationStatus
 } from '@ecosdelisboa/shared';
@@ -21,10 +22,11 @@ import maplibregl from 'maplibre-gl';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { mergeTranslationDrafts, translationToDraft, type TextVersionDraft } from './textVersionDrafts';
 import './styles.css';
 
 type Resource = 'authors' | 'points' | 'texts' | 'routes';
-type Section = Resource | 'audio' | 'csv' | 'translations';
+type Section = Resource | 'audio' | 'csv';
 type ResourceItem = AdminAuthor | AdminPoint | AdminText | AdminRoute;
 type DraftValue = string | number | boolean | null | AdminRouteItem[];
 type Draft = Record<string, DraftValue>;
@@ -217,7 +219,6 @@ const sectionLabels: Record<Section, string> = {
   points: resourceLabels.points,
   texts: resourceLabels.texts,
   routes: resourceLabels.routes,
-  translations: 'Traduções',
   audio: 'Áudios',
 };
 
@@ -255,6 +256,7 @@ function emptyDraft(resource: Resource): Draft {
       point_id: '',
       author_id: '',
       content_pt: '',
+      phonetic_content: '',
       source_work: '',
       source_year: '',
       content_type: 'prose'
@@ -377,10 +379,9 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           Sair
         </button>
       </aside>
-      {section === 'translations' ? <TranslationsPanel token={token} onAuthExpired={onLogout} /> : null}
       {section === 'audio' ? <AudioPanel token={token} onAuthExpired={onLogout} /> : null}
       {section === 'csv' ? <CsvPanel token={token} onAuthExpired={onLogout} /> : null}
-      {section !== 'audio' && section !== 'csv' && section !== 'translations' ? (
+      {section !== 'audio' && section !== 'csv' ? (
         <ResourcePanel token={token} resource={section} onAuthExpired={onLogout} />
       ) : null}
     </main>
@@ -401,6 +402,8 @@ function ResourcePanel({
   const [draft, setDraft] = useState<Draft>(emptyDraft(resource));
   const [isLocal, setIsLocal] = useState(false);
   const [textSearch, setTextSearch] = useState('');
+  const [textLanguage, setTextLanguage] = useState('');
+  const [textStatus, setTextStatus] = useState('');
   const [textOrigin, setTextOrigin] = useState('');
 
   useEffect(() => {
@@ -408,6 +411,8 @@ function ResourcePanel({
     setDraft(emptyDraft(resource));
     setIsLocal(false);
     setTextSearch('');
+    setTextLanguage('');
+    setTextStatus('');
     setTextOrigin('');
   }, [resource]);
 
@@ -450,10 +455,41 @@ function ResourcePanel({
     ...autoSyncQueryOptions
   });
 
+  const languagesQuery = useQuery({
+    queryKey: ['admin-languages', token],
+    queryFn: async () =>
+      client
+        .get<AdminLanguage[]>('/api/v1/admin/languages?active=true', token)
+        .catch((cause) => fallbackUnlessAuth(cause, fallbackLanguages, onAuthExpired)),
+    enabled: resource === 'texts',
+    ...autoSyncQueryOptions
+  });
+
+  const translationsQuery = useQuery({
+    queryKey: ['admin-translations', token],
+    queryFn: async () =>
+      client
+        .get<AdminTranslation[]>('/api/v1/admin/translations', token)
+        .catch((cause) => fallbackUnlessAuth(cause, mockTranslations, onAuthExpired)),
+    enabled: resource === 'texts',
+    ...autoSyncQueryOptions
+  });
+
   const items = query.data ?? (ENABLE_MOCKS ? fallbackFor(resource) : []);
+  const languages = languagesQuery.data ?? (ENABLE_MOCKS ? fallbackLanguages : []);
+  const translations = translationsQuery.data ?? (ENABLE_MOCKS ? mockTranslations : []);
+  const sourceLanguage = languages.find((language) => language.is_source)?.code ?? 'pt';
   const filteredItems = useMemo(
-    () => filterResourceItems(resource, items, { textSearch, textOrigin }),
-    [items, resource, textOrigin, textSearch]
+    () =>
+      filterResourceItems(resource, items, {
+        textSearch,
+        textLanguage,
+        textStatus,
+        textOrigin,
+        translations,
+        sourceLanguage
+      }),
+    [items, resource, sourceLanguage, textLanguage, textOrigin, textSearch, textStatus, translations]
   );
   const metrics = useMemo(() => filteredItems.length, [filteredItems.length]);
   const fieldContext = useMemo<FieldContext>(
@@ -543,7 +579,7 @@ function ResourcePanel({
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    saveMutation.mutate();
+    saveMutation.mutate(undefined);
   }
 
   return (
@@ -565,16 +601,33 @@ function ResourcePanel({
 
       {resource === 'texts' ? (
         <TextFilters
+          languages={languages}
+          language={textLanguage}
           origin={textOrigin}
           search={textSearch}
+          status={textStatus}
+          onLanguage={setTextLanguage}
           onOrigin={setTextOrigin}
           onSearch={setTextSearch}
+          onStatus={setTextStatus}
         />
       ) : null}
 
       <form className="editor" onSubmit={submit}>
         <h3>{editing ? 'Editar' : 'Criar'} {resourceLabels[resource].toLowerCase()}</h3>
         <ResourceFields resource={resource} draft={draft} context={fieldContext} onDraft={setDraft} />
+        {resource === 'texts' ? (
+          <TextVersionsEditor
+            baseDraft={draft}
+            languages={languages}
+            text={editing as AdminText | null}
+            token={token}
+            translations={translations}
+            onAuthExpired={onAuthExpired}
+            onBaseDraft={setDraft}
+            onTranslationsChanged={() => translationsQuery.refetch()}
+          />
+        ) : null}
         <div className="form-actions">
           <button type="submit">{editing ? 'Guardar' : 'Criar'}</button>
           <button
@@ -627,13 +680,23 @@ function ResourcePanel({
 
 function TextFilters({
   search,
+  language,
+  status,
   origin,
+  languages,
   onSearch,
+  onLanguage,
+  onStatus,
   onOrigin
 }: {
   search: string;
+  language: string;
+  status: string;
   origin: string;
+  languages: AdminLanguage[];
   onSearch: (value: string) => void;
+  onLanguage: (value: string) => void;
+  onStatus: (value: string) => void;
   onOrigin: (value: string) => void;
 }) {
   return (
@@ -643,11 +706,30 @@ function TextFilters({
         <input value={search} onChange={(event) => onSearch(event.target.value)} type="search" />
       </label>
       <label>
-        Alterado manualmente
-        <select value={origin} onChange={(event) => onOrigin(event.target.value)}>
+        Idioma
+        <select value={language} onChange={(event) => onLanguage(event.target.value)}>
           <option value="">Todos</option>
-          <option value="manual">Sim</option>
-          <option value="not_manual">Não</option>
+          {languages.map((item) => (
+            <option key={item.code} value={item.code}>{languageLabel(item)}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Estado
+        <select value={status} onChange={(event) => onStatus(event.target.value)}>
+          <option value="">Todos</option>
+          {translationStatusOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Origem
+        <select value={origin} onChange={(event) => onOrigin(event.target.value)}>
+          <option value="">Todas</option>
+          {originOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
         </select>
       </label>
     </section>
@@ -706,321 +788,281 @@ function CsvPanel({ token, onAuthExpired }: { token: string; onAuthExpired: () =
 function filterResourceItems(
   resource: Resource,
   items: ResourceItem[],
-  filters: { textSearch: string; textOrigin: string }
+  filters: {
+    textSearch: string;
+    textLanguage: string;
+    textStatus: string;
+    textOrigin: string;
+    translations: AdminTranslation[];
+    sourceLanguage: string;
+  }
 ) {
   if (resource !== 'texts') return items;
   const normalizedSearch = filters.textSearch.trim().toLowerCase();
   return items.filter((item) => {
     const text = item as AdminText;
     const matchesSearch = !normalizedSearch || text.content_pt.toLowerCase().includes(normalizedSearch);
-    const origin = text.origin ?? 'manual';
+    const textTranslations = filters.translations.filter((translation) => translation.text_id === text.id);
+    const sourceOrigin = text.origin ?? 'manual';
+    const matchesLanguage =
+      !filters.textLanguage ||
+      (filters.textLanguage === filters.sourceLanguage
+        ? true
+        : textTranslations.some((translation) => translation.lang === filters.textLanguage));
+    const matchesStatus =
+      !filters.textStatus || textTranslations.some((translation) => translation.status === filters.textStatus);
     const matchesOrigin =
       !filters.textOrigin ||
-      (filters.textOrigin === 'not_manual' ? origin !== 'manual' : origin === filters.textOrigin);
-    return matchesSearch && matchesOrigin;
+      sourceOrigin === filters.textOrigin ||
+      textTranslations.some((translation) => translation.origin === filters.textOrigin);
+    return matchesSearch && matchesLanguage && matchesStatus && matchesOrigin;
   });
 }
 
-function TranslationsPanel({ token, onAuthExpired }: { token: string; onAuthExpired: () => void }) {
-  const queryClient = useQueryClient();
-  const [statusFilter, setStatusFilter] = useState('');
-  const [langFilter, setLangFilter] = useState('');
-  const [editing, setEditing] = useState<AdminTranslation | null>(null);
-  const [textId, setTextId] = useState('');
-  const [lang, setLang] = useState<SupportedLanguage>('en');
-  const [content, setContent] = useState('');
-  const [phoneticContent, setPhoneticContent] = useState('');
-  const [status, setStatus] = useState<TranslationStatus>('pending');
+function TextVersionsEditor({
+  baseDraft,
+  languages,
+  text,
+  token,
+  translations,
+  onAuthExpired,
+  onBaseDraft,
+  onTranslationsChanged
+}: {
+  baseDraft: Draft;
+  languages: AdminLanguage[];
+  text: AdminText | null;
+  token: string;
+  translations: AdminTranslation[];
+  onAuthExpired: () => void;
+  onBaseDraft: (draft: Draft) => void;
+  onTranslationsChanged: () => void;
+}) {
+  const sourceLanguage = languages.find((language) => language.is_source)?.code ?? 'pt';
+  const editableLanguages = languages.length > 0 ? languages : fallbackLanguages;
+  const [activeLang, setActiveLang] = useState(sourceLanguage);
+  const [versionDrafts, setVersionDrafts] = useState<Record<string, TextVersionDraft>>({});
   const [message, setMessage] = useState('');
 
-  const translationsQuery = useQuery({
-    queryKey: ['admin-translations', token, statusFilter, langFilter],
-    queryFn: async () => {
-      const query = toQuery({ status: statusFilter, lang: langFilter });
-      return client
-        .get<AdminTranslation[]>(`/api/v1/admin/translations${query}`, token)
-        .catch((cause) => fallbackUnlessAuth(cause, mockTranslations, onAuthExpired));
-    },
-    ...autoSyncQueryOptions
-  });
-  const textsQuery = useQuery({
-    queryKey: ['admin-resource', 'texts', token],
-    queryFn: async () =>
-      client
-        .get<AdminText[]>('/api/v1/admin/texts', token)
-        .catch((cause) => fallbackUnlessAuth(cause, mockTexts, onAuthExpired)),
-    ...autoSyncQueryOptions
-  });
-  const pointsQuery = useQuery({
-    queryKey: ['admin-options', 'points', token],
-    queryFn: async () =>
-      client
-        .get<AdminPoint[]>('/api/v1/admin/points', token)
-        .catch((cause) => fallbackUnlessAuth(cause, mockPoints, onAuthExpired)),
-    ...autoSyncQueryOptions
-  });
-  const authorsQuery = useQuery({
-    queryKey: ['admin-options', 'authors', token],
-    queryFn: async () =>
-      client
-        .get<AdminAuthor[]>('/api/v1/admin/authors', token)
-        .catch((cause) => fallbackUnlessAuth(cause, mockAuthors, onAuthExpired)),
-    ...autoSyncQueryOptions
-  });
-  const languagesQuery = useQuery({
-    queryKey: ['admin-languages', token],
-    queryFn: async () =>
-      client
-        .get<AdminLanguage[]>('/api/v1/admin/languages?active=true', token)
-        .catch((cause) => fallbackUnlessAuth(cause, fallbackLanguages, onAuthExpired)),
-    ...autoSyncQueryOptions
-  });
-
-  const translations = translationsQuery.data ?? (ENABLE_MOCKS ? mockTranslations : []);
-  const texts = textsQuery.data ?? (ENABLE_MOCKS ? mockTexts : []);
-  const points = pointsQuery.data ?? (ENABLE_MOCKS ? mockPoints : []);
-  const authors = authorsQuery.data ?? (ENABLE_MOCKS ? mockAuthors : []);
-  const languages = languagesQuery.data ?? (ENABLE_MOCKS ? fallbackLanguages : []);
-  const targetLanguages = languages.filter((language) => !language.is_source);
-  const filteredTranslations = useMemo(
-    () =>
-      translations.filter((translation) => {
-        const matchesLang = !langFilter || translation.lang === langFilter;
-        const matchesStatus = !statusFilter || translation.status === statusFilter;
-        return matchesLang && matchesStatus;
-      }),
-    [langFilter, statusFilter, translations]
+  const textTranslations = useMemo(
+    () => (text ? translations.filter((translation) => translation.text_id === text.id) : []),
+    [text, translations]
   );
+  const activeTranslation = textTranslations.find((translation) => translation.lang === activeLang);
+  const activeDraft = versionDrafts[activeLang] ?? translationToDraft(activeTranslation);
+  const activeLanguage = editableLanguages.find((language) => language.code === activeLang);
+  const isSource = activeLang === sourceLanguage;
+  const sourceOrigin = text?.origin ?? 'manual';
 
   useEffect(() => {
-    if (!textId && texts.length > 0) setTextId(texts[0].id);
-  }, [textId, texts]);
+    if (editableLanguages.some((language) => language.code === activeLang)) return;
+    setActiveLang(sourceLanguage);
+  }, [activeLang, editableLanguages, sourceLanguage]);
 
   useEffect(() => {
-    if (targetLanguages.length === 0 || targetLanguages.some((language) => language.code === lang)) return;
-    setLang(targetLanguages[0].code);
-  }, [lang, targetLanguages]);
+    setVersionDrafts((current) => mergeTranslationDrafts(current, textTranslations));
+  }, [textTranslations]);
 
   const saveMutation = useMutation({
-    mutationFn: () => {
-      if (!textId) throw new Error('Selecione um texto antes de guardar a tradução.');
-      if (!lang) throw new Error('Selecione uma língua antes de guardar a tradução.');
+    mutationFn: (nextStatus?: TranslationStatus) => {
+      if (!text) throw new Error('Guarde o texto em português antes de editar traduções.');
       return client.put<AdminTranslation>(
-        `/api/v1/admin/translations/${textId}/${lang}/manual`,
+        `/api/v1/admin/translations/${text.id}/${activeLang}/manual`,
         {
-          content,
-          phonetic_content: phoneticContent || null,
-          status
+          content: activeDraft.content,
+          phonetic_content: activeDraft.phoneticContent || null,
+          status: nextStatus ?? activeDraft.status
         },
         token
       );
     },
-    onSuccess: () => {
-      setMessage('Tradução guardada.');
-      clearEditor();
-      queryClient.invalidateQueries({ queryKey: ['admin-translations', token] });
+    onSuccess: (translation) => {
+      setMessage('Versão guardada.');
+      setVersionDrafts((current) => ({ ...current, [translation.lang]: translationToDraft(translation) }));
+      onTranslationsChanged();
     },
     onError: (cause) => {
       if (redirectIfAuthError(cause, onAuthExpired)) return;
-      setMessage(cause instanceof Error ? cause.message : 'Não foi possível guardar.');
+      setMessage(cause instanceof Error ? cause.message : 'Não foi possível guardar a versão.');
     }
   });
 
   const generateMutation = useMutation({
     mutationFn: () => {
-      if (!textId) throw new Error('Selecione um texto antes de gerar a tradução.');
-      if (!lang) throw new Error('Selecione uma língua antes de gerar a tradução.');
-      return client.post<AdminTranslation>(`/api/v1/admin/translations/${textId}/${lang}`, {}, token);
+      if (!text) throw new Error('Guarde o texto em português antes de gerar tradução.');
+      return client.post<AdminTranslation>(`/api/v1/admin/translations/${text.id}/${activeLang}`, {}, token);
     },
     onSuccess: (translation) => {
-      setEditing(translation);
-      setContent(translation.content ?? '');
-      setPhoneticContent(translation.phonetic_content ?? '');
-      setStatus(translation.status);
-      setMessage('Tradução gerada. Reveja antes de aprovar.');
-      queryClient.invalidateQueries({ queryKey: ['admin-translations', token] });
+      setMessage('Tradução gerada como pendente.');
+      setVersionDrafts((current) => ({ ...current, [translation.lang]: translationToDraft(translation) }));
+      onTranslationsChanged();
     },
     onError: (cause) => {
       if (redirectIfAuthError(cause, onAuthExpired)) return;
-      setMessage(cause instanceof Error ? cause.message : 'Não foi possível gerar.');
+      setMessage(cause instanceof Error ? cause.message : 'Não foi possível gerar a tradução.');
+    }
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: (nextStatus: TranslationStatus) => {
+      if (!activeTranslation) return saveMutation.mutateAsync(nextStatus);
+      return client.put<AdminTranslation>(
+        `/api/v1/admin/translations/${activeTranslation.id}/review`,
+        {
+          content: activeDraft.content,
+          phonetic_content: activeDraft.phoneticContent || null,
+          status: nextStatus
+        },
+        token
+      );
+    },
+    onSuccess: (_translation, nextStatus) => {
+      setMessage('Revisão guardada.');
+      setVersionDrafts((current) => ({
+        ...current,
+        [activeLang]: { ...activeDraft, status: nextStatus, dirty: false }
+      }));
+      onTranslationsChanged();
+    },
+    onError: (cause) => {
+      if (redirectIfAuthError(cause, onAuthExpired)) return;
+      setMessage(cause instanceof Error ? cause.message : 'Não foi possível rever a tradução.');
     }
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (translationId: string) =>
-      client.delete<{ deleted: boolean }>(`/api/v1/admin/translations/${translationId}`, token),
+    mutationFn: () => {
+      if (!activeTranslation) throw new Error('Esta tradução ainda não existe.');
+      return client.delete<{ deleted: boolean }>(`/api/v1/admin/translations/${activeTranslation.id}`, token);
+    },
     onSuccess: () => {
-      setMessage('Tradução apagada.');
-      clearEditor();
-      queryClient.invalidateQueries({ queryKey: ['admin-translations', token] });
+      setMessage('Tradução removida.');
+      setVersionDrafts((current) => ({ ...current, [activeLang]: translationToDraft(undefined) }));
+      onTranslationsChanged();
     },
     onError: (cause) => {
       if (redirectIfAuthError(cause, onAuthExpired)) return;
-      setMessage(cause instanceof Error ? cause.message : 'Não foi possível apagar.');
+      setMessage(cause instanceof Error ? cause.message : 'Não foi possível remover a tradução.');
     }
   });
 
-  function editTranslation(translation: AdminTranslation) {
-    setEditing(translation);
-    setTextId(translation.text_id);
-    setLang(translation.lang);
-    setContent(translation.content ?? '');
-    setPhoneticContent(translation.phonetic_content ?? '');
-    setStatus(translation.status);
-    setMessage('');
-  }
-
-  function clearEditor() {
-    setEditing(null);
-    setContent('');
-    setPhoneticContent('');
-    setStatus('pending');
-  }
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    saveMutation.mutate();
+  function updateTranslationDraft(nextDraft: Partial<TextVersionDraft>) {
+    setVersionDrafts((current) => ({
+      ...current,
+      [activeLang]: { ...activeDraft, ...nextDraft, dirty: true }
+    }));
   }
 
   return (
-    <section className="content-panel">
-      <div className="panel-heading">
+    <section className="text-versions-editor">
+      <div className="text-version-heading">
         <div>
-          <span>Traduções</span>
-          <h2>{filteredTranslations.length} registos</h2>
-          <p>Crie, gere e reveja traduções dos textos literários por língua.</p>
+          <span>Versões multilíngues</span>
+          <h4>{activeLanguage ? languageLabel(activeLanguage) : activeLang.toUpperCase()}</h4>
         </div>
+        <span className={`version-state ${versionState(activeTranslation, isSource, sourceOrigin)}`}>
+          {versionStateLabel(activeTranslation, isSource, sourceOrigin)}
+        </span>
       </div>
 
-      <section className="filter-panel">
-        <label>
-          Língua
-          <select value={langFilter} onChange={(event) => setLangFilter(event.target.value)}>
-            <option value="">Todas</option>
-            {languages.map((language) => (
-              <option key={language.code} value={language.code}>
-                {language.code.toUpperCase()} · {language.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Estado
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            <option value="">Todos</option>
-            {translationStatusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
-
-      {translationsQuery.isError ? (
-        <div className="admin-state error-state">
-          <p>Não foi possível carregar traduções.</p>
-          <button type="button" onClick={() => translationsQuery.refetch()}>Tentar novamente</button>
-        </div>
-      ) : null}
-
-      <form className="editor" onSubmit={submit}>
-        <h3>{editing ? 'Editar tradução' : 'Criar tradução'}</h3>
-        <div className="field-grid">
-          <label className="textarea-field">
-            Texto original
-            <select value={textId} onChange={(event) => setTextId(event.target.value)}>
-              {texts.map((text) => (
-                <option key={text.id} value={text.id}>{audioTextLabel(text, points, authors)}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Língua
-            <select value={lang} onChange={(event) => setLang(event.target.value)}>
-              {targetLanguages.map((language) => (
-                <option key={language.code} value={language.code}>
-                  {language.code.toUpperCase()} · {language.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Estado
-            <select value={status} onChange={(event) => setStatus(event.target.value as TranslationStatus)}>
-              {translationStatusOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </label>
-          <label className="textarea-field">
-            Conteúdo traduzido
-            <textarea value={content} onChange={(event) => setContent(event.target.value)} />
-          </label>
-          <label className="textarea-field">
-            Conteúdo fonético
-            <textarea value={phoneticContent} onChange={(event) => setPhoneticContent(event.target.value)} />
-          </label>
-        </div>
-        <div className="form-actions">
-          <button type="submit" disabled={!textId || !lang || saveMutation.isPending}>
-            {saveMutation.isPending ? 'A guardar...' : 'Guardar'}
-          </button>
-          <button
-            type="button"
-            className="secondary-action"
-            disabled={!textId || !lang || generateMutation.isPending}
-            onClick={() => generateMutation.mutate()}
-          >
-            {generateMutation.isPending ? 'A gerar...' : 'Gerar com IA'}
-          </button>
-          <button type="button" className="secondary-action" onClick={clearEditor}>
-            Limpar
-          </button>
-        </div>
-        {message ? <p className="audio-message">{message}</p> : null}
-      </form>
-
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Texto</th>
-              <th>Língua</th>
-              <th>Estado</th>
-              <th>Origem</th>
-              <th>Conteúdo</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredTranslations.length === 0 ? <tr><td colSpan={6}>Nenhuma tradução registada.</td></tr> : null}
-            {filteredTranslations.map((translation) => (
-              <tr key={translation.id}>
-                <td>{audioTextLabel(texts.find((text) => text.id === translation.text_id), points, authors)}</td>
-                <td>{translation.lang.toUpperCase()}</td>
-                <td>{translationStatusLabel(translation.status)}</td>
-                <td>{originLabel(translation.origin ?? 'manual')}</td>
-                <td>{translation.content ? translation.content.slice(0, 100) : '-'}</td>
-                <td>
-                  <div className="row-actions">
-                    <button type="button" onClick={() => editTranslation(translation)}>
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      className="danger"
-                      onClick={() => deleteMutation.mutate(translation.id)}
-                    >
-                      Apagar
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="language-tabs">
+        {editableLanguages.map((language) => {
+          const translation = textTranslations.find((item) => item.lang === language.code);
+          return (
+            <button
+              key={language.code}
+              type="button"
+              className={language.code === activeLang ? 'active' : ''}
+              onClick={() => setActiveLang(language.code)}
+            >
+              {language.code.toUpperCase()}
+              <small>{versionStateLabel(translation, language.code === sourceLanguage, sourceOrigin)}</small>
+            </button>
+          );
+        })}
       </div>
+
+      {isSource ? (
+        <div className="field-grid text-version-fields">
+          <label className="textarea-field">
+            Conteúdo {activeLang.toUpperCase()}
+            <textarea
+              value={String(baseDraft.content_pt ?? '')}
+              onChange={(event) => onBaseDraft({ ...baseDraft, content_pt: event.target.value })}
+            />
+          </label>
+          <label className="textarea-field">
+            Conteúdo fonético {activeLang.toUpperCase()}
+            <textarea
+              value={String(baseDraft.phonetic_content ?? '')}
+              onChange={(event) => onBaseDraft({ ...baseDraft, phonetic_content: event.target.value })}
+            />
+          </label>
+        </div>
+      ) : (
+        <>
+          <div className="version-meta">
+            <span>Origem: {originLabel(activeTranslation?.origin ?? 'manual')}</span>
+            <span>Estado: {translationStatusLabel(activeDraft.status)}</span>
+            <span>Revisão: {reviewLabel(activeTranslation)}</span>
+          </div>
+          <div className="field-grid text-version-fields">
+            <label className="textarea-field">
+              Conteúdo {activeLang.toUpperCase()}
+              <textarea
+                value={activeDraft.content}
+                onChange={(event) => updateTranslationDraft({ content: event.target.value })}
+              />
+            </label>
+            <label className="textarea-field">
+              Conteúdo fonético {activeLang.toUpperCase()}
+              <textarea
+                value={activeDraft.phoneticContent}
+                onChange={(event) => updateTranslationDraft({ phoneticContent: event.target.value })}
+              />
+            </label>
+            <label>
+              Estado
+              <select
+                value={activeDraft.status}
+                onChange={(event) => updateTranslationDraft({ status: event.target.value as TranslationStatus })}
+              >
+                {translationStatusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="form-actions text-version-actions">
+            <button type="button" disabled={!text || saveMutation.isPending} onClick={() => saveMutation.mutate(undefined)}>
+              {saveMutation.isPending ? 'A guardar...' : 'Guardar versão manual'}
+            </button>
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={!text || generateMutation.isPending}
+              onClick={() => generateMutation.mutate()}
+            >
+              {generateMutation.isPending ? 'A gerar...' : 'Gerar tradução IA'}
+            </button>
+            <button type="button" className="secondary-action" disabled={!text} onClick={() => reviewMutation.mutate('approved')}>
+              Aprovar
+            </button>
+            <button type="button" className="secondary-action" disabled={!text} onClick={() => reviewMutation.mutate('rejected')}>
+              Rejeitar
+            </button>
+            <button
+              type="button"
+              className="danger"
+              disabled={!activeTranslation || deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate(undefined)}
+            >
+              Remover tradução
+            </button>
+          </div>
+        </>
+      )}
+      {message ? <p className="audio-message">{message}</p> : null}
     </section>
   );
 }
@@ -1544,7 +1586,6 @@ function fieldsFor(resource: Resource, context: FieldContext): FieldConfig[] {
     return [
       { name: 'point_id', label: 'Ponto', type: 'select', options: relationOptions(context.points, 'Selecione um ponto') },
       { name: 'author_id', label: 'Autor', type: 'select', options: relationOptions(context.authors, 'Selecione um autor') },
-      { name: 'content_pt', label: 'Conteúdo PT', type: 'textarea', placeholder: 'Texto original em português' },
       { name: 'source_work', label: 'Obra', type: 'text', placeholder: 'Nome da obra ou fonte' },
       { name: 'source_year', label: 'Ano da obra', type: 'number', min: 0, max: 2100, step: 1 },
       { name: 'content_type', label: 'Tipo', type: 'select', options: contentTypeOptions }
@@ -1772,6 +1813,12 @@ const translationStatusOptions: Array<{ value: TranslationStatus; label: string 
   { value: 'rejected', label: 'Rejeitada' }
 ];
 
+const originOptions: Array<{ value: TextOrigin; label: string }> = [
+  { value: 'manual', label: 'Manual' },
+  { value: 'automatic', label: 'Automático' },
+  { value: 'import', label: 'CSV/importação' }
+];
+
 function relationOptions(items: Array<{ id: string; name?: string; title_pt?: string }>, emptyLabel: string): FieldOption[] {
   return [
     { value: '', label: emptyLabel },
@@ -1805,6 +1852,39 @@ function originLabel(origin: string) {
   if (origin === 'import') return 'CSV';
   if (origin === 'automatic') return 'Automático';
   return 'Manual';
+}
+
+function languageLabel(language: AdminLanguage) {
+  return `${language.code.toUpperCase()} · ${language.name}${language.is_source ? ' · fonte' : ''}`;
+}
+
+function versionState(translation: AdminTranslation | undefined, isSource: boolean, sourceOrigin: string) {
+  if (isSource) return sourceOrigin;
+  if (!translation) return 'missing';
+  if (translation.status === 'rejected') return 'rejected';
+  if (translation.origin === 'import') return 'import';
+  if (translation.origin === 'automatic') return 'automatic';
+  return 'manual';
+}
+
+function versionStateLabel(
+  translation: AdminTranslation | undefined,
+  isSource: boolean,
+  sourceOrigin: string
+) {
+  if (isSource) return originLabel(sourceOrigin);
+  if (!translation) return 'Ausente';
+  if (translation.status === 'rejected') return 'Rejeitada';
+  if (translation.origin === 'automatic') return 'Automática/pendente';
+  if (translation.origin === 'import') return 'CSV/importação';
+  if (translation.reviewed_by) return 'Revisada manualmente';
+  return translationStatusLabel(translation.status);
+}
+
+function reviewLabel(translation?: AdminTranslation) {
+  if (!translation?.reviewed_by) return 'sem revisão manual';
+  const date = translation.reviewed_at ? new Date(translation.reviewed_at).toLocaleString('pt-PT') : 'data não registrada';
+  return `${translation.reviewed_by} · ${date}`;
 }
 
 function translationStatusLabel(status: TranslationStatus) {
