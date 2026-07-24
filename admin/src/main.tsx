@@ -14,7 +14,6 @@ import {
   type AdminUser,
   type AdminVoice,
   type TextOrigin,
-  type SupportedLanguage,
   type TranslationStatus
 } from '@ecosdelisboa/shared';
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -26,7 +25,7 @@ import { mergeTranslationDrafts, translationToDraft, type TextVersionDraft } fro
 import './styles.css';
 
 type Resource = 'authors' | 'points' | 'texts' | 'routes';
-type Section = Resource | 'audio' | 'csv';
+type Section = Resource | 'csv';
 type ResourceItem = AdminAuthor | AdminPoint | AdminText | AdminRoute;
 type DraftValue = string | number | boolean | null | AdminRouteItem[];
 type Draft = Record<string, DraftValue>;
@@ -129,6 +128,28 @@ async function postCsv<T>(path: string, file: File, token: string): Promise<T> {
   return isEnvelope(payload) ? payload.data : payload;
 }
 
+
+async function putMp3<T>(path: string, file: File, token: string): Promise<T> {
+  const body = new FormData();
+  body.append('file', file);
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'PUT',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body
+  });
+
+  if (!response.ok) {
+    throw new ApiError(`Falha ao enviar MP3: ${path}`, response.status, path);
+  }
+
+  const payload = (await response.json()) as T;
+  return isEnvelope(payload) ? payload.data : payload;
+}
+
 async function fetchCsvTemplate(token: string) {
   const path = '/api/v1/admin/points/import/template';
   const response = await fetch(`${API_BASE}${path}`, {
@@ -194,6 +215,9 @@ const mockTranslations: AdminTranslation[] = [
   }
 ];
 
+
+const mockAudioFiles: AdminAudioFile[] = [];
+
 const mockRoutes: AdminRoute[] = [
   {
     id: 'route-baixa',
@@ -219,7 +243,6 @@ const sectionLabels: Record<Section, string> = {
   points: resourceLabels.points,
   texts: resourceLabels.texts,
   routes: resourceLabels.routes,
-  audio: 'Áudios',
 };
 
 const fallbackLanguages: AdminLanguage[] = [
@@ -379,9 +402,8 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           Sair
         </button>
       </aside>
-      {section === 'audio' ? <AudioPanel token={token} onAuthExpired={onLogout} /> : null}
       {section === 'csv' ? <CsvPanel token={token} onAuthExpired={onLogout} /> : null}
-      {section !== 'audio' && section !== 'csv' ? (
+      {section !== 'csv' ? (
         <ResourcePanel token={token} resource={section} onAuthExpired={onLogout} />
       ) : null}
     </main>
@@ -405,6 +427,8 @@ function ResourcePanel({
   const [textLanguage, setTextLanguage] = useState('');
   const [textStatus, setTextStatus] = useState('');
   const [textOrigin, setTextOrigin] = useState('');
+  const [textAudio, setTextAudio] = useState('');
+  const [textGap, setTextGap] = useState('');
 
   useEffect(() => {
     setEditing(null);
@@ -414,6 +438,8 @@ function ResourcePanel({
     setTextLanguage('');
     setTextStatus('');
     setTextOrigin('');
+    setTextAudio('');
+    setTextGap('');
   }, [resource]);
 
   const query = useQuery({
@@ -475,9 +501,31 @@ function ResourcePanel({
     ...autoSyncQueryOptions
   });
 
+  const voicesQuery = useQuery({
+    queryKey: ['admin-voices', token],
+    queryFn: async () =>
+      client
+        .get<AdminVoice[]>('/api/v1/admin/voices', token)
+        .catch((cause) => fallbackUnlessAuth(cause, [], onAuthExpired)),
+    enabled: resource === 'texts',
+    ...autoSyncQueryOptions
+  });
+
+  const audioQuery = useQuery({
+    queryKey: ['admin-audio', token],
+    queryFn: async () =>
+      client
+        .get<AdminAudioFile[]>('/api/v1/admin/audio', token)
+        .catch((cause) => fallbackUnlessAuth(cause, mockAudioFiles, onAuthExpired)),
+    enabled: resource === 'texts',
+    ...autoSyncQueryOptions
+  });
+
   const items = query.data ?? (ENABLE_MOCKS ? fallbackFor(resource) : []);
   const languages = languagesQuery.data ?? (ENABLE_MOCKS ? fallbackLanguages : []);
   const translations = translationsQuery.data ?? (ENABLE_MOCKS ? mockTranslations : []);
+  const voices = voicesQuery.data ?? [];
+  const audios = audioQuery.data ?? (ENABLE_MOCKS ? mockAudioFiles : []);
   const sourceLanguage = languages.find((language) => language.is_source)?.code ?? 'pt';
   const filteredItems = useMemo(
     () =>
@@ -486,10 +534,13 @@ function ResourcePanel({
         textLanguage,
         textStatus,
         textOrigin,
+        textAudio,
+        textGap,
         translations,
+        audios,
         sourceLanguage
       }),
-    [items, resource, sourceLanguage, textLanguage, textOrigin, textSearch, textStatus, translations]
+    [audios, items, resource, sourceLanguage, textAudio, textGap, textLanguage, textOrigin, textSearch, textStatus, translations]
   );
   const metrics = useMemo(() => filteredItems.length, [filteredItems.length]);
   const fieldContext = useMemo<FieldContext>(
@@ -603,9 +654,13 @@ function ResourcePanel({
         <TextFilters
           languages={languages}
           language={textLanguage}
+          audio={textAudio}
+          gap={textGap}
           origin={textOrigin}
           search={textSearch}
           status={textStatus}
+          onAudio={setTextAudio}
+          onGap={setTextGap}
           onLanguage={setTextLanguage}
           onOrigin={setTextOrigin}
           onSearch={setTextSearch}
@@ -623,9 +678,14 @@ function ResourcePanel({
             text={editing as AdminText | null}
             token={token}
             translations={translations}
+            audios={audios}
+            voices={voices}
+            audioLoading={audioQuery.isLoading}
+            audioError={audioQuery.isError}
             onAuthExpired={onAuthExpired}
             onBaseDraft={setDraft}
             onTranslationsChanged={() => translationsQuery.refetch()}
+            onAudiosChanged={() => audioQuery.refetch()}
           />
         ) : null}
         <div className="form-actions">
@@ -657,7 +717,7 @@ function ResourcePanel({
             {filteredItems.map((item) => (
               <tr key={item.id}>
                 {columnsFor(resource).map((column) => (
-                  <td key={column}>{formatCell(item, column)}</td>
+                  <td key={column}>{formatCell(item, column, { translations, audios, sourceLanguage })}</td>
                 ))}
                 <td>
                   <div className="row-actions">
@@ -683,21 +743,29 @@ function TextFilters({
   language,
   status,
   origin,
+  audio,
+  gap,
   languages,
   onSearch,
   onLanguage,
   onStatus,
-  onOrigin
+  onOrigin,
+  onAudio,
+  onGap
 }: {
   search: string;
   language: string;
   status: string;
   origin: string;
+  audio: string;
+  gap: string;
   languages: AdminLanguage[];
   onSearch: (value: string) => void;
   onLanguage: (value: string) => void;
   onStatus: (value: string) => void;
   onOrigin: (value: string) => void;
+  onAudio: (value: string) => void;
+  onGap: (value: string) => void;
 }) {
   return (
     <section className="filter-panel">
@@ -730,6 +798,26 @@ function TextFilters({
           {originOptions.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
+        </select>
+      </label>
+
+      <label>
+        Áudio
+        <select value={audio} onChange={(event) => onAudio(event.target.value)}>
+          <option value="">Todos</option>
+          <option value="missing">Sem áudio</option>
+          <option value="automatic">Gerado automaticamente</option>
+          <option value="manual">Enviado manualmente</option>
+        </select>
+      </label>
+      <label>
+        Lacunas PT/EN
+        <select value={gap} onChange={(event) => onGap(event.target.value)}>
+          <option value="">Todas</option>
+          <option value="missing-text-pt">Sem texto PT</option>
+          <option value="missing-audio-pt">Sem áudio PT</option>
+          <option value="missing-text-en">Sem tradução EN</option>
+          <option value="missing-audio-en">Sem áudio EN</option>
         </select>
       </label>
     </section>
@@ -793,7 +881,10 @@ function filterResourceItems(
     textLanguage: string;
     textStatus: string;
     textOrigin: string;
+    textAudio: string;
+    textGap: string;
     translations: AdminTranslation[];
+    audios: AdminAudioFile[];
     sourceLanguage: string;
   }
 ) {
@@ -801,23 +892,61 @@ function filterResourceItems(
   const normalizedSearch = filters.textSearch.trim().toLowerCase();
   return items.filter((item) => {
     const text = item as AdminText;
-    const matchesSearch = !normalizedSearch || text.content_pt.toLowerCase().includes(normalizedSearch);
     const textTranslations = filters.translations.filter((translation) => translation.text_id === text.id);
+    const textAudios = filters.audios.filter((audio) => audio.text_id === text.id);
     const sourceOrigin = text.origin ?? 'manual';
-    const matchesLanguage =
-      !filters.textLanguage ||
-      (filters.textLanguage === filters.sourceLanguage
-        ? true
-        : textTranslations.some((translation) => translation.lang === filters.textLanguage));
-    const matchesStatus =
-      !filters.textStatus || textTranslations.some((translation) => translation.status === filters.textStatus);
+    const matchesSearch = !normalizedSearch || text.content_pt.toLowerCase().includes(normalizedSearch);
+    const matchesLanguage = matchesTextLanguage(text, textTranslations, filters.textLanguage, filters.sourceLanguage);
+    const matchesStatus = !filters.textStatus || textTranslations.some((translation) => translation.status === filters.textStatus);
     const matchesOrigin =
       !filters.textOrigin ||
       sourceOrigin === filters.textOrigin ||
       textTranslations.some((translation) => translation.origin === filters.textOrigin);
-    return matchesSearch && matchesLanguage && matchesStatus && matchesOrigin;
+    const matchesAudio = matchesAudioFilter(textAudios, filters.textLanguage, filters.textAudio);
+    const matchesGap = matchesGapFilter(text, textTranslations, textAudios, filters.textGap, filters.sourceLanguage);
+    return matchesSearch && matchesLanguage && matchesStatus && matchesOrigin && matchesAudio && matchesGap;
   });
 }
+
+function matchesTextLanguage(
+  text: AdminText,
+  translations: AdminTranslation[],
+  language: string,
+  sourceLanguage: string
+) {
+  if (!language) return true;
+  if (language === sourceLanguage) return Boolean(text.content_pt.trim());
+  return translations.some((translation) => translation.lang === language);
+}
+
+function matchesAudioFilter(audios: AdminAudioFile[], language: string, audioFilter: string) {
+  if (!audioFilter) return true;
+  const scopedAudios = language ? audios.filter((audio) => audio.lang === language) : audios;
+  if (audioFilter === 'missing') return scopedAudios.length === 0;
+  if (audioFilter === 'manual') return scopedAudios.some((audio) => audio.manually_uploaded);
+  if (audioFilter === 'automatic') return scopedAudios.some((audio) => !audio.manually_uploaded);
+  return true;
+}
+
+function matchesGapFilter(
+  text: AdminText,
+  translations: AdminTranslation[],
+  audios: AdminAudioFile[],
+  gap: string,
+  sourceLanguage: string
+) {
+  if (!gap) return true;
+  if (gap === 'missing-text-pt') return !text.content_pt.trim();
+  if (gap === 'missing-audio-pt') return !audios.some((audio) => audio.lang === 'pt');
+  if (gap === 'missing-text-en') {
+    return sourceLanguage === 'en'
+      ? !text.content_pt.trim()
+      : !translations.some((translation) => translation.lang === 'en');
+  }
+  if (gap === 'missing-audio-en') return !audios.some((audio) => audio.lang === 'en');
+  return true;
+}
+
 
 function TextVersionsEditor({
   baseDraft,
@@ -825,18 +954,28 @@ function TextVersionsEditor({
   text,
   token,
   translations,
+  audios,
+  voices,
+  audioLoading,
+  audioError,
   onAuthExpired,
   onBaseDraft,
-  onTranslationsChanged
+  onTranslationsChanged,
+  onAudiosChanged
 }: {
   baseDraft: Draft;
   languages: AdminLanguage[];
   text: AdminText | null;
   token: string;
   translations: AdminTranslation[];
+  audios: AdminAudioFile[];
+  voices: AdminVoice[];
+  audioLoading: boolean;
+  audioError: boolean;
   onAuthExpired: () => void;
   onBaseDraft: (draft: Draft) => void;
   onTranslationsChanged: () => void;
+  onAudiosChanged: () => void;
 }) {
   const sourceLanguage = languages.find((language) => language.is_source)?.code ?? 'pt';
   const editableLanguages = languages.length > 0 ? languages : fallbackLanguages;
@@ -848,7 +987,12 @@ function TextVersionsEditor({
     () => (text ? translations.filter((translation) => translation.text_id === text.id) : []),
     [text, translations]
   );
+  const textAudios = useMemo(
+    () => (text ? audios.filter((audio) => audio.text_id === text.id) : []),
+    [audios, text]
+  );
   const activeTranslation = textTranslations.find((translation) => translation.lang === activeLang);
+  const activeAudio = textAudios.find((audio) => audio.lang === activeLang);
   const activeDraft = versionDrafts[activeLang] ?? translationToDraft(activeTranslation);
   const activeLanguage = editableLanguages.find((language) => language.code === activeLang);
   const isSource = activeLang === sourceLanguage;
@@ -933,6 +1077,9 @@ function TextVersionsEditor({
   const deleteMutation = useMutation({
     mutationFn: () => {
       if (!activeTranslation) throw new Error('Esta tradução ainda não existe.');
+      if (!window.confirm(`Remover a tradução ${activeLang.toUpperCase()} deste texto?`)) {
+        throw new Error('Ação cancelada.');
+      }
       return client.delete<{ deleted: boolean }>(`/api/v1/admin/translations/${activeTranslation.id}`, token);
     },
     onSuccess: () => {
@@ -960,14 +1107,18 @@ function TextVersionsEditor({
           <span>Versões multilíngues</span>
           <h4>{activeLanguage ? languageLabel(activeLanguage) : activeLang.toUpperCase()}</h4>
         </div>
-        <span className={`version-state ${versionState(activeTranslation, isSource, sourceOrigin)}`}>
-          {versionStateLabel(activeTranslation, isSource, sourceOrigin)}
-        </span>
+        <div className="version-state-group">
+          <span className={`version-state ${versionState(activeTranslation, isSource, sourceOrigin)}`}>
+            {versionStateLabel(activeTranslation, isSource, sourceOrigin)}
+          </span>
+          <span className={`version-state ${audioState(activeAudio)}`}>{audioStateLabel(activeAudio)}</span>
+        </div>
       </div>
 
       <div className="language-tabs">
         {editableLanguages.map((language) => {
           const translation = textTranslations.find((item) => item.lang === language.code);
+          const audio = textAudios.find((item) => item.lang === language.code);
           return (
             <button
               key={language.code}
@@ -977,6 +1128,7 @@ function TextVersionsEditor({
             >
               {language.code.toUpperCase()}
               <small>{versionStateLabel(translation, language.code === sourceLanguage, sourceOrigin)}</small>
+              <small>{audioStateLabel(audio)}</small>
             </button>
           );
         })}
@@ -1062,97 +1214,67 @@ function TextVersionsEditor({
           </div>
         </>
       )}
+
+      <AudioVersionEditor
+        audio={activeAudio}
+        audioError={audioError}
+        audioLoading={audioLoading}
+        lang={activeLang}
+        text={text}
+        token={token}
+        voices={voices}
+        onAuthExpired={onAuthExpired}
+        onAudiosChanged={onAudiosChanged}
+      />
       {message ? <p className="audio-message">{message}</p> : null}
     </section>
   );
 }
 
-function AudioPanel({ token, onAuthExpired }: { token: string; onAuthExpired: () => void }) {
-  const queryClient = useQueryClient();
-  const [textId, setTextId] = useState('');
-  const [lang, setLang] = useState<SupportedLanguage>('pt');
+function AudioVersionEditor({
+  audio,
+  audioError,
+  audioLoading,
+  lang,
+  text,
+  token,
+  voices,
+  onAuthExpired,
+  onAudiosChanged
+}: {
+  audio?: AdminAudioFile;
+  audioError: boolean;
+  audioLoading: boolean;
+  lang: string;
+  text: AdminText | null;
+  token: string;
+  voices: AdminVoice[];
+  onAuthExpired: () => void;
+  onAudiosChanged: () => void;
+}) {
   const [voiceId, setVoiceId] = useState('');
-  const [manualUrl, setManualUrl] = useState('');
-  const [duration, setDuration] = useState('');
+  const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState('');
-
-  const textsQuery = useQuery({
-    queryKey: ['admin-resource', 'texts', token],
-    queryFn: async () =>
-      client
-        .get<AdminText[]>('/api/v1/admin/texts', token)
-        .catch((cause) => fallbackUnlessAuth(cause, mockTexts, onAuthExpired)),
-    ...autoSyncQueryOptions
-  });
-  const pointsQuery = useQuery({
-    queryKey: ['admin-options', 'points', token],
-    queryFn: async () =>
-      client
-        .get<AdminPoint[]>('/api/v1/admin/points', token)
-        .catch((cause) => fallbackUnlessAuth(cause, mockPoints, onAuthExpired)),
-    ...autoSyncQueryOptions
-  });
-  const authorsQuery = useQuery({
-    queryKey: ['admin-options', 'authors', token],
-    queryFn: async () =>
-      client
-        .get<AdminAuthor[]>('/api/v1/admin/authors', token)
-        .catch((cause) => fallbackUnlessAuth(cause, mockAuthors, onAuthExpired)),
-    ...autoSyncQueryOptions
-  });
-  const languagesQuery = useQuery({
-    queryKey: ['admin-languages', token],
-    queryFn: async () =>
-      client
-        .get<AdminLanguage[]>('/api/v1/admin/languages?active=true', token)
-        .catch((cause) => fallbackUnlessAuth(cause, fallbackLanguages, onAuthExpired)),
-    ...autoSyncQueryOptions
-  });
-  const voicesQuery = useQuery({
-    queryKey: ['admin-voices', token],
-    queryFn: async () =>
-      client
-        .get<AdminVoice[]>('/api/v1/admin/voices', token)
-        .catch((cause) => fallbackUnlessAuth(cause, [], onAuthExpired)),
-    ...autoSyncQueryOptions
-  });
-  const audioQuery = useQuery({
-    queryKey: ['admin-audio', token],
-    queryFn: async () =>
-      client
-        .get<AdminAudioFile[]>('/api/v1/admin/audio', token)
-        .catch((cause) => fallbackUnlessAuth(cause, [], onAuthExpired)),
-    ...autoSyncQueryOptions
-  });
-
-  const texts = textsQuery.data ?? (ENABLE_MOCKS ? mockTexts : []);
-  const points = pointsQuery.data ?? (ENABLE_MOCKS ? mockPoints : []);
-  const authors = authorsQuery.data ?? (ENABLE_MOCKS ? mockAuthors : []);
-  const languages = languagesQuery.data ?? (ENABLE_MOCKS ? fallbackLanguages : []);
-  const voices = voicesQuery.data ?? [];
-  const audios = audioQuery.data ?? [];
+  const publicUrl = toAssetUrl(audio?.public_url);
 
   useEffect(() => {
-    if (!textId && texts.length > 0) setTextId(texts[0].id);
-  }, [textId, texts]);
+    setFile(null);
+    setMessage('');
+  }, [lang, text?.id]);
 
-  useEffect(() => {
-    if (languages.length === 0 || languages.some((language) => language.code === lang)) return;
-    setLang(languages.find((language) => language.is_source)?.code ?? languages[0].code);
-  }, [lang, languages]);
-
-  const generateMutation = useMutation({
+  const generateAudioMutation = useMutation({
     mutationFn: () => {
-      if (!textId) throw new Error('Selecione um texto antes de gerar áudio.');
-      return client.post<{ status: string; error?: string | null }>(
-        `/api/v1/admin/audio/${textId}/${lang}/generate${toQuery({ voice_id: voiceId })}`,
+      if (!text) throw new Error('Guarde o texto antes de gerar áudio.');
+      if (audio?.manually_uploaded) throw new Error('Áudio manual não é sobrescrito por geração automática.');
+      return client.post<{ status: string; error?: string | null; audio?: AdminAudioFile | null }>(
+        `/api/v1/admin/audio/${text.id}/${lang}/generate${toQuery({ voice_id: voiceId })}`,
         {},
         token
       );
     },
     onSuccess: (result) => {
-      setMessage(result.error ? `Geração concluída com erro: ${result.error}` : `Geração ${result.status}.`);
-      queryClient.invalidateQueries({ queryKey: ['admin-audio', token] });
+      setMessage(result.error ? `Geração concluída com erro: ${result.error}` : `Geração ${audioJobStatusLabel(result.status)}.`);
+      onAudiosChanged();
     },
     onError: (cause) => {
       if (redirectIfAuthError(cause, onAuthExpired)) return;
@@ -1160,33 +1282,37 @@ function AudioPanel({ token, onAuthExpired }: { token: string; onAuthExpired: ()
     }
   });
 
-  const uploadMutation = useMutation({
+  const uploadAudioMutation = useMutation({
     mutationFn: () => {
-      if (!textId) throw new Error('Selecione um texto antes de guardar áudio.');
-      if (!manualUrl) throw new Error('Informe a URL pública do áudio.');
-      return client.put<AdminAudioFile>(
-        `/api/v1/admin/audio/${textId}/${lang}/upload`,
-        { public_url: manualUrl, duration_s: duration ? Number(duration) : null, voice_id: voiceId || null },
-        token
-      );
+      if (!text) throw new Error('Guarde o texto antes de enviar áudio.');
+      if (!file) throw new Error('Selecione um MP3 para enviar.');
+      if (audio && !window.confirm(`Substituir o áudio ${lang.toUpperCase()} atual por este MP3?`)) {
+        throw new Error('Ação cancelada.');
+      }
+      return putMp3<AdminAudioFile>(`/api/v1/admin/audio/${text.id}/${lang}/upload`, file, token);
     },
     onSuccess: () => {
-      setMessage('Áudio manual guardado.');
-      setManualUrl('');
-      setDuration('');
-      queryClient.invalidateQueries({ queryKey: ['admin-audio', token] });
+      setMessage('Áudio manual enviado.');
+      setFile(null);
+      onAudiosChanged();
     },
     onError: (cause) => {
       if (redirectIfAuthError(cause, onAuthExpired)) return;
-      setMessage(cause instanceof Error ? cause.message : 'Não foi possível guardar o áudio.');
+      setMessage(cause instanceof Error ? cause.message : 'Não foi possível enviar o áudio.');
     }
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (audio: AdminAudioFile) => client.delete<{ deleted: boolean }>(`/api/v1/admin/audio/${audio.text_id}/${audio.lang}`, token),
+  const deleteAudioMutation = useMutation({
+    mutationFn: () => {
+      if (!text || !audio) throw new Error('Este idioma ainda não tem áudio.');
+      if (!window.confirm(`Apagar o áudio ${lang.toUpperCase()} deste texto?`)) {
+        throw new Error('Ação cancelada.');
+      }
+      return client.delete<{ deleted: boolean }>(`/api/v1/admin/audio/${text.id}/${lang}`, token);
+    },
     onSuccess: () => {
       setMessage('Áudio apagado.');
-      queryClient.invalidateQueries({ queryKey: ['admin-audio', token] });
+      onAudiosChanged();
     },
     onError: (cause) => {
       if (redirectIfAuthError(cause, onAuthExpired)) return;
@@ -1195,112 +1321,75 @@ function AudioPanel({ token, onAuthExpired }: { token: string; onAuthExpired: ()
   });
 
   return (
-    <section className="content-panel">
-      <div className="panel-heading">
+    <section className="audio-version-panel">
+      <div className="audio-version-heading">
         <div>
-          <span>Áudios</span>
-          <h2>{audios.length} ficheiros</h2>
-          <p>Gere com ElevenLabs ou associe uma URL pública manualmente por texto e língua.</p>
+          <span>Áudio {lang.toUpperCase()}</span>
+          <h4>{audioStateLabel(audio)}</h4>
         </div>
+        <span className={`version-state ${audioState(audio)}`}>{audioOriginLabel(audio)}</span>
       </div>
 
-      <section className="editor audio-editor">
-        <h3>Preparar áudio</h3>
-        <div className="field-grid">
-          <label className="textarea-field">
-            Texto
-            <select value={textId} onChange={(event) => setTextId(event.target.value)}>
-              {texts.map((text) => (
-                <option key={text.id} value={text.id}>{audioTextLabel(text, points, authors)}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Língua
-            <select value={lang} onChange={(event) => setLang(event.target.value)}>
-              {languages.map((language) => (
-                <option key={language.code} value={language.code}>
-                  {language.code.toUpperCase()} · {language.name}{language.is_source ? ' · fonte' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Voz
-            <select value={voiceId} onChange={(event) => setVoiceId(event.target.value)}>
-              <option value="">Fallback automático</option>
-              {voices.map((voice) => (
-                <option key={voice.id} value={voice.elevenlabs_id}>
-                  {voice.name} · {voice.elevenlabs_id}{voice.languages?.length ? ` · ${voice.languages.join(', ')}` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="textarea-field">
-            URL pública do áudio
-            <input value={manualUrl} onChange={(event) => setManualUrl(event.target.value)} type="url" />
-          </label>
-          <label>
-            Duração s
-            <input min={0} step="any" value={duration} onChange={(event) => setDuration(event.target.value)} type="number" />
-          </label>
-        </div>
-        <div className="form-actions">
-          <button type="button" disabled={!textId || generateMutation.isPending} onClick={() => generateMutation.mutate()}>
-            {generateMutation.isPending ? 'A gerar...' : 'Gerar com IA'}
-          </button>
-          <button type="button" className="secondary-action" disabled={!textId || !manualUrl || uploadMutation.isPending} onClick={() => uploadMutation.mutate()}>
-            {uploadMutation.isPending ? 'A guardar...' : 'Guardar URL manual'}
-          </button>
-        </div>
-        {message ? <p className="audio-message">{message}</p> : null}
-      </section>
+      <div className="version-meta">
+        <span>{audioLoading ? 'A carregar áudio...' : `Estado: ${audioStateLabel(audio)}`}</span>
+        {audioError ? <span>Erro ao carregar áudios. Use tentar novamente na listagem ou recarregue a sessão.</span> : null}
+        {audio?.generated_at ? <span>Gerado em: {new Date(audio.generated_at).toLocaleString('pt-PT')}</span> : null}
+        {audio?.voice_id ? <span>Voz: {audio.voice_id}</span> : null}
+      </div>
 
-      {audioQuery.isError ? (
-        <div className="admin-state error-state">
-          <p>Não foi possível carregar os áudios.</p>
-          <button type="button" onClick={() => audioQuery.refetch()}>Tentar novamente</button>
-        </div>
+      <div className="audio-player-row">
+        {publicUrl ? <audio className="admin-audio-player" controls src={publicUrl} /> : <audio className="admin-audio-player" controls />}
+      </div>
+
+      <div className="field-grid audio-version-fields">
+        <label>
+          Voz para geração
+          <select value={voiceId} onChange={(event) => setVoiceId(event.target.value)}>
+            <option value="">Fallback automático</option>
+            {voices.map((voice) => (
+              <option key={voice.id} value={voice.elevenlabs_id}>
+                {voice.name} · {voice.elevenlabs_id}{voice.languages?.length ? ` · ${voice.languages.join(', ')}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          MP3 manual
+          <input accept="audio/mpeg,.mp3" type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+        </label>
+      </div>
+
+      <div className="form-actions text-version-actions">
+        <button
+          type="button"
+          disabled={!text || generateAudioMutation.isPending || Boolean(audio?.manually_uploaded)}
+          onClick={() => generateAudioMutation.mutate()}
+        >
+          {generateAudioMutation.isPending ? 'A gerar áudio...' : 'Gerar áudio IA'}
+        </button>
+        <button
+          type="button"
+          className="secondary-action"
+          disabled={!text || !file || uploadAudioMutation.isPending}
+          onClick={() => uploadAudioMutation.mutate()}
+        >
+          {uploadAudioMutation.isPending ? 'A enviar...' : audio ? 'Substituir por MP3' : 'Enviar MP3'}
+        </button>
+        <button
+          type="button"
+          className="danger"
+          disabled={!audio || deleteAudioMutation.isPending}
+          onClick={() => deleteAudioMutation.mutate()}
+        >
+          Apagar áudio
+        </button>
+      </div>
+      {audio?.manually_uploaded ? (
+        <p className="audio-message">Geração automática bloqueada para preservar o upload manual.</p>
       ) : null}
-
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Texto</th>
-              <th>Língua</th>
-              <th>Origem</th>
-              <th>Áudio</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {audios.length === 0 ? <tr><td colSpan={5}>Nenhum áudio registado.</td></tr> : null}
-            {audios.map((audio) => {
-              const publicUrl = toAssetUrl(audio.public_url);
-              return (
-                <tr key={audio.id}>
-                  <td>{audioTextLabel(texts.find((text) => text.id === audio.text_id), points, authors)}</td>
-                  <td>{audio.lang.toUpperCase()}</td>
-                  <td>{audio.manually_uploaded ? 'Manual' : 'Gerado'}</td>
-                  <td>{publicUrl ? <audio className="admin-audio-player" controls src={publicUrl} /> : '-'}</td>
-                  <td><button type="button" className="danger" onClick={() => deleteMutation.mutate(audio)}>Apagar</button></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {message ? <p className="audio-message">{message}</p> : null}
     </section>
   );
-}
-
-function audioTextLabel(text: AdminText | undefined, points: AdminPoint[], authors: AdminAuthor[]) {
-  if (!text) return 'Texto não encontrado';
-  const point = points.find((item) => item.id === text.point_id);
-  const author = authors.find((item) => item.id === text.author_id);
-  const title = point?.title_pt ?? text.content_pt.slice(0, 64);
-  return `${title}${author ? ` · ${author.name}` : ''}`;
 }
 
 function CsvImportPanel({
@@ -1836,16 +1925,38 @@ function selectOptions(field: FieldConfig, draft: Draft): FieldOption[] {
 function columnsFor(resource: Resource) {
   if (resource === 'authors') return ['name', 'bio_pt', 'birth_year'];
   if (resource === 'points') return ['title_pt', 'neighborhood', 'lat', 'lng'];
-  if (resource === 'texts') return ['content_pt', 'origin', 'author_id', 'source_work', 'content_type'];
+  if (resource === 'texts') return ['content_pt', 'origin', 'author_id', 'source_work', 'content_type', 'pt', 'en'];
   return ['title_pt', 'is_published', 'estimated_distance_m', 'estimated_duration_s'];
 }
 
-function formatCell(item: ResourceItem, column: string) {
+function formatCell(
+  item: ResourceItem,
+  column: string,
+  context?: { translations: AdminTranslation[]; audios: AdminAudioFile[]; sourceLanguage: string }
+) {
+  if ((column === 'pt' || column === 'en') && context) {
+    return textLanguageSummary(item as AdminText, column, context);
+  }
   const value = (item as unknown as Record<string, unknown>)[column];
   if (column === 'origin') return originLabel(String(value || 'manual'));
   if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
   if (value === null || value === undefined || value === '') return '-';
   return String(value).slice(0, 100);
+}
+
+function textLanguageSummary(
+  text: AdminText,
+  lang: string,
+  context: { translations: AdminTranslation[]; audios: AdminAudioFile[]; sourceLanguage: string }
+) {
+  const hasText =
+    lang === context.sourceLanguage
+      ? Boolean(text.content_pt.trim())
+      : context.translations.some((translation) => translation.text_id === text.id && translation.lang === lang);
+  const audio = context.audios.find((item) => item.text_id === text.id && item.lang === lang);
+  const textLabel = hasText ? 'texto ok' : 'sem texto';
+  const audioLabel = audio ? (audio.manually_uploaded ? 'áudio manual' : 'áudio IA') : 'sem áudio';
+  return `${textLabel} · ${audioLabel}`;
 }
 
 function originLabel(origin: string) {
@@ -1856,6 +1967,28 @@ function originLabel(origin: string) {
 
 function languageLabel(language: AdminLanguage) {
   return `${language.code.toUpperCase()} · ${language.name}${language.is_source ? ' · fonte' : ''}`;
+}
+
+function audioState(audio?: AdminAudioFile) {
+  if (!audio) return 'missing';
+  return audio.manually_uploaded ? 'manual' : 'automatic';
+}
+
+function audioStateLabel(audio?: AdminAudioFile) {
+  if (!audio) return 'Áudio ausente';
+  return audio.manually_uploaded ? 'Áudio manual' : 'Áudio automático';
+}
+
+function audioOriginLabel(audio?: AdminAudioFile) {
+  if (!audio) return 'Ausente';
+  return audio.manually_uploaded ? 'Upload manual' : 'Gerado automaticamente';
+}
+
+function audioJobStatusLabel(status: string) {
+  if (status === 'completed') return 'concluída';
+  if (status === 'failed') return 'com falha';
+  if (status === 'running') return 'em curso';
+  return status;
 }
 
 function versionState(translation: AdminTranslation | undefined, isSource: boolean, sourceOrigin: string) {

@@ -325,16 +325,25 @@ input[type='checkbox'] {
 }
 
 .text-version-heading,
-.version-meta {
+.version-meta,
+.audio-version-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.text-version-heading h4 {
+.text-version-heading h4,
+.audio-version-heading h4 {
   margin: 6px 0 0;
   color: #16211f;
+}
+
+.version-state-group {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .language-tabs {
@@ -386,6 +395,11 @@ input[type='checkbox'] {
   color: #275032;
 }
 
+.version-state.automatic {
+  background: #dbe9f0;
+  color: #315f7d;
+}
+
 .version-state.import {
   background: #f3e3c2;
   color: #75531a;
@@ -405,6 +419,24 @@ input[type='checkbox'] {
 
 .text-version-actions {
   margin-bottom: 0;
+}
+
+.audio-version-panel {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #d8d0c4;
+  margin-top: 4px;
+  padding-top: 14px;
+}
+
+.audio-version-fields {
+  align-items: end;
+}
+
+.audio-player-row {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
 }
 
 .location-actions {
