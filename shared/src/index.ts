@@ -241,18 +241,23 @@ export interface AdminRouteTranslation extends AdminEditorialTranslation {
 type RequestBody = Record<string, unknown> | Array<unknown>;
 
 export class ApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly path: string
-  ) {
+  readonly status: number;
+  readonly path: string;
+
+  constructor(message: string, status: number, path: string) {
     super(message);
     this.name = 'ApiError';
+    this.status = status;
+    this.path = path;
   }
 }
 
 export class ApiClient {
-  constructor(private readonly baseUrl = '') {}
+  private readonly baseUrl: string;
+
+  constructor(baseUrl = '') {
+    this.baseUrl = baseUrl;
+  }
 
   async get<T>(path: string, token?: string): Promise<T> {
     return this.request<T>(path, { method: 'GET' }, token);

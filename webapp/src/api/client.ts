@@ -11,6 +11,7 @@ import type { Author, DefaultVoice, Lang, Point, Route } from '../types';
 import { mockAuthors, mockPoints, mockRoutes, mockVoice } from './mock';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+const ENABLE_MOCKS = import.meta.env.VITE_ENABLE_MOCKS === 'true' || import.meta.env.STORYBOOK === 'true';
 const client = new ApiClient(API_BASE);
 
 export interface PointQuery {
@@ -49,9 +50,14 @@ function normalizeAudio(audio: PublicAudioFile) {
 async function withMockFallback<T>(call: () => Promise<T>, fallback: T): Promise<{ data: T; isMock: boolean }> {
   try {
     return { data: await call(), isMock: false };
-  } catch {
+  } catch (cause) {
+    if (!ENABLE_MOCKS) throw cause;
     return { data: fallback, isMock: true };
   }
+}
+
+export function mocksEnabled() {
+  return ENABLE_MOCKS;
 }
 
 function normalizeAuthor(author: PublicAuthorSummary | Author): Author {

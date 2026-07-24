@@ -19,3 +19,9 @@ npm run admin:build
 
 Ou dentro deste workspace, use `npm run dev` e `npm run build`. Copie `.env.example` para `.env`
 e configure `VITE_API_BASE_URL` quando não quiser usar o proxy local.
+
+Dados mockados ficam desabilitados por padrão. Para desenvolvimento isolado, habilite explicitamente:
+
+```env
+VITE_ENABLE_MOCKS=true
+```

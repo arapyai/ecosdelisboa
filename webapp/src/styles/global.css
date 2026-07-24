@@ -254,6 +254,34 @@ a {
   font-size: 13px;
 }
 
+.state-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.state-panel p {
+  margin: 0;
+}
+
+.state-panel button {
+  width: fit-content;
+  min-height: 34px;
+  border: 1px solid var(--green);
+  background: var(--green);
+  color: #fff;
+}
+
+.error-state {
+  border-color: rgba(196, 87, 50, 0.42);
+  color: var(--ink);
+}
+
 .filter-panel {
   display: grid;
   gap: 10px;

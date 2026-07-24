@@ -1,6 +1,7 @@
 import { Filter, LocateFixed } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
+import { EmptyState, ErrorState } from '../components/AsyncState';
 import { CityMap } from '../components/CityMap';
 // import { OfflineCache } from '../components/OfflineCache';
 import { PointSheet } from '../components/PointSheet';
@@ -20,12 +21,29 @@ export function MapPage({ lang }: Props) {
   const [authorId, setAuthorId] = useState('');
   const [radius, setRadius] = useState(cityConfig.map.defaultRadius);
   const [isMock, setIsMock] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    api.getAuthors().then((result) => setAuthors(result.data));
-  }, []);
+    let cancelled = false;
+    api
+      .getAuthors()
+      .then((result) => {
+        if (!cancelled) setAuthors(result.data);
+      })
+      .catch(() => {
+        if (!cancelled) setAuthors([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
     api
       .getPoints({
         lat: cityConfig.api.defaultLat,
@@ -35,13 +53,28 @@ export function MapPage({ lang }: Props) {
         author_id: authorId
       })
       .then((result) => {
+        if (cancelled) return;
         setPoints(result.data);
         setSelectedPoint((current) =>
           current && result.data.some((point) => point.id === current.id) ? current : null
         );
         setIsMock(result.isMock);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPoints([]);
+        setSelectedPoint(null);
+        setSelectedTextId(null);
+        setIsMock(false);
+        setError('Não foi possível carregar os pontos.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
-  }, [authorId, lang, radius]);
+    return () => {
+      cancelled = true;
+    };
+  }, [authorId, lang, radius, reloadKey]);
 
   const pointsWithAuthors = useMemo(
     () =>
@@ -59,15 +92,19 @@ export function MapPage({ lang }: Props) {
   async function selectPoint(point: Point) {
     setSelectedPoint(point);
     setSelectedTextId(null);
-    const result = await api.getPoint(point.id, lang);
-    const loadedPoint = {
-      ...point,
-      ...result.data,
-      author: result.data.author ?? result.data.authors?.[0] ?? point.author ?? point.authors?.[0] ?? authors.find((author) => author.id === point.author_id)
-    };
-    setSelectedPoint(loadedPoint);
-    if (loadedPoint.texts && loadedPoint.texts.length > 0) {
-      setSelectedTextId(loadedPoint.texts[0].id);
+    try {
+      const result = await api.getPoint(point.id, lang);
+      const loadedPoint = {
+        ...point,
+        ...result.data,
+        author: result.data.author ?? result.data.authors?.[0] ?? point.author ?? point.authors?.[0] ?? authors.find((author) => author.id === point.author_id)
+      };
+      setSelectedPoint(loadedPoint);
+      if (loadedPoint.texts && loadedPoint.texts.length > 0) {
+        setSelectedTextId(loadedPoint.texts[0].id);
+      }
+    } catch {
+      setError('Não foi possível carregar o detalhe do ponto.');
     }
   }
 
@@ -83,6 +120,7 @@ export function MapPage({ lang }: Props) {
           <strong>{pointsWithAuthors.length}</strong>
         </div>
         {isMock ? <p className="notice">{t(lang, 'mockData')}</p> : null}
+        {error ? <ErrorState message={error} onRetry={() => setReloadKey((current) => current + 1)} /> : null}
         <div className="filter-panel">
           <label>
             <Filter size={15} />
@@ -116,6 +154,8 @@ export function MapPage({ lang }: Props) {
           ))}
         </div>
         <div className="point-list">
+          {!loading && !error && pointsWithAuthors.length === 0 ? <EmptyState message={t(lang, 'empty')} /> : null}
+          {loading ? <EmptyState message="A carregar..." /> : null}
           {pointsWithAuthors.map((point) => (
             <button
               key={point.id}

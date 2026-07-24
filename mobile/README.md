@@ -13,3 +13,9 @@ npm run mobile:start
 ```
 
 Configure `EXPO_PUBLIC_API_BASE_URL` a partir de `.env.example`.
+
+Dados mockados ficam desabilitados por padrão. Para desenvolvimento isolado, habilite explicitamente:
+
+```env
+EXPO_PUBLIC_ENABLE_MOCKS=true
+```

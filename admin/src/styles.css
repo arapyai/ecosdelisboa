@@ -213,6 +213,31 @@ input[type='checkbox'] {
   color: #ffd6c7;
 }
 
+.admin-state {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid #d8d0c4;
+  border-radius: 8px;
+  background: #fffaf1;
+  color: #16211f;
+}
+
+.admin-state p {
+  margin: 0;
+  color: #69736e;
+  font-weight: 700;
+}
+
+.admin-state button {
+  width: fit-content;
+}
+
+.admin-state.error-state {
+  border-color: rgba(158, 58, 32, 0.36);
+}
+
 .admin-shell {
   min-height: 100vh;
   display: grid;

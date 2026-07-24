@@ -15,6 +15,7 @@ import { styles } from './styles';
 type Tab = 'points' | 'authors';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
+const ENABLE_MOCKS = process.env.EXPO_PUBLIC_ENABLE_MOCKS === 'true';
 
 const mockAuthors: PublicAuthorSummary[] = [
   {
@@ -106,10 +107,14 @@ export default function App() {
   const [authors, setAuthors] = useState<PublicAuthorSummary[]>([]);
   const [selectedPoint, setSelectedPoint] = useState<PublicPointDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
   const [isMock, setIsMock] = useState(false);
 
   useEffect(() => {
     let mounted = true;
+    setLoading(true);
+    setError('');
 
     Promise.all([
       getPublicData<PublicPointSummary[]>('/api/v1/points?lat=38.7223&lng=-9.1393&radius=5000'),
@@ -123,9 +128,16 @@ export default function App() {
       })
       .catch(() => {
         if (!mounted) return;
-        setPoints(mockPoints);
-        setAuthors(mockAuthors);
-        setIsMock(true);
+        if (ENABLE_MOCKS) {
+          setPoints(mockPoints);
+          setAuthors(mockAuthors);
+          setIsMock(true);
+          return;
+        }
+        setPoints([]);
+        setAuthors([]);
+        setIsMock(false);
+        setError('Não foi possível carregar os dados.');
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -134,7 +146,7 @@ export default function App() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   const authorsById = useMemo(
     () => new Map(authors.map((author) => [author.id, author])),
@@ -148,14 +160,23 @@ export default function App() {
   async function openPoint(point: PublicPointSummary) {
     setTab('points');
     setSelectedPoint(null);
+    setError('');
     try {
       const detail = await getPublicData<PublicPointDetail>(`/api/v1/points/${point.id}?lang=pt`);
       setSelectedPoint(detail);
       setIsMock(false);
     } catch {
-      setSelectedPoint(mockPointDetails[point.id] ?? { ...point, texts: [] });
-      setIsMock(true);
+      if (ENABLE_MOCKS) {
+        setSelectedPoint(mockPointDetails[point.id] ?? { ...point, texts: [] });
+        setIsMock(true);
+        return;
+      }
+      setError('Não foi possível carregar o detalhe do ponto.');
     }
+  }
+
+  function retry() {
+    setReloadKey((current) => current + 1);
   }
 
   return (
@@ -170,6 +191,7 @@ export default function App() {
           </View>
         </View>
         {isMock ? <Text style={styles.notice}>Dados de exemplo enquanto a API nao responde.</Text> : null}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>
 
       <View style={styles.tabs}>
@@ -187,6 +209,21 @@ export default function App() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
+          {error ? (
+            <Pressable style={styles.retryButton} onPress={retry}>
+              <Text style={styles.retryButtonText}>Tentar novamente</Text>
+            </Pressable>
+          ) : null}
+          {!error && tab === 'points' && points.length === 0 ? (
+            <View style={styles.card}>
+              <Text style={styles.cardMeta}>Ainda não há pontos para mostrar.</Text>
+            </View>
+          ) : null}
+          {!error && tab === 'authors' && authors.length === 0 ? (
+            <View style={styles.card}>
+              <Text style={styles.cardMeta}>Ainda não há autores para mostrar.</Text>
+            </View>
+          ) : null}
           {tab === 'points'
             ? points.map((point) => (
                 <Pressable key={point.id} style={styles.card} onPress={() => openPoint(point)}>

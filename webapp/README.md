@@ -33,6 +33,14 @@ VITE_MAP_ZOOM=12.2
 VITE_MAP_DEFAULT_RADIUS=1500
 ```
 
+## Mocks
+
+Dados locais ficam desabilitados por padrão. Para desenvolvimento isolado ou Storybook, use:
+
+```env
+VITE_ENABLE_MOCKS=true
+```
+
 ## Scripts do workspace
 
 - `npm run dev`: Vite de desenvolvimento;

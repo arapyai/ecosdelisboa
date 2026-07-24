@@ -35,6 +35,11 @@ export const styles = StyleSheet.create({
     color: '#315f7d',
     marginTop: 8
   },
+  errorText: {
+    color: '#9e3a20',
+    fontWeight: '700',
+    marginTop: 8
+  },
   tabs: {
     flexDirection: 'row',
     gap: 8,
@@ -75,6 +80,17 @@ export const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     padding: 14
+  },
+  retryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#163832',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10
+  },
+  retryButtonText: {
+    color: '#fffaf1',
+    fontWeight: '800'
   },
   cardTitle: {
     color: '#16211f',

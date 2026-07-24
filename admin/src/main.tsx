@@ -59,6 +59,7 @@ type FieldContext = {
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+const ENABLE_MOCKS = import.meta.env.VITE_ENABLE_MOCKS === 'true' || import.meta.env.STORYBOOK === 'true';
 const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY ?? '';
 const ADMIN_MAP_STYLE_URL = MAPTILER_KEY
   ? `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_KEY}`
@@ -80,6 +81,7 @@ function fallbackUnlessAuth<T>(cause: unknown, fallback: T, onAuthExpired: () =>
     onAuthExpired();
     throw cause;
   }
+  if (!ENABLE_MOCKS) throw cause;
   return fallback;
 }
 
@@ -448,7 +450,7 @@ function ResourcePanel({
     ...autoSyncQueryOptions
   });
 
-  const items = query.data ?? fallbackFor(resource);
+  const items = query.data ?? (ENABLE_MOCKS ? fallbackFor(resource) : []);
   const filteredItems = useMemo(
     () => filterResourceItems(resource, items, { textSearch, textOrigin }),
     [items, resource, textOrigin, textSearch]
@@ -456,9 +458,9 @@ function ResourcePanel({
   const metrics = useMemo(() => filteredItems.length, [filteredItems.length]);
   const fieldContext = useMemo<FieldContext>(
     () => ({
-      authors: authorsQuery.data ?? mockAuthors,
+      authors: authorsQuery.data ?? (ENABLE_MOCKS ? mockAuthors : []),
       authorsReady: Boolean(authorsQuery.data),
-      points: pointsQuery.data ?? mockPoints,
+      points: pointsQuery.data ?? (ENABLE_MOCKS ? mockPoints : []),
       pointsReady: Boolean(pointsQuery.data)
     }),
     [authorsQuery.data, pointsQuery.data]
@@ -467,7 +469,6 @@ function ResourcePanel({
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = serializeDraft(resource, draft);
-      if (isLocal) return payload as unknown as ResourceItem;
       if (editing) {
         return client.put<ResourceItem>(`/api/v1/admin/${resource}/${editing.id}`, payload, token);
       }
@@ -475,9 +476,9 @@ function ResourcePanel({
     },
     onSuccess: (saved) => {
       queryClient.setQueryData<ResourceItem[]>(['admin-resource', resource, token], (current) => {
-        const list = current ?? fallbackFor(resource);
+        const list = current ?? (ENABLE_MOCKS ? fallbackFor(resource) : []);
         if (editing) return list.map((item) => (item.id === editing.id ? { ...item, ...saved, id: editing.id } : item));
-        return [{ ...saved, id: `local-${Date.now()}` }, ...list];
+        return [saved, ...list];
       });
       syncRelationshipOptions(saved);
       invalidateRelatedQueries();
@@ -491,12 +492,12 @@ function ResourcePanel({
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      if (!isLocal) await client.delete<{ deleted: boolean }>(`/api/v1/admin/${resource}/${id}`, token);
+      await client.delete<{ deleted: boolean }>(`/api/v1/admin/${resource}/${id}`, token);
       return id;
     },
     onSuccess: (id) => {
       queryClient.setQueryData<ResourceItem[]>(['admin-resource', resource, token], (current) =>
-        (current ?? fallbackFor(resource)).filter((item) => item.id !== id)
+        (current ?? (ENABLE_MOCKS ? fallbackFor(resource) : [])).filter((item) => item.id !== id)
       );
       removeRelationshipOption(id);
       invalidateRelatedQueries();
@@ -509,7 +510,7 @@ function ResourcePanel({
   function syncRelationshipOptions(saved: ResourceItem) {
     if (resource !== 'authors' && resource !== 'points') return;
     queryClient.setQueryData<ResourceItem[]>(['admin-options', resource, token], (current) => {
-      const list = current ?? fallbackFor(resource);
+      const list = current ?? (ENABLE_MOCKS ? fallbackFor(resource) : []);
       if (editing) return list.map((item) => (item.id === editing.id ? { ...item, ...saved, id: editing.id } : item));
       return [{ ...saved, id: saved.id ?? `local-${Date.now()}` }, ...list];
     });
@@ -518,7 +519,7 @@ function ResourcePanel({
   function removeRelationshipOption(id: string) {
     if (resource !== 'authors' && resource !== 'points') return;
     queryClient.setQueryData<ResourceItem[]>(['admin-options', resource, token], (current) =>
-      (current ?? fallbackFor(resource)).filter((item) => item.id !== id)
+      (current ?? (ENABLE_MOCKS ? fallbackFor(resource) : [])).filter((item) => item.id !== id)
     );
   }
 
@@ -551,9 +552,16 @@ function ResourcePanel({
         <div>
           <span>{resourceLabels[resource]}</span>
           <h2>{metrics} registos</h2>
-          {isLocal ? <p>Usando mocks locais enquanto o endpoint admin não responde.</p> : null}
+          {isLocal ? <p>Usando mocks locais por flag explícita de desenvolvimento.</p> : null}
         </div>
       </div>
+
+      {query.isError && !isLocal ? (
+        <div className="admin-state error-state">
+          <p>Não foi possível carregar {resourceLabels[resource].toLowerCase()}.</p>
+          <button type="button" onClick={() => query.refetch()}>Tentar novamente</button>
+        </div>
+      ) : null}
 
       {resource === 'texts' ? (
         <TextFilters
@@ -768,11 +776,11 @@ function TranslationsPanel({ token, onAuthExpired }: { token: string; onAuthExpi
     ...autoSyncQueryOptions
   });
 
-  const translations = translationsQuery.data ?? mockTranslations;
-  const texts = textsQuery.data ?? mockTexts;
-  const points = pointsQuery.data ?? mockPoints;
-  const authors = authorsQuery.data ?? mockAuthors;
-  const languages = languagesQuery.data ?? fallbackLanguages;
+  const translations = translationsQuery.data ?? (ENABLE_MOCKS ? mockTranslations : []);
+  const texts = textsQuery.data ?? (ENABLE_MOCKS ? mockTexts : []);
+  const points = pointsQuery.data ?? (ENABLE_MOCKS ? mockPoints : []);
+  const authors = authorsQuery.data ?? (ENABLE_MOCKS ? mockAuthors : []);
+  const languages = languagesQuery.data ?? (ENABLE_MOCKS ? fallbackLanguages : []);
   const targetLanguages = languages.filter((language) => !language.is_source);
   const filteredTranslations = useMemo(
     () =>
@@ -908,6 +916,13 @@ function TranslationsPanel({ token, onAuthExpired }: { token: string; onAuthExpi
           </select>
         </label>
       </section>
+
+      {translationsQuery.isError ? (
+        <div className="admin-state error-state">
+          <p>Não foi possível carregar traduções.</p>
+          <button type="button" onClick={() => translationsQuery.refetch()}>Tentar novamente</button>
+        </div>
+      ) : null}
 
       <form className="editor" onSubmit={submit}>
         <h3>{editing ? 'Editar tradução' : 'Criar tradução'}</h3>
@@ -1068,10 +1083,10 @@ function AudioPanel({ token, onAuthExpired }: { token: string; onAuthExpired: ()
     ...autoSyncQueryOptions
   });
 
-  const texts = textsQuery.data ?? mockTexts;
-  const points = pointsQuery.data ?? mockPoints;
-  const authors = authorsQuery.data ?? mockAuthors;
-  const languages = languagesQuery.data ?? fallbackLanguages;
+  const texts = textsQuery.data ?? (ENABLE_MOCKS ? mockTexts : []);
+  const points = pointsQuery.data ?? (ENABLE_MOCKS ? mockPoints : []);
+  const authors = authorsQuery.data ?? (ENABLE_MOCKS ? mockAuthors : []);
+  const languages = languagesQuery.data ?? (ENABLE_MOCKS ? fallbackLanguages : []);
   const voices = voicesQuery.data ?? [];
   const audios = audioQuery.data ?? [];
 
@@ -1198,6 +1213,13 @@ function AudioPanel({ token, onAuthExpired }: { token: string; onAuthExpired: ()
         </div>
         {message ? <p className="audio-message">{message}</p> : null}
       </section>
+
+      {audioQuery.isError ? (
+        <div className="admin-state error-state">
+          <p>Não foi possível carregar os áudios.</p>
+          <button type="button" onClick={() => audioQuery.refetch()}>Tentar novamente</button>
+        </div>
+      ) : null}
 
       <div className="table-wrap">
         <table>
