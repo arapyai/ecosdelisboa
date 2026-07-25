@@ -573,13 +573,19 @@ function ResourcePanel({
       return client.post<ResourceItem>(`/api/v1/admin/${resource}`, payload, token);
     },
     onSuccess: (saved) => {
+      const savedItem = editing ? ({ ...editing, ...saved, id: editing.id } as ResourceItem) : saved;
       queryClient.setQueryData<ResourceItem[]>(['admin-resource', resource, token], (current) => {
         const list = current ?? (ENABLE_MOCKS ? fallbackFor(resource) : []);
-        if (editing) return list.map((item) => (item.id === editing.id ? { ...item, ...saved, id: editing.id } : item));
-        return [saved, ...list];
+        if (editing) return list.map((item) => (item.id === editing.id ? savedItem : item));
+        return [savedItem, ...list];
       });
-      syncRelationshipOptions(saved);
+      syncRelationshipOptions(savedItem);
       invalidateRelatedQueries();
+      if (resource === 'texts') {
+        setEditing(savedItem);
+        setDraft(draftFromItem(resource, savedItem));
+        return;
+      }
       setEditing(null);
       setDraft(emptyDraft(resource));
     },
@@ -988,6 +994,7 @@ function TextVersionsEditor({
   onTranslationsChanged: () => void;
   onAudiosChanged: () => void;
 }) {
+  const queryClient = useQueryClient();
   const sourceLanguage = languages.find((language) => language.is_source)?.code ?? 'pt';
   const editableLanguages = languages.length > 0 ? languages : fallbackLanguages;
   const [activeLang, setActiveLang] = useState(sourceLanguage);
@@ -1008,6 +1015,11 @@ function TextVersionsEditor({
   const activeLanguage = editableLanguages.find((language) => language.code === activeLang);
   const isSource = activeLang === sourceLanguage;
   const sourceOrigin = text?.origin ?? 'manual';
+
+  useEffect(() => {
+    setVersionDrafts({});
+    setMessage('');
+  }, [text?.id]);
 
   useEffect(() => {
     if (editableLanguages.some((language) => language.code === activeLang)) return;
@@ -1034,6 +1046,7 @@ function TextVersionsEditor({
     onSuccess: (translation) => {
       setMessage('Versão guardada.');
       setVersionDrafts((current) => ({ ...current, [translation.lang]: translationToDraft(translation) }));
+      updateTranslationCache(queryClient, token, translation);
       onTranslationsChanged();
     },
     onError: (cause) => {
@@ -1050,6 +1063,7 @@ function TextVersionsEditor({
     onSuccess: (translation) => {
       setMessage('Tradução gerada como pendente.');
       setVersionDrafts((current) => ({ ...current, [translation.lang]: translationToDraft(translation) }));
+      updateTranslationCache(queryClient, token, translation);
       onTranslationsChanged();
     },
     onError: (cause) => {
@@ -1071,12 +1085,10 @@ function TextVersionsEditor({
         token
       );
     },
-    onSuccess: (_translation, nextStatus) => {
+    onSuccess: (translation) => {
       setMessage('Revisão guardada.');
-      setVersionDrafts((current) => ({
-        ...current,
-        [activeLang]: { ...activeDraft, status: nextStatus, dirty: false }
-      }));
+      setVersionDrafts((current) => ({ ...current, [translation.lang]: translationToDraft(translation) }));
+      updateTranslationCache(queryClient, token, translation);
       onTranslationsChanged();
     },
     onError: (cause) => {
@@ -1095,6 +1107,7 @@ function TextVersionsEditor({
     },
     onSuccess: () => {
       setMessage('Tradução removida.');
+      if (activeTranslation) removeTranslationCache(queryClient, token, activeTranslation.id);
       setVersionDrafts((current) => ({ ...current, [activeLang]: translationToDraft(undefined) }));
       onTranslationsChanged();
     },
@@ -2112,6 +2125,23 @@ function originLabel(origin: string) {
 
 function languageLabel(language: AdminLanguage) {
   return `${language.code.toUpperCase()} · ${language.name}${language.is_source ? ' · fonte' : ''}`;
+}
+
+function updateTranslationCache(queryClient: QueryClient, token: string, nextTranslation: AdminTranslation) {
+  queryClient.setQueryData<AdminTranslation[]>(['admin-translations', token], (current) => {
+    const list = current ?? [];
+    const matches = (translation: AdminTranslation) =>
+      translation.id === nextTranslation.id ||
+      (translation.text_id === nextTranslation.text_id && translation.lang === nextTranslation.lang);
+    if (!list.some(matches)) return [nextTranslation, ...list];
+    return list.map((translation) => (matches(translation) ? nextTranslation : translation));
+  });
+}
+
+function removeTranslationCache(queryClient: QueryClient, token: string, translationId: string) {
+  queryClient.setQueryData<AdminTranslation[]>(['admin-translations', token], (current) =>
+    (current ?? []).filter((translation) => translation.id !== translationId)
+  );
 }
 
 function updateAudioCache(queryClient: QueryClient, token: string, nextAudio: AdminAudioFile) {
