@@ -439,8 +439,69 @@ input[type='checkbox'] {
   min-height: 42px;
 }
 
-.location-actions {
-  margin-top: 12px;
+
+.point-location-editor {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d8d0c4;
+  border-radius: 8px;
+  background: #fff;
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.point-location-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.point-location-heading h4 {
+  margin: 6px 0 0;
+  color: #16211f;
+}
+
+.geocoding-field {
+  max-width: 720px;
+}
+
+.geocoding-feedback,
+.coordinate-feedback {
+  margin: -4px 0 0;
+  color: #69736e;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.coordinate-feedback {
+  color: #315f7d;
+}
+
+.geocoding-results {
+  display: grid;
+  gap: 8px;
+  max-width: 720px;
+}
+
+.geocoding-results button {
+  display: grid;
+  gap: 3px;
+  border: 1px solid #d8d0c4;
+  background: #fffaf1;
+  color: #16211f;
+  text-align: left;
+}
+
+.geocoding-results small {
+  color: #69736e;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.embedded-coordinate-map {
+  height: min(44vh, 420px);
+  min-height: 300px;
 }
 
 .dialog-backdrop {

@@ -59,12 +59,23 @@ type FieldContext = {
   pointsReady: boolean;
 };
 
+type GeocodingFeature = {
+  id: string;
+  text?: string;
+  place_name?: string;
+  center?: [number, number];
+  context?: Array<{ id?: string; text?: string }>;
+  place_type?: string[];
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 const ENABLE_MOCKS = import.meta.env.VITE_ENABLE_MOCKS === 'true' || import.meta.env.STORYBOOK === 'true';
 const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY ?? '';
 const ADMIN_MAP_STYLE_URL = MAPTILER_KEY
   ? `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_KEY}`
   : 'https://demotiles.maplibre.org/style.json';
+const ADMIN_DEFAULT_LAT = Number(import.meta.env.VITE_CITY_DEFAULT_LAT ?? import.meta.env.VITE_MAP_CENTER_LAT ?? 38.7223);
+const ADMIN_DEFAULT_LNG = Number(import.meta.env.VITE_CITY_DEFAULT_LNG ?? import.meta.env.VITE_MAP_CENTER_LNG ?? -9.1393);
 const client = new ApiClient(API_BASE);
 const queryClient = new QueryClient();
 const TOKEN_KEY = 'ecosdelisboa.admin.token';
@@ -270,8 +281,8 @@ function emptyDraft(resource: Resource): Draft {
       title_pt: '',
       address: '',
       neighborhood: '',
-      lat: 38.7223,
-      lng: -9.1393
+      lat: ADMIN_DEFAULT_LAT,
+      lng: ADMIN_DEFAULT_LNG
     };
   }
   if (resource === 'texts') {
@@ -1540,7 +1551,6 @@ function ResourceFields({
   onDraft: (draft: Draft) => void;
 }) {
   const fields = fieldsFor(resource, context);
-  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
 
   useEffect(() => {
     const nextDraft = { ...draft };
@@ -1632,21 +1642,7 @@ function ResourceFields({
           )
         )}
       </div>
-      {resource === 'points' ? (
-        <div className="location-actions">
-          <button type="button" className="secondary-action" onClick={() => setLocationPickerOpen(true)}>
-            Selecionar no mapa
-          </button>
-        </div>
-      ) : null}
-      {locationPickerOpen ? (
-        <LocationPickerDialog
-          lat={Number(draft.lat)}
-          lng={Number(draft.lng)}
-          onClose={() => setLocationPickerOpen(false)}
-          onSelect={(lat, lng) => onDraft({ ...draft, lat, lng })}
-        />
-      ) : null}
+      {resource === 'points' ? <PointLocationEditor draft={draft} onDraft={onDraft} /> : null}
     </>
   );
 }
@@ -1698,27 +1694,24 @@ function fieldClassName(field: FieldConfig) {
   return undefined;
 }
 
-function LocationPickerDialog({
-  lat,
-  lng,
-  onClose,
-  onSelect
-}: {
-  lat: number;
-  lng: number;
-  onClose: () => void;
-  onSelect: (lat: number, lng: number) => void;
-}) {
-  const currentLat = Number.isFinite(lat) ? lat : 38.7223;
-  const currentLng = Number.isFinite(lng) ? lng : -9.1393;
+function PointLocationEditor({ draft, onDraft }: { draft: Draft; onDraft: (draft: Draft) => void }) {
+  const lat = coordinateNumber(draft.lat);
+  const lng = coordinateNumber(draft.lng);
+  const hasValidLocation = isValidCoordinate(lat, lng);
+  const currentLat = hasValidLocation ? lat : ADMIN_DEFAULT_LAT;
+  const currentLng = hasValidLocation ? lng : ADMIN_DEFAULT_LNG;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
-  const onSelectRef = useRef(onSelect);
+  const draftRef = useRef(draft);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<GeocodingFeature[]>([]);
+  const [searchState, setSearchState] = useState<'idle' | 'loading' | 'empty' | 'error'>('idle');
+  const [coordinateMessage, setCoordinateMessage] = useState('');
 
   useEffect(() => {
-    onSelectRef.current = onSelect;
-  }, [onSelect]);
+    draftRef.current = draft;
+  }, [draft]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -1728,7 +1721,7 @@ function LocationPickerDialog({
       center: [currentLng, currentLat],
       container: containerRef.current,
       style: ADMIN_MAP_STYLE_URL,
-      zoom: 14
+      zoom: hasValidLocation ? 15 : 12
     });
     const marker = new maplibregl.Marker({ color: '#c45732', draggable: true })
       .setLngLat([currentLng, currentLat])
@@ -1737,11 +1730,11 @@ function LocationPickerDialog({
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     marker.on('dragend', () => {
       const nextLocation = marker.getLngLat();
-      onSelectRef.current(Number(nextLocation.lat.toFixed(6)), Number(nextLocation.lng.toFixed(6)));
+      updateLocation(Number(nextLocation.lat.toFixed(6)), Number(nextLocation.lng.toFixed(6)), true);
     });
     map.on('click', (event) => {
       marker.setLngLat(event.lngLat);
-      onSelectRef.current(Number(event.lngLat.lat.toFixed(6)), Number(event.lngLat.lng.toFixed(6)));
+      updateLocation(Number(event.lngLat.lat.toFixed(6)), Number(event.lngLat.lng.toFixed(6)), true);
     });
 
     mapRef.current = map;
@@ -1756,27 +1749,170 @@ function LocationPickerDialog({
   }, []);
 
   useEffect(() => {
+    if (!hasValidLocation) {
+      setCoordinateMessage('Coordenadas inválidas. Corrija latitude e longitude ou selecione no mapa.');
+      return;
+    }
+    setCoordinateMessage('');
     markerRef.current?.setLngLat([currentLng, currentLat]);
-    mapRef.current?.easeTo({ center: [currentLng, currentLat], duration: 250 });
-  }, [currentLat, currentLng]);
+    mapRef.current?.easeTo({ center: [currentLng, currentLat], duration: 250, zoom: Math.max(mapRef.current.getZoom(), 14) });
+  }, [currentLat, currentLng, hasValidLocation]);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setResults([]);
+      setSearchState('idle');
+      return;
+    }
+    if (trimmed.length < 3) {
+      setResults([]);
+      setSearchState('idle');
+      return;
+    }
+    if (!MAPTILER_KEY) {
+      setResults([]);
+      setSearchState('error');
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSearchState('loading');
+      try {
+        const url = new URL(`https://api.maptiler.com/geocoding/${encodeURIComponent(trimmed)}.json`);
+        url.searchParams.set('key', MAPTILER_KEY);
+        url.searchParams.set('limit', '6');
+        url.searchParams.set('language', 'pt');
+        url.searchParams.set('proximity', `${currentLng},${currentLat}`);
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) throw new Error('Geocoding failed');
+        const payload = (await response.json()) as { features?: GeocodingFeature[] };
+        const nextResults = payload.features?.filter((feature) => Array.isArray(feature.center)) ?? [];
+        setResults(nextResults);
+        setSearchState(nextResults.length > 0 ? 'idle' : 'empty');
+      } catch (cause) {
+        if ((cause as DOMException).name === 'AbortError') return;
+        setResults([]);
+        setSearchState('error');
+      }
+    }, 350);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [currentLat, currentLng, query]);
+
+  function updateLocation(nextLat: number, nextLng: number, keepAddress = false) {
+    if (!isValidCoordinate(nextLat, nextLng)) {
+      setCoordinateMessage('Coordenadas inválidas. Latitude deve estar entre -90 e 90; longitude entre -180 e 180.');
+      return;
+    }
+    onDraft({ ...draftRef.current, lat: nextLat, lng: nextLng });
+    if (keepAddress) setCoordinateMessage('Coordenadas atualizadas pelo mapa.');
+  }
+
+  function selectResult(feature: GeocodingFeature) {
+    if (!feature.center) {
+      setCoordinateMessage('Resultado sem coordenadas válidas.');
+      return;
+    }
+    const nextLng = feature.center[0];
+    const nextLat = feature.center[1];
+    if (!isValidCoordinate(nextLat, nextLng)) {
+      setCoordinateMessage('Resultado sem coordenadas válidas.');
+      return;
+    }
+    const nextDraft = {
+      ...draftRef.current,
+      lat: Number(nextLat.toFixed(6)),
+      lng: Number(nextLng.toFixed(6)),
+      address: feature.place_name || feature.text || draftRef.current.address || '',
+      neighborhood: geocodingNeighborhood(feature) || draftRef.current.neighborhood || ''
+    };
+    onDraft(nextDraft);
+    setQuery(feature.place_name || feature.text || '');
+    setResults([]);
+    setSearchState('idle');
+    setCoordinateMessage('Endereço selecionado e coordenadas atualizadas.');
+    mapRef.current?.flyTo({ center: [nextLng, nextLat], zoom: 16, duration: 500 });
+  }
 
   return (
-    <div className="dialog-backdrop" role="presentation">
-      <section className="location-dialog" role="dialog" aria-modal="true" aria-label="Selecionar localização">
-        <div className="dialog-heading">
-          <div>
-            <span>Localização</span>
-            <h3>Selecionar coordenadas</h3>
-          </div>
-          <button type="button" className="secondary-action" onClick={onClose}>Fechar</button>
+    <section className="point-location-editor">
+      <div className="point-location-heading">
+        <div>
+          <span>Localização visual</span>
+          <h4>Mapa do ponto</h4>
         </div>
-        <div ref={containerRef} className="coordinate-map" />
-        <p className="coordinate-readout">
-          Clique no mapa ou arraste o marcador. Lat {currentLat.toFixed(6)} · Lng {currentLng.toFixed(6)}
-        </p>
-      </section>
-    </div>
+        <span className={`version-state ${hasValidLocation ? 'manual' : 'missing'}`}>
+          {hasValidLocation ? 'Coordenadas válidas' : 'Coordenadas inválidas'}
+        </span>
+      </div>
+
+      <label className="geocoding-field">
+        Buscar endereço
+        <input
+          aria-describedby="geocoding-feedback"
+          autoComplete="off"
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setResults([]);
+          }}
+        />
+      </label>
+      <div id="geocoding-feedback" className="geocoding-feedback" aria-live="polite">
+        {searchState === 'loading' ? 'A buscar endereços...' : null}
+        {searchState === 'empty' ? 'Nenhum resultado encontrado.' : null}
+        {searchState === 'error'
+          ? MAPTILER_KEY
+            ? 'Não foi possível buscar endereços agora.'
+            : 'Configure VITE_MAPTILER_KEY para ativar a busca por endereço.'
+          : null}
+      </div>
+      {results.length > 0 ? (
+        <div className="geocoding-results" role="listbox" aria-label="Resultados de endereço">
+          {results.map((feature) => (
+            <button key={feature.id} type="button" role="option" onClick={() => selectResult(feature)}>
+              <strong>{feature.text || 'Endereço'}</strong>
+              <small>{feature.place_name || '-'}</small>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div ref={containerRef} className="coordinate-map embedded-coordinate-map" />
+      <p className={`coordinate-readout ${coordinateMessage ? 'has-message' : ''}`}>
+        Clique no mapa ou arraste o marcador. Lat {Number.isFinite(lat) ? lat.toFixed(6) : '-'} · Lng{' '}
+        {Number.isFinite(lng) ? lng.toFixed(6) : '-'}
+      </p>
+      {coordinateMessage ? <p className="coordinate-feedback">{coordinateMessage}</p> : null}
+    </section>
   );
+}
+
+function coordinateNumber(value: DraftValue | undefined) {
+  if (value === '' || value === null || value === undefined) return Number.NaN;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : Number.NaN;
+}
+
+function isValidCoordinate(lat: number, lng: number) {
+  return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+
+function geocodingNeighborhood(feature: GeocodingFeature) {
+  if (feature.place_type?.some((type) => ['neighbourhood', 'neighborhood', 'suburb', 'locality'].includes(type))) {
+    return feature.text ?? '';
+  }
+  const contextMatch = feature.context?.find((item) => {
+    const id = item.id ?? '';
+    return ['neighbourhood', 'neighborhood', 'suburb', 'locality', 'district'].some((type) => id.includes(type));
+  });
+  return contextMatch?.text ?? '';
 }
 
 function RouteItemsEditor({
