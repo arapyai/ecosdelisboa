@@ -1263,10 +1263,12 @@ function AudioVersionEditor({
   onAuthExpired: () => void;
   onAudiosChanged: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [voiceId, setVoiceId] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState('');
   const publicUrl = toAssetUrl(audio?.public_url);
+  const playerKey = `${text?.id ?? 'new'}-${lang}-${publicUrl || 'no-audio'}`;
 
   useEffect(() => {
     setFile(null);
@@ -1285,6 +1287,7 @@ function AudioVersionEditor({
     },
     onSuccess: (result) => {
       setMessage(result.error ? `Geração concluída com erro: ${result.error}` : `Geração ${audioJobStatusLabel(result.status)}.`);
+      if (result.audio) updateAudioCache(queryClient, token, result.audio);
       onAudiosChanged();
     },
     onError: (cause) => {
@@ -1302,9 +1305,10 @@ function AudioVersionEditor({
       }
       return putMp3<AdminAudioFile>(`/api/v1/admin/audio/${text.id}/${lang}/upload`, file, token);
     },
-    onSuccess: () => {
+    onSuccess: (nextAudio) => {
       setMessage('Áudio manual enviado.');
       setFile(null);
+      updateAudioCache(queryClient, token, nextAudio);
       onAudiosChanged();
     },
     onError: (cause) => {
@@ -1323,6 +1327,7 @@ function AudioVersionEditor({
     },
     onSuccess: () => {
       setMessage('Áudio apagado.');
+      if (text) removeAudioCache(queryClient, token, text.id, lang);
       onAudiosChanged();
     },
     onError: (cause) => {
@@ -1349,7 +1354,11 @@ function AudioVersionEditor({
       </div>
 
       <div className="audio-player-row">
-        {publicUrl ? <audio className="admin-audio-player" controls src={publicUrl} /> : <audio className="admin-audio-player" controls />}
+        {publicUrl ? (
+          <audio key={playerKey} className="admin-audio-player" controls src={publicUrl} />
+        ) : (
+          <audio key={playerKey} className="admin-audio-player" controls />
+        )}
       </div>
 
       <div className="field-grid audio-version-fields">
@@ -2103,6 +2112,21 @@ function originLabel(origin: string) {
 
 function languageLabel(language: AdminLanguage) {
   return `${language.code.toUpperCase()} · ${language.name}${language.is_source ? ' · fonte' : ''}`;
+}
+
+function updateAudioCache(queryClient: QueryClient, token: string, nextAudio: AdminAudioFile) {
+  queryClient.setQueryData<AdminAudioFile[]>(['admin-audio', token], (current) => {
+    const list = current ?? [];
+    const exists = list.some((audio) => audio.text_id === nextAudio.text_id && audio.lang === nextAudio.lang);
+    if (!exists) return [nextAudio, ...list];
+    return list.map((audio) => (audio.text_id === nextAudio.text_id && audio.lang === nextAudio.lang ? nextAudio : audio));
+  });
+}
+
+function removeAudioCache(queryClient: QueryClient, token: string, textId: string, lang: string) {
+  queryClient.setQueryData<AdminAudioFile[]>(['admin-audio', token], (current) =>
+    (current ?? []).filter((audio) => audio.text_id !== textId || audio.lang !== lang)
+  );
 }
 
 function audioState(audio?: AdminAudioFile) {
