@@ -25,6 +25,7 @@ import {
 } from './adminConfig';
 import { fallbackFor, fallbackLanguages, mockAudioFiles, mockAuthors, mockPoints, mockTexts, mockTranslations } from './adminMocks';
 import { CsvPanel } from './csv/CsvPanel';
+import { PronunciationPanel } from './pronunciation/PronunciationPanel';
 import { TextFilters, filterResourceItems } from './texts/TextFilters';
 import { TextVersionsEditor } from './texts/TextVersionsEditor';
 import { ResourceFields } from './resources/ResourceFields';
@@ -50,6 +51,7 @@ const sectionLabels: Record<Section, string> = {
   points: resourceLabels.points,
   texts: resourceLabels.texts,
   routes: resourceLabels.routes,
+  pronunciation: 'Pronúncias',
 };
 
 
@@ -161,7 +163,10 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         </button>
       </aside>
       {section === 'csv' ? <CsvPanel token={token} onAuthExpired={onLogout} /> : null}
-      {section !== 'csv' ? (
+      {section === 'pronunciation' ? (
+        <PronunciationPanel token={token} onAuthExpired={onLogout} />
+      ) : null}
+      {section !== 'csv' && section !== 'pronunciation' ? (
         <ResourcePanel token={token} resource={section} onAuthExpired={onLogout} />
       ) : null}
     </main>

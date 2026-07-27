@@ -128,6 +128,42 @@ export interface AdminVoice {
   is_default?: boolean;
 }
 
+export type PronunciationRule =
+  | {
+      type: 'alias';
+      string_to_replace: string;
+      alias: string;
+    }
+  | {
+      type: 'phoneme';
+      string_to_replace: string;
+      alphabet: 'ipa';
+      phoneme: string;
+    };
+
+export interface AdminPronunciationDictionary {
+  id: string;
+  language_code: SupportedLanguage;
+  elevenlabs_id: string;
+  version_id: string;
+  name: string;
+  last_published_at?: string | null;
+  last_published_by?: string | null;
+  rules?: PronunciationRule[];
+}
+
+export interface PronunciationPreviewAudio {
+  content_type: 'audio/mpeg';
+  audio_base64: string;
+}
+
+export interface PronunciationPreview {
+  voice_id: string;
+  text: string;
+  without_dictionary: PronunciationPreviewAudio;
+  with_dictionary: PronunciationPreviewAudio;
+}
+
 export interface AdminAudioFile {
   id: string;
   text_id: string;

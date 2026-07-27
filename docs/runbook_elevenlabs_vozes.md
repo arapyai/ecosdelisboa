@@ -22,7 +22,7 @@ Copie `backend/.env.example` para `backend/.env` e configure:
 ```env
 ELEVENLABS_API_KEY=sua-chave-real
 ELEVENLABS_BASE_URL=https://api.elevenlabs.io/v1
-ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+ELEVENLABS_MODEL_ID=eleven_v3
 ELEVENLABS_TIMEOUT_S=60
 ELEVENLABS_DEFAULT_VOICE_ID=
 AUDIO_STORAGE_DIR=media
@@ -36,7 +36,28 @@ quando nao existe override, voz do autor, voz da lingua ou voz marcada como defa
 Sem `ELEVENLABS_API_KEY`, o backend usa um fallback de teste que grava os bytes do texto no
 lugar do MP3. Esse modo serve aos testes automatizados, mas nao valida sintese de voz real.
 
-## 3. Aplicar migrations e carregar o catalogo inicial
+O modelo `eleven_v3` e necessario para aplicar regras foneticas IPA em portugues. Antes de
+alterar o modelo no ambiente publicado, gere uma amostra com as vozes usadas pelo produto e
+confirme ritmo, naturalidade e pronuncia.
+
+## 3. Dicionarios de pronuncia
+
+O painel administrativo possui a secao **Pronuncias**. Para cada lingua ativa, o gestor pode:
+
+1. criar um dicionario remoto na ElevenLabs;
+2. adicionar regras de alias ou fonemas IPA;
+3. usar **Salvar e publicar** para ativar uma nova versao;
+4. comparar a mesma frase e voz sem e com o dicionario.
+
+As regras diferenciam maiusculas e minusculas. Cadastre entradas separadas quando ambas as
+grafias precisarem da mesma pronuncia.
+
+O teste comparativo faz duas chamadas de sintese, retorna os MP3 diretamente ao painel e nao
+cria registros em `audio_files`. Uma publicacao afeta apenas geracoes futuras; arquivos ja
+gerados nao sao alterados. O banco guarda o ID e a versao ativa por lingua, enquanto as regras
+permanecem na ElevenLabs.
+
+## 4. Aplicar migrations e carregar o catalogo inicial
 
 ```bash
 nix develop
@@ -55,7 +76,7 @@ O catalogo padrao configura `pt`, `en`, `fr`, `zh` e `de`, associa 40 vozes e ma
 vozes de portugues europeu como pool default. A migration tambem preserva `es` para bancos
 que ja usavam a lista historica de linguas.
 
-## 4. Subir a API e autenticar
+## 5. Subir a API e autenticar
 
 ```bash
 uv run uvicorn app.main:app --reload
@@ -77,7 +98,7 @@ TOKEN=$(
 Use as credenciais reais de `ADMIN_INITIAL_EMAIL` e `ADMIN_INITIAL_PASSWORD` quando elas
 forem diferentes do seed local.
 
-## 5. Sincronizar a conta ElevenLabs
+## 6. Sincronizar a conta ElevenLabs
 
 ```bash
 curl -sS -X POST "$API/api/v1/admin/voices/sync" \
@@ -99,7 +120,7 @@ Cada item possui dois identificadores:
 - `id`: UUID interno, usado nos endpoints de configuracao
 - `elevenlabs_id`: ID enviado para a API da ElevenLabs e armazenado nos autores/audios
 
-## 6. Configurar linguas
+## 7. Configurar linguas
 
 Liste as linguas:
 
@@ -148,7 +169,7 @@ curl -sS -X PUT "$API/api/v1/admin/languages/it/activate" \
 Os campos historicos `content_pt` e `phonetic_content` continuam contendo o texto-fonte. A
 troca da lingua-fonte muda a interpretacao do pipeline, mas nao traduz nem reescreve dados.
 
-## 7. Importar configuracao por CSV
+## 8. Importar configuracao por CSV
 
 O cabecalho aceito e:
 
@@ -180,7 +201,7 @@ deve declarar exatamente uma lingua com `is_source=true`.
 O arquivo inteiro e validado antes da escrita. Qualquer linha invalida rejeita a importacao
 sem alteracao parcial.
 
-## 8. Associar vozes a linguas
+## 9. Associar vozes a linguas
 
 Uma voz pode atender varias linguas. Use o UUID interno retornado pela listagem:
 
@@ -205,7 +226,7 @@ O endpoint antigo `PUT /api/v1/admin/voices/{voice_id}/lang?lang=pt` continua di
 temporariamente, mas representa zero ou uma lingua e nao deve ser usado em configuracoes
 novas.
 
-## 9. Configurar o pool default
+## 10. Configurar o pool default
 
 Adicione quantas vozes forem necessarias:
 
@@ -224,7 +245,7 @@ curl -sS -X DELETE "$API/api/v1/admin/voices/$VOICE_UUID/default" \
 Quando existem varias candidatas no pool da lingua ou no pool default, a escolha e
 aleatoria a cada geracao.
 
-## 10. Atribuir uma voz especifica a um autor
+## 11. Atribuir uma voz especifica a um autor
 
 `authors.elevenlabs_voice_id` recebe o ID da ElevenLabs, nao o UUID interno. O `PUT` de autor
 substitui o recurso completo, portanto consulte a listagem e envie todos os campos:
@@ -247,7 +268,7 @@ curl -sS -X PUT "$API/api/v1/admin/authors/$AUTHOR_UUID" \
 
 A mesma voz pode ser usada por varios autores.
 
-## 11. Ordem de escolha da voz
+## 12. Ordem de escolha da voz
 
 O backend resolve a voz nesta ordem:
 
@@ -261,7 +282,7 @@ O backend resolve a voz nesta ordem:
 No job em lote, evite informar `voice_id` quando quiser respeitar as vozes dos autores e das
 linguas.
 
-## 12. Gerar um audio
+## 13. Gerar um audio
 
 Para portugues ou para a lingua-fonte atual:
 
@@ -287,7 +308,7 @@ curl -sS -X POST \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
-## 13. Gerar todos os audios de uma lingua
+## 14. Gerar todos os audios de uma lingua
 
 O job recebe a lista de textos explicitamente:
 
@@ -311,7 +332,7 @@ O `POST` retorna o job em `pending`; o worker interno do backend processa os ite
 requisição. O progresso fica persistido e pode ser acompanhado pelo endpoint SSE. Se o serviço
 reiniciar, itens interrompidos voltam à fila e itens já concluídos são preservados.
 
-## 14. Onde os arquivos ficam
+## 15. Onde os arquivos ficam
 
 O backend grava os áudios gerados em disco local:
 
@@ -340,7 +361,7 @@ ${AUDIO_PUBLIC_BASE_URL}/audio/{text_id}/{lang}.mp3
 `AUDIO_STORAGE_DIR` precisa estar montado em volume persistente. O procedimento de backup e
 restore fica em `docs/runbook_audio_storage.md`.
 
-## 15. Subir ou substituir um MP3 manual
+## 16. Subir ou substituir um MP3 manual
 
 ```bash
 curl -sS -X PUT "$API/api/v1/admin/audio/$TEXT_UUID/en/upload" \
@@ -353,7 +374,7 @@ simultaneamente o registro `audio_files` daquele texto e idioma. Um segundo uplo
 a mesma chave; não cria arquivos versionados. Se havia áudio gerado, ele é removido após a base
 passar a apontar para o arquivo manual.
 
-## 16. Diagnostico rapido
+## 17. Diagnostico rapido
 
 ### `401 invalid_api_key`
 
