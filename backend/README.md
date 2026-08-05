@@ -95,6 +95,17 @@ admin@example.com
 secret
 ```
 
+### Seed administrativo de deploy
+
+O Railway usa `railway.toml` para aplicar migrations e executar
+`python -m app.scripts.seed_admin` antes de iniciar a API. Esse seed cria somente o primeiro
+administrador e apenas quando `admin_users` não possui nenhuma linha. Ele não substitui o seed de
+desenvolvimento nem cria autores, pontos ou outros dados editoriais.
+
+Staging e produção exigem valores não padrão em `ADMIN_INITIAL_EMAIL` e
+`ADMIN_INITIAL_PASSWORD`, com senha de pelo menos 12 caracteres. Consulte
+`../docs/runbook_admin_users.md` antes de alterar o ciclo de deploy ou recuperar acesso.
+
 ## Estrutura
 ```text
 app/

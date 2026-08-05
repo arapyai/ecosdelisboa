@@ -67,7 +67,9 @@ no ambiente correto do Railway e validadas no navegador.
 Configuração esperada por serviço:
 
 - diretório-fonte `backend/`;
-- start command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`;
+- config as code em `/backend/railway.toml`;
+- pre-deploy aplicando migrations e executando o seed administrativo idempotente;
+- start command `uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT`;
 - `DATABASE_URL` ligado ao PostgreSQL do mesmo ambiente;
 - `AUDIO_STORAGE_DIR` apontando para um volume persistente;
 - `AUDIO_PUBLIC_BASE_URL` configurando o prefixo público dos MP3;
@@ -89,6 +91,11 @@ configure ao menos os grupos aplicáveis:
 
 Não mantenha uma tabela de quotas de provider neste repositório: limites e preços mudam. Use o
 painel e a documentação oficial do provider configurado quando precisar dimensionar uma carga.
+
+Em staging e produção, `ADMIN_INITIAL_EMAIL` e `ADMIN_INITIAL_PASSWORD` precisam usar valores não
+padrão; a senha inicial deve ter ao menos 12 caracteres. O deploy falha antes de iniciar a nova
+versão quando o banco está vazio e essas variáveis são inseguras. Consulte
+`runbook_admin_users.md` para bootstrap, verificação e recuperação.
 
 ## Secrets
 

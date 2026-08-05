@@ -50,6 +50,7 @@ class AdminUser(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    auth_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
 voice_languages = Table(

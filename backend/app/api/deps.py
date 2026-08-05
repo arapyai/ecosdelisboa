@@ -26,6 +26,7 @@ def get_current_admin(
     try:
         payload = decode_access_token(credentials.credentials)
         subject = payload.get("sub")
+        auth_version = int(payload.get("ver"))
         admin_id = UUID(str(subject))
     except (TypeError, ValueError):
         raise HTTPException(
@@ -37,6 +38,8 @@ def get_current_admin(
         select(AdminUser).where(AdminUser.id == admin_id, AdminUser.is_active.is_(True))
     )
     if admin is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    if admin.auth_version != auth_version:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     return admin

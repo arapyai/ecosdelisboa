@@ -10,6 +10,7 @@ Esta pasta concentra decisões transversais, contratos e procedimentos do Lisboa
 - `importacao_csv_conteudo.md`: contrato do CSV editorial e deduplicação;
 - `infrastructure.md`: ambientes, deploy, variáveis e operação;
 - `runbook_elevenlabs_vozes.md`: configuração de vozes e geração de áudio;
+- `runbook_admin_users.md`: seed de deploy, gestão e recuperação de usuários administrativos;
 - `runbook_audio_storage.md`: layout, backup e restore dos MP3;
 - `voice_language_seed.csv`: catálogo inicial importável de idiomas e vozes.
 

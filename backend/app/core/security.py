@@ -29,12 +29,18 @@ def verify_password(password: str, password_hash: str) -> bool:
     return hmac.compare_digest(calculated, expected)
 
 
-def create_access_token(subject: UUID | str, expires_delta: timedelta | None = None) -> str:
+def create_access_token(
+    subject: UUID | str,
+    *,
+    auth_version: int = 0,
+    expires_delta: timedelta | None = None,
+) -> str:
     settings = get_settings()
     expires_in = expires_delta or timedelta(minutes=settings.admin_access_token_expire_minutes)
     now = datetime.now(UTC)
     payload = {
         "sub": str(subject),
+        "ver": auth_version,
         "iat": int(now.timestamp()),
         "exp": int((now + expires_in).timestamp()),
     }
