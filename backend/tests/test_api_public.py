@@ -198,10 +198,13 @@ def test_get_route_gpx_returns_xml_payload(client, db_session) -> None:
 def test_get_route_podcast_rss_returns_xml_payload(client, db_session) -> None:
     ids = seed_public_data(db_session)
 
-    response = client.get(f"/api/v1/routes/{ids['route'].id}/podcast.rss")
+    response = client.get(
+        f"/api/v1/routes/{ids['route'].id}/podcast.rss",
+        headers={"X-Forwarded-Proto": "https"},
+    )
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/rss+xml")
     assert "<rss" in response.text
     assert "Tabacaria do Rossio" in response.text
-    assert f"<link>http://testserver/api/v1/routes/{ids['route'].id}</link>" in response.text
+    assert f"<link>https://testserver/api/v1/routes/{ids['route'].id}</link>" in response.text

@@ -1,5 +1,5 @@
 from typing import Annotated
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit, urlunsplit
 from uuid import UUID
 from xml.sax.saxutils import escape
 
@@ -309,6 +309,15 @@ def build_podcast_rss(
     )
 
 
+def external_request_base_url(request: Request) -> str:
+    base_url = str(request.base_url)
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", maxsplit=1)[0].strip()
+    if forwarded_proto not in {"http", "https"}:
+        return base_url
+    parsed = urlsplit(base_url)
+    return urlunsplit((forwarded_proto, parsed.netloc, parsed.path, parsed.query, parsed.fragment))
+
+
 def get_published_route(route_id: UUID, db: Session) -> Route:
     route = db.scalar(
         select(Route)
@@ -412,7 +421,7 @@ def get_route_podcast_rss(
             description,
             selected_language,
             source_language,
-            str(request.base_url),
+            external_request_base_url(request),
         ),
         media_type="application/rss+xml",
     )
