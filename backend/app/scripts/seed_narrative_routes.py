@@ -49,15 +49,19 @@ def seed_do_tejo_ao_chiado(
     fixture = load_fixture()
     texts = [_upsert_text(db, item) for item in fixture["texts"]]
     route = db.scalar(select(Route).where(Route.slug == fixture["slug"]))
+    is_new_route = route is None
     if route is None:
-        route = Route(slug=fixture["slug"])
+        route = Route(
+            slug=fixture["slug"],
+            is_published=False,
+            routing_status=RouteRoutingStatus.PENDING.value,
+        )
         db.add(route)
     route.title_pt = fixture["title_pt"]
     route.description_pt = fixture["description_pt"]
     route.difficulty = fixture["difficulty"]
-    route.is_published = False
-    route.routing_status = RouteRoutingStatus.PENDING.value
-    route.routing_hash = None
+    if is_new_route:
+        route.routing_hash = None
     route.migration_status = "ready"
     db.flush()
     _upsert_route_translation(db, route, fixture)

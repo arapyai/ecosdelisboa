@@ -9,7 +9,7 @@ from app.models.entities import (
     RouteItem,
     Text,
 )
-from app.models.enums import RouteSegmentKind
+from app.models.enums import RouteRoutingStatus, RouteSegmentKind
 from app.scripts.seed_narrative_routes import queue_missing_route_audio, seed_do_tejo_ao_chiado
 
 
@@ -24,11 +24,18 @@ def test_seed_is_idempotent_and_preserves_narrative_order(db_session):
         "texts": db_session.scalar(select(func.count()).select_from(Text)),
         "segments": db_session.scalar(select(func.count()).select_from(RouteItem)),
     }
+    first.is_published = True
+    first.routing_status = RouteRoutingStatus.READY.value
+    first.routing_hash = "calculated-route-hash"
+    db_session.commit()
 
     second = seed_do_tejo_ao_chiado(db_session, environment="staging")
     db_session.commit()
     assert second is not None
     assert second.id == first_id
+    assert second.is_published is True
+    assert second.routing_status == RouteRoutingStatus.READY.value
+    assert second.routing_hash == "calculated-route-hash"
     assert counts == {
         "authors": db_session.scalar(select(func.count()).select_from(Author)),
         "points": db_session.scalar(select(func.count()).select_from(Point)),
