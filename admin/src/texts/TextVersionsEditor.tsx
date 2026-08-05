@@ -8,7 +8,7 @@ import type {
   TranslationStatus
 } from '@ecosdelisboa/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { redirectIfAuthError, toAssetUrl, toQuery, putMp3 } from '../adminApi';
 import { removeAudioCache, removeTranslationCache, updateAudioCache, updateTranslationCache } from '../adminCache';
 import { client } from '../adminConfig';
@@ -30,29 +30,6 @@ function originLabel(origin: string) {
 
 function languageLabel(language: AdminLanguage) {
   return `${language.code.toUpperCase()} · ${language.name}${language.is_source ? ' · fonte' : ''}`;
-}
-
-function versionState(translation: AdminTranslation | undefined, isSource: boolean, sourceOrigin: string) {
-  if (isSource) return sourceOrigin;
-  if (!translation) return 'missing';
-  if (translation.status === 'rejected') return 'rejected';
-  if (translation.origin === 'import') return 'import';
-  if (translation.origin === 'automatic') return 'automatic';
-  return 'manual';
-}
-
-function versionStateLabel(
-  translation: AdminTranslation | undefined,
-  isSource: boolean,
-  sourceOrigin: string
-) {
-  if (isSource) return originLabel(sourceOrigin);
-  if (!translation) return 'Ausente';
-  if (translation.status === 'rejected') return 'Rejeitada';
-  if (translation.origin === 'automatic') return 'Automática/pendente';
-  if (translation.origin === 'import') return 'CSV/importação';
-  if (translation.reviewed_by) return 'Revisada manualmente';
-  return translationStatusLabel(translation.status);
 }
 
 function reviewLabel(translation?: AdminTranslation) {
@@ -102,7 +79,11 @@ export function TextVersionsEditor({
   onAuthExpired,
   onBaseDraft,
   onTranslationsChanged,
-  onAudiosChanged
+  onAudiosChanged,
+  initialLanguage,
+  onDirtyChange,
+  onReviewed,
+  metadataFields
 }: {
   baseDraft: Draft;
   languages: AdminLanguage[];
@@ -117,6 +98,10 @@ export function TextVersionsEditor({
   onBaseDraft: (draft: Draft) => void;
   onTranslationsChanged: () => void;
   onAudiosChanged: () => void;
+  initialLanguage?: string;
+  onDirtyChange?: (dirty: boolean) => void;
+  onReviewed?: (translation: AdminTranslation) => void;
+  metadataFields?: ReactNode;
 }) {
   const queryClient = useQueryClient();
   const sourceLanguage = languages.find((language) => language.is_source)?.code ?? 'pt';
@@ -144,6 +129,16 @@ export function TextVersionsEditor({
     setVersionDrafts({});
     setMessage('');
   }, [text?.id]);
+
+  useEffect(() => {
+    if (initialLanguage && editableLanguages.some((language) => language.code === initialLanguage)) {
+      setActiveLang(initialLanguage);
+    }
+  }, [editableLanguages, initialLanguage, text?.id]);
+
+  useEffect(() => {
+    onDirtyChange?.(Object.values(versionDrafts).some((draft) => draft.dirty));
+  }, [onDirtyChange, versionDrafts]);
 
   useEffect(() => {
     if (editableLanguages.some((language) => language.code === activeLang)) return;
@@ -214,6 +209,7 @@ export function TextVersionsEditor({
       setVersionDrafts((current) => ({ ...current, [translation.lang]: translationToDraft(translation) }));
       updateTranslationCache(queryClient, token, translation);
       onTranslationsChanged();
+      onReviewed?.(translation);
     },
     onError: (cause) => {
       if (redirectIfAuthError(cause, onAuthExpired)) return;
@@ -248,42 +244,49 @@ export function TextVersionsEditor({
     }));
   }
 
+  const languageVoices = voices.filter((voice) => !voice.languages?.length || voice.languages.includes(activeLang));
+
   return (
     <section className="text-versions-editor">
-      <div className="text-version-heading">
-        <div>
-          <span>Versões multilíngues</span>
-          <h4>{activeLanguage ? languageLabel(activeLanguage) : activeLang.toUpperCase()}</h4>
-        </div>
-        <div className="version-state-group">
-          <span className={`version-state ${versionState(activeTranslation, isSource, sourceOrigin)}`}>
-            {versionStateLabel(activeTranslation, isSource, sourceOrigin)}
-          </span>
-          <span className={`version-state ${audioState(activeAudio)}`}>{audioStateLabel(activeAudio)}</span>
-        </div>
-      </div>
-
-      <div className="language-tabs">
+      <div className="compact-language-tabs" aria-label="Idiomas do texto">
         {editableLanguages.map((language) => {
           const translation = textTranslations.find((item) => item.lang === language.code);
           const audio = textAudios.find((item) => item.lang === language.code);
+          const hasText = language.code === sourceLanguage
+            ? Boolean(String(baseDraft.content_pt ?? '').trim())
+            : Boolean(translation?.content?.trim());
+          const stateDescription = `${languageLabel(language)}: ${hasText ? 'com texto' : 'sem texto'}, ${audio ? 'com áudio' : 'sem áudio'}`;
           return (
             <button
               key={language.code}
               type="button"
-              className={language.code === activeLang ? 'active' : ''}
+              className={`${hasText ? 'has-text' : 'missing-text'} ${language.code === activeLang ? 'active' : ''}`}
               onClick={() => setActiveLang(language.code)}
+              aria-label={stateDescription}
+              title={stateDescription}
             >
               {language.code.toUpperCase()}
-              <small>{versionStateLabel(translation, language.code === sourceLanguage, sourceOrigin)}</small>
-              <small>{audioStateLabel(audio)}</small>
+              {audio ? <SpeakerIcon /> : null}
             </button>
           );
         })}
       </div>
+      <p className="language-legend">Preenchido: com texto · contorno: sem texto · speaker: com áudio</p>
+      {metadataFields ? <div className="text-version-metadata-fields">{metadataFields}</div> : null}
+
+      <div className="text-version-heading">
+        <div>
+          <span>{isSource ? 'Idioma-fonte' : 'Tradução'}</span>
+          <h4>{activeLanguage ? languageLabel(activeLanguage) : activeLang.toUpperCase()}</h4>
+        </div>
+        <div className="version-state-group">
+          <span>{isSource ? `Origem: ${originLabel(sourceOrigin)}` : `Origem: ${originLabel(activeTranslation?.origin ?? 'manual')}`}</span>
+          {!isSource ? <span>Revisão: {translationStatusLabel(activeDraft.status)}</span> : null}
+        </div>
+      </div>
 
       {isSource ? (
-        <div className="field-grid text-version-fields">
+        <div className="text-version-fields">
           <label className="textarea-field">
             Conteúdo {activeLang.toUpperCase()}
             <textarea
@@ -291,34 +294,34 @@ export function TextVersionsEditor({
               onChange={(event) => onBaseDraft({ ...baseDraft, content_pt: event.target.value })}
             />
           </label>
-          <label className="textarea-field">
-            Conteúdo fonético {activeLang.toUpperCase()}
-            <textarea
-              value={String(baseDraft.phonetic_content ?? '')}
-              onChange={(event) => onBaseDraft({ ...baseDraft, phonetic_content: event.target.value })}
-            />
-          </label>
+          <details className="advanced-disclosure">
+            <summary>Conteúdo fonético</summary>
+            <label className="textarea-field">
+              Conteúdo fonético {activeLang.toUpperCase()}
+              <textarea
+                value={String(baseDraft.phonetic_content ?? '')}
+                onChange={(event) => onBaseDraft({ ...baseDraft, phonetic_content: event.target.value })}
+              />
+            </label>
+          </details>
         </div>
       ) : (
         <>
+          <div className="source-reference">
+            <div><strong>Português (fonte)</strong><span>Somente leitura</span></div>
+            <p>{String(baseDraft.content_pt ?? '') || 'O texto-fonte ainda não foi preenchido.'}</p>
+          </div>
           <div className="version-meta">
             <span>Origem: {originLabel(activeTranslation?.origin ?? 'manual')}</span>
-            <span>Estado: {translationStatusLabel(activeDraft.status)}</span>
             <span>Revisão: {reviewLabel(activeTranslation)}</span>
+            <span>Publicação: {translationStatusLabel(activeDraft.status)}</span>
           </div>
-          <div className="field-grid text-version-fields">
+          <div className="text-version-fields">
             <label className="textarea-field">
               Conteúdo {activeLang.toUpperCase()}
               <textarea
                 value={activeDraft.content}
                 onChange={(event) => updateTranslationDraft({ content: event.target.value })}
-              />
-            </label>
-            <label className="textarea-field">
-              Conteúdo fonético {activeLang.toUpperCase()}
-              <textarea
-                value={activeDraft.phoneticContent}
-                onChange={(event) => updateTranslationDraft({ phoneticContent: event.target.value })}
               />
             </label>
             <label>
@@ -332,6 +335,16 @@ export function TextVersionsEditor({
                 ))}
               </select>
             </label>
+            <details className="advanced-disclosure">
+              <summary>Conteúdo fonético</summary>
+              <label className="textarea-field">
+                Conteúdo fonético {activeLang.toUpperCase()}
+                <textarea
+                  value={activeDraft.phoneticContent}
+                  onChange={(event) => updateTranslationDraft({ phoneticContent: event.target.value })}
+                />
+              </label>
+            </details>
           </div>
           <div className="form-actions text-version-actions">
             <button type="button" disabled={!text || saveMutation.isPending} onClick={() => saveMutation.mutate(undefined)}>
@@ -346,10 +359,10 @@ export function TextVersionsEditor({
               {generateMutation.isPending ? 'A gerar...' : 'Gerar tradução IA'}
             </button>
             <button type="button" className="secondary-action" disabled={!text} onClick={() => reviewMutation.mutate('approved')}>
-              Aprovar
+              Aprovar e próximo
             </button>
             <button type="button" className="secondary-action" disabled={!text} onClick={() => reviewMutation.mutate('rejected')}>
-              Rejeitar
+              Rejeitar e próximo
             </button>
             <button
               type="button"
@@ -363,19 +376,31 @@ export function TextVersionsEditor({
         </>
       )}
 
-      <AudioVersionEditor
-        audio={activeAudio}
-        audioError={audioError}
-        audioLoading={audioLoading}
-        lang={activeLang}
-        text={text}
-        token={token}
-        voices={voices}
-        onAuthExpired={onAuthExpired}
-        onAudiosChanged={onAudiosChanged}
-      />
+      <details className="audio-disclosure">
+        <summary><SpeakerIcon /> Áudio em {activeLanguage?.name ?? activeLang.toUpperCase()} — {activeAudio ? 'disponível' : 'ausente'}</summary>
+        <AudioVersionEditor
+          audio={activeAudio}
+          audioError={audioError}
+          audioLoading={audioLoading}
+          lang={activeLang}
+          text={text}
+          token={token}
+          voices={languageVoices}
+          onAuthExpired={onAuthExpired}
+          onAudiosChanged={onAudiosChanged}
+        />
+      </details>
       {message ? <p className="audio-message">{message}</p> : null}
     </section>
+  );
+}
+
+function SpeakerIcon() {
+  return (
+    <svg className="speaker-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9v6h4l5 4V5L8 9H4Z" fill="currentColor" />
+      <path d="M16 8.2c1.2 1 1.8 2.2 1.8 3.8S17.2 14.8 16 15.8M18.5 5.8c2 1.7 3 3.7 3 6.2s-1 4.5-3 6.2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
   );
 }
 
@@ -548,4 +573,3 @@ function AudioVersionEditor({
     </section>
   );
 }
-

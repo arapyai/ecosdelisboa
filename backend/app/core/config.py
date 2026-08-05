@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     geocoding_api_key_header: str | None = None
     geocoding_api_key_query_param: str | None = None
     translation_llm_provider: str = "claude"
-    translation_llm_model: str = "claude-3-5-sonnet-latest"
+    translation_llm_model: str = "claude-sonnet-4-6"
     translation_llm_api_key: str | None = None
     translation_llm_base_url: str | None = None
     translation_llm_timeout_s: float = 30.0

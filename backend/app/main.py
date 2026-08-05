@@ -12,6 +12,8 @@ from app.core.db import SessionLocal
 from app.services.audio_jobs import AudioJobWorker
 from app.services.audio_storage import AudioStorage
 from app.services.elevenlabs import ElevenLabsService
+from app.services.llm import LLMTranslationService
+from app.services.translation_jobs import TranslationJobWorker
 
 
 def create_app(start_audio_worker: bool | None = None) -> FastAPI:
@@ -23,6 +25,7 @@ def create_app(start_audio_worker: bool | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         worker: AudioJobWorker | None = None
+        translation_worker: TranslationJobWorker | None = None
         if worker_enabled:
             worker = AudioJobWorker(
                 session_factory=SessionLocal,
@@ -35,11 +38,20 @@ def create_app(start_audio_worker: bool | None = None) -> FastAPI:
             )
             worker.start()
             app.state.audio_job_worker = worker
+            translation_worker = TranslationJobWorker(
+                session_factory=SessionLocal,
+                service=LLMTranslationService(),
+                poll_interval_s=settings.audio_worker_poll_interval_s,
+            )
+            translation_worker.start()
+            app.state.translation_job_worker = translation_worker
         try:
             yield
         finally:
             if worker is not None:
                 worker.stop()
+            if translation_worker is not None:
+                translation_worker.stop()
 
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
 

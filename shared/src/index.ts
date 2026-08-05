@@ -175,6 +175,64 @@ export interface AdminAudioFile {
   manually_uploaded?: boolean;
 }
 
+export type GenerationPolicy = 'missing_only' | 'replace_automatic';
+export type GenerationBatchStatus =
+  | 'pending'
+  | 'running'
+  | 'awaiting_review'
+  | 'completed'
+  | 'partial_failure'
+  | 'failed';
+
+export interface GenerationProgress {
+  total: number;
+  processed: number;
+  succeeded: number;
+  skipped: number;
+  failed: number;
+}
+
+export interface GenerationBatchReview {
+  text_id: string;
+  lang: SupportedLanguage;
+  translation_id: string;
+}
+
+export interface GenerationBatchError {
+  kind: 'translation' | 'audio';
+  text_id: string;
+  lang: SupportedLanguage;
+  message?: string | null;
+}
+
+export interface GenerationBatchItem {
+  kind: 'translation' | 'audio';
+  text_id: string;
+  lang: SupportedLanguage;
+  status: string;
+  skipped: boolean;
+}
+
+export interface ContentGenerationBatch {
+  id: string;
+  status: GenerationBatchStatus;
+  current_stage:
+    | 'generating_translations'
+    | 'awaiting_review'
+    | 'ready_for_translated_audio'
+    | 'generating_audio'
+    | 'completed';
+  source: 'texts' | 'csv';
+  voice_overrides: Record<string, string>;
+  auto_approve_translations: boolean;
+  generate_translated_audio: boolean;
+  created_at: string;
+  progress: GenerationProgress;
+  pending_reviews: GenerationBatchReview[];
+  errors: GenerationBatchError[];
+  items?: GenerationBatchItem[];
+}
+
 export interface AdminUser {
   id: string;
   email: string;

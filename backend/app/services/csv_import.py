@@ -827,6 +827,13 @@ def apply_import(
     created_rows = sum(
         1 for row in plan if not row.preview.errors and row.preview.point_action == "create"
     )
+    imported_text_ids = sorted(
+        {
+            str(text_objects[row.text_key].id)
+            for row in plan
+            if not row.preview.errors and row.text_key in text_objects
+        }
+    )
     return {
         "created": created_rows,
         "updated": imported_rows - created_rows,
@@ -841,4 +848,5 @@ def apply_import(
         "points": points,
         "texts": texts,
         "translations": {**translations, "by_language": translations_by_language},
+        "imported_text_ids": imported_text_ids,
     }

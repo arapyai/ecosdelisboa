@@ -25,9 +25,11 @@ import {
 } from './adminConfig';
 import { fallbackFor, fallbackLanguages, mockAudioFiles, mockAuthors, mockPoints, mockTexts, mockTranslations } from './adminMocks';
 import { CsvPanel } from './csv/CsvPanel';
+import { BatchJobTray } from './batches/BatchJobTray';
 import { PronunciationPanel } from './pronunciation/PronunciationPanel';
 import { TextFilters, filterResourceItems } from './texts/TextFilters';
 import { TextVersionsEditor } from './texts/TextVersionsEditor';
+import { TextsPanel } from './texts/TextsPanel';
 import { UsersPanel } from './users/UsersPanel';
 import { ResourceFields } from './resources/ResourceFields';
 import { columnsFor, draftFromItem, emptyDraft, formatCell, serializeDraft } from './resources/resourceModel';
@@ -106,8 +108,8 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
         <div className="admin-brand">
           <img src="/branding/literary-map-icon.png" alt="" />
           <div>
-            <span>Login Admin</span>
-            <h1>Lisbon Literary Map</h1>
+            <span>Administração</span>
+            <h1>Lisboa por Outros</h1>
           </div>
         </div>
         <form onSubmit={submit}>
@@ -116,7 +118,7 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
             <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" />
           </label>
           <label>
-            Password
+            Senha
             <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" />
           </label>
           {error ? <p className="form-error">{error}</p> : null}
@@ -131,6 +133,8 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
 
 function Dashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
   const [section, setSection] = useState<Section>('authors');
+  const [importedTextIds, setImportedTextIds] = useState<string[]>([]);
+  const [reviewBatchId, setReviewBatchId] = useState<string>();
   const me = useQuery({
     queryKey: ['me', token],
     queryFn: () => client.get<AdminUser>('/api/v1/admin/auth/me', token),
@@ -149,7 +153,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           <img src="/branding/literary-map-icon.png" alt="" />
           <div>
             <span>Admin</span>
-            <h1>Lisbon Literary Map</h1>
+            <h1>Lisboa por Outros</h1>
           </div>
         </div>
         <p>{me.data?.email ?? 'Sessão autenticada'}</p>
@@ -164,16 +168,42 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           Sair
         </button>
       </aside>
-      {section === 'csv' ? <CsvPanel token={token} onAuthExpired={onLogout} /> : null}
+      {section === 'csv' ? (
+        <CsvPanel
+          token={token}
+          onAuthExpired={onLogout}
+          onGenerate={(textIds) => {
+            setImportedTextIds(textIds);
+            setSection('texts');
+          }}
+        />
+      ) : null}
       {section === 'pronunciation' ? (
         <PronunciationPanel token={token} onAuthExpired={onLogout} />
       ) : null}
       {section === 'users' && me.data ? (
         <UsersPanel currentUser={me.data} token={token} onAuthExpired={onLogout} />
       ) : null}
-      {section !== 'csv' && section !== 'pronunciation' && section !== 'users' ? (
+      {section === 'texts' ? (
+        <TextsPanel
+          token={token}
+          onAuthExpired={onLogout}
+          importedTextIds={importedTextIds}
+          reviewBatchId={reviewBatchId}
+          onImportedTextIdsConsumed={() => setImportedTextIds([])}
+        />
+      ) : null}
+      {section !== 'csv' && section !== 'pronunciation' && section !== 'users' && section !== 'texts' ? (
         <ResourcePanel token={token} resource={section} onAuthExpired={onLogout} />
       ) : null}
+      <BatchJobTray
+        token={token}
+        onAuthExpired={onLogout}
+        onReview={(batchId) => {
+          setReviewBatchId(batchId);
+          setSection('texts');
+        }}
+      />
     </main>
   );
 }

@@ -4,7 +4,11 @@ import type { AdminAuthor, AdminPoint } from '@ecosdelisboa/shared';
 import { fetchCsvTemplate, isAuthError, postCsv } from '../adminApi';
 import type { ImportPreviewRow, ImportResult } from '../adminTypes';
 
-export function CsvPanel({ token, onAuthExpired }: { token: string; onAuthExpired: () => void }) {
+export function CsvPanel({ token, onAuthExpired, onGenerate }: {
+  token: string;
+  onAuthExpired: () => void;
+  onGenerate?: (textIds: string[]) => void;
+}) {
   const queryClient = useQueryClient();
   const [downloadError, setDownloadError] = useState('');
 
@@ -48,7 +52,12 @@ export function CsvPanel({ token, onAuthExpired }: { token: string; onAuthExpire
         </button>
       </div>
       {downloadError ? <p className="import-error standalone-error">{downloadError}</p> : null}
-      <CsvImportPanel token={token} onAuthExpired={onAuthExpired} onImported={invalidateImportQueries} />
+      <CsvImportPanel
+        token={token}
+        onAuthExpired={onAuthExpired}
+        onImported={invalidateImportQueries}
+        onGenerate={onGenerate}
+      />
     </section>
   );
 }
@@ -56,11 +65,13 @@ export function CsvPanel({ token, onAuthExpired }: { token: string; onAuthExpire
 function CsvImportPanel({
   token,
   onAuthExpired,
-  onImported
+  onImported,
+  onGenerate
 }: {
   token: string;
   onAuthExpired: () => void;
   onImported: () => void;
+  onGenerate?: (textIds: string[]) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ImportPreviewRow[]>([]);
@@ -141,10 +152,17 @@ function CsvImportPanel({
 
       {error ? <p className="import-error">{error}</p> : null}
       {result ? (
-        <p className="import-summary">
-          Importação concluída: {result.created} criados, {result.updated} atualizados
-          {result.errors.length > 0 ? `, ${result.errors.length} linhas ignoradas` : ''}.
-        </p>
+        <div className="import-complete-row">
+          <p className="import-summary">
+            Importação concluída: {result.created} criados, {result.updated} atualizados
+            {result.errors.length > 0 ? `, ${result.errors.length} linhas ignoradas` : ''}.
+          </p>
+          {result.imported_text_ids.length > 0 && onGenerate ? (
+            <button type="button" onClick={() => onGenerate(result.imported_text_ids)}>
+              Gerar traduções e áudios
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       {preview.length > 0 ? <ImportPreviewTable rows={preview} /> : null}
