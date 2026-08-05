@@ -2,13 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { PublicRoute } from '@ecosdelisboa/shared';
 import {
+  activeLeg,
   advanceRouteSession,
   bridgesAfterActiveText,
+  completedLegPositions,
   confirmArrival,
   initialRouteSession,
   markListening,
   registerLocation,
   restoreRouteSession,
+  setRouteApproach,
   startRouteSession
 } from './routeSession.ts';
 
@@ -35,16 +38,28 @@ const route: PublicRoute = {
 test('moves through the explicit visitor phases without implicit audio playback', () => {
   let session = startRouteSession(initialRouteSession(route));
   assert.equal(session.phase, 'going_to_first_text');
+  session = setRouteApproach(session, {
+    geometry: { type: 'LineString', coordinates: [[-9.11, 38.69], [-9.1, 38.7]] },
+    distance_m: 220,
+    duration_s: 170,
+    provider: 'stub',
+    destination_segment_id: 'one'
+  });
+  assert.equal(session.approach_leg?.distance_m, 220);
+  assert.equal(activeLeg(route, session)?.distance_m, 220);
   session = confirmArrival(route, session);
   assert.equal(session.phase, 'arrived');
+  assert.equal(session.approach_leg, null);
   session = markListening(session);
   assert.equal(session.phase, 'listening');
   session = advanceRouteSession(route, session);
   assert.equal(session.phase, 'walking');
   assert.equal(session.active_leg_position, 0);
+  assert.equal(activeLeg(route, session)?.distance_m, 111);
   assert.deepEqual(bridgesAfterActiveText(route, 0).map((bridge) => bridge.id), ['bridge']);
   session = confirmArrival(route, session);
   assert.equal(session.active_text_index, 1);
+  assert.deepEqual(completedLegPositions(route, session), [0]);
 });
 
 test('requires two accurate readings and rejects poor accuracy for automatic arrival', () => {

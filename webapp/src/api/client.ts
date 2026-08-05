@@ -215,6 +215,9 @@ export const api = {
       return { data: legacyMockRoute(mockRoutes.find((route) => route.id === id) ?? mockRoutes[0], lang), isMock: true };
     }
   },
+  calculateRouteApproach(id: string, location: { lat: number; lng: number }) {
+    return client.calculateRouteApproach(id, location);
+  },
   getRouteGpxUrl(id: string, lang: Lang) {
     return `${API_BASE}/api/v1/routes/${id}/gpx?lang=${encodeURIComponent(lang)}`;
   },

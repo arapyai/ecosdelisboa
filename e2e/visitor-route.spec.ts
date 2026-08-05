@@ -16,6 +16,20 @@ async function prepareVisitor(page: Page, route = publicRoute) {
     Object.defineProperty(window, '__audioPlayCalls', { get: () => MockAudio.playCalls });
   });
   await page.route('**/demotiles.maplibre.org/style.json', (request) => request.fulfill({ json: mapStyle }));
+  await page.route(`**/api/v1/routes/${route.id}/approach`, (request) => request.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      data: {
+        geometry: { type: 'LineString', coordinates: [[-9.14, 38.7], [route.segments[0].text.point.lng, route.segments[0].text.point.lat]] },
+        distance_m: 920,
+        duration_s: 690,
+        provider: 'stub',
+        destination_segment_id: route.segments[0].id
+      },
+      meta: {}
+    })
+  }));
   await page.route(new RegExp(`/api/v1/routes/${route.id}\\?`), (request) => request.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify({ data: route, meta: {} })
   }));
@@ -39,6 +53,7 @@ test('visitor downloads, starts, listens, walks and completes the narrative', as
   await page.getByRole('button', { name: 'Ouvir este texto' }).click();
   await expect(page.getByRole('button', { name: 'Ouvindo…' })).toBeVisible();
   await page.getByRole('button', { name: 'Continuar percurso' }).click();
+  await page.getByRole('button', { name: 'Expandir informações' }).click();
   await expect(page.getByRole('button', { name: /Entre na malha da Baixa/ })).toBeVisible();
   await page.getByRole('button', { name: 'Cheguei' }).click();
   await page.getByRole('button', { name: 'Ouvir este texto' }).click();
@@ -46,6 +61,26 @@ test('visitor downloads, starts, listens, walks and completes the narrative', as
   await expect(page.getByText('Percurso concluído')).toBeVisible();
   const session = await page.evaluate(() => JSON.parse(localStorage.getItem('ecos-route-session:route-e2e') ?? '{}'));
   expect(session.phase).toBe('completed');
+});
+
+test('accurate GPS calculates and persists the route to the first text', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'geolocation', { value: {
+      watchPosition: (success: PositionCallback) => {
+        success({ coords: { latitude: 38.7, longitude: -9.14, accuracy: 9 } } as GeolocationPosition);
+        return 1;
+      },
+      clearWatch: () => undefined
+    } });
+  });
+  await prepareVisitor(page);
+  await page.getByRole('button', { name: 'Começar percurso' }).click();
+  await expect.poll(() => page.evaluate(() => {
+    const session = JSON.parse(localStorage.getItem('ecos-route-session:route-e2e') ?? '{}');
+    return session.approach_leg?.distance_m;
+  })).toBe(920);
+  await expect(page.getByRole('button', { name: 'Recentralizar na minha localização' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cheguei' })).toBeVisible();
 });
 
 test('downloaded route remains available after the API network disappears', async ({ page }) => {

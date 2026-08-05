@@ -4,6 +4,7 @@ import {
   type PublicBridgeRouteSegment,
   type PublicRoute,
   type PublicTextRouteSegment,
+  type RouteApproach,
   type RouteSession,
   type RouteSessionPhase
 } from '@ecosdelisboa/shared';
@@ -43,6 +44,7 @@ export function initialRouteSession(route: PublicRoute, now = new Date()): Route
     phase: 'preview',
     active_text_index: 0,
     active_leg_position: null,
+    approach_leg: null,
     consecutive_arrival_readings: 0,
     updated_at: now.toISOString()
   };
@@ -52,6 +54,7 @@ export function startRouteSession(session: RouteSession, now = new Date()): Rout
   return updateSession(session, 'going_to_first_text', now, {
     active_text_index: 0,
     active_leg_position: null,
+    approach_leg: session.approach_leg ?? null,
     consecutive_arrival_readings: 0
   });
 }
@@ -63,12 +66,22 @@ export function confirmArrival(route: PublicRoute, session: RouteSession, now = 
   return updateSession(session, 'arrived', now, {
     active_text_index: targetIndex,
     active_leg_position: null,
+    approach_leg: null,
     consecutive_arrival_readings: 0
   });
 }
 
 export function markListening(session: RouteSession, now = new Date()): RouteSession {
   return updateSession(session, 'listening', now);
+}
+
+export function setRouteApproach(
+  session: RouteSession,
+  approach: RouteApproach,
+  now = new Date()
+): RouteSession {
+  if (session.phase !== 'going_to_first_text') return session;
+  return { ...session, approach_leg: approach, updated_at: now.toISOString() };
 }
 
 export function advanceRouteSession(route: PublicRoute, session: RouteSession, now = new Date()): RouteSession {
@@ -112,8 +125,15 @@ export function activeDestination(route: PublicRoute, session: RouteSession): Pu
 }
 
 export function activeLeg(route: PublicRoute, session: RouteSession) {
+  if (session.phase === 'going_to_first_text') return session.approach_leg ?? undefined;
   if (session.active_leg_position == null) return undefined;
   return route.legs?.find((leg) => leg.position === session.active_leg_position) ?? route.legs?.[session.active_leg_position];
+}
+
+export function completedLegPositions(route: PublicRoute, session: RouteSession): number[] {
+  return (route.legs ?? [])
+    .filter((leg) => leg.position < session.active_text_index)
+    .map((leg) => leg.position);
 }
 
 export function distanceMeters(a: Pick<VisitorLocation, 'lat' | 'lng'>, b: { lat: number; lng: number }) {
