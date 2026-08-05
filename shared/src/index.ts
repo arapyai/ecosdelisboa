@@ -181,6 +181,10 @@ export interface AdminUser {
   is_active: boolean;
 }
 
+export interface AdminManagedUser extends AdminUser {
+  created_at: string;
+}
+
 export interface AdminLoginResponse {
   access_token: string;
   token_type: 'bearer';

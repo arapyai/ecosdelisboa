@@ -28,6 +28,7 @@ import { CsvPanel } from './csv/CsvPanel';
 import { PronunciationPanel } from './pronunciation/PronunciationPanel';
 import { TextFilters, filterResourceItems } from './texts/TextFilters';
 import { TextVersionsEditor } from './texts/TextVersionsEditor';
+import { UsersPanel } from './users/UsersPanel';
 import { ResourceFields } from './resources/ResourceFields';
 import { columnsFor, draftFromItem, emptyDraft, formatCell, serializeDraft } from './resources/resourceModel';
 import type {
@@ -52,6 +53,7 @@ const sectionLabels: Record<Section, string> = {
   texts: resourceLabels.texts,
   routes: resourceLabels.routes,
   pronunciation: 'Pronúncias',
+  users: 'Usuários',
 };
 
 
@@ -166,7 +168,10 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
       {section === 'pronunciation' ? (
         <PronunciationPanel token={token} onAuthExpired={onLogout} />
       ) : null}
-      {section !== 'csv' && section !== 'pronunciation' ? (
+      {section === 'users' && me.data ? (
+        <UsersPanel currentUser={me.data} token={token} onAuthExpired={onLogout} />
+      ) : null}
+      {section !== 'csv' && section !== 'pronunciation' && section !== 'users' ? (
         <ResourcePanel token={token} resource={section} onAuthExpired={onLogout} />
       ) : null}
     </main>
