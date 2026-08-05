@@ -4,6 +4,7 @@ from uuid import UUID
 from xml.sax.saxutils import escape
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -15,8 +16,15 @@ from app.services.editorial_translations import (
     resolve_language_selection,
     select_approved_translation,
 )
+from app.services.routing import DirectionsProvider, RoutingError, create_directions_provider
 
 router = APIRouter(prefix="/api/v1/routes", tags=["routes"])
+directions_provider_factory = create_directions_provider
+
+
+class RouteApproachRequest(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
 
 
 def resolve_text_content(text: Text, lang: str, source_language: str) -> str:
@@ -339,6 +347,23 @@ def get_published_route(route_id: UUID, db: Session) -> Route:
     return route
 
 
+def first_text_segment(route: Route) -> RouteItem:
+    segment = next(
+        (
+            item
+            for item in sorted(route.items, key=lambda candidate: candidate.position)
+            if item.kind == RouteSegmentKind.TEXT.value and item.text is not None
+        ),
+        None,
+    )
+    if segment is None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "route_has_no_texts", "message": "Route has no narrative texts"},
+        )
+    return segment
+
+
 @router.get("")
 def list_routes(
     db: Annotated[Session, Depends(get_db)],
@@ -384,6 +409,42 @@ def get_route(
     payload["items_deprecated"] = True
     payload["legs"] = [serialize_route_leg(leg) for leg in route.legs]
     return envelope(payload, EnvelopeMeta(extra={"lang": selected_language}))
+
+
+@router.post("/{route_id}/approach")
+def calculate_route_approach(
+    route_id: UUID,
+    payload: RouteApproachRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict[str, object]:
+    route = get_published_route(route_id, db)
+    destination = first_text_segment(route)
+    try:
+        provider: DirectionsProvider = directions_provider_factory()
+        result = provider.directions(
+            [
+                (payload.lng, payload.lat),
+                (destination.text.point.lng, destination.text.point.lat),
+            ]
+        )
+    except RoutingError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "routing_unavailable",
+                "message": "Pedestrian approach route is temporarily unavailable",
+            },
+        ) from exc
+    return envelope(
+        {
+            "geometry": result.geometry,
+            "distance_m": result.distance_m,
+            "duration_s": result.duration_s,
+            "provider": result.provider,
+            "destination_segment_id": str(destination.id),
+        },
+        EnvelopeMeta(),
+    )
 
 
 @router.get("/{route_id}/gpx")

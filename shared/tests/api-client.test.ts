@@ -71,6 +71,36 @@ test('route client sends language and unwraps narrative route envelopes', async 
   assert.equal(routes[0].title, 'From the Tagus');
 });
 
+test('route client requests an ephemeral pedestrian approach', async () => {
+  let requested = '';
+  let requestInit: RequestInit | undefined;
+  globalThis.fetch = ((input, init) => {
+    requested = String(input);
+    requestInit = init;
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({
+        data: {
+          geometry: { type: 'LineString', coordinates: [[-9.15, 38.71], [-9.14, 38.72]] },
+          distance_m: 245,
+          duration_s: 180,
+          provider: 'stub',
+          destination_segment_id: 'segment-1'
+        },
+        meta: {}
+      })
+    } as Response);
+  }) as typeof fetch;
+
+  const client = new ApiClient('https://api.example.test');
+  const approach = await client.calculateRouteApproach('route-1', { lat: 38.71, lng: -9.15 });
+
+  assert.equal(requested, 'https://api.example.test/api/v1/routes/route-1/approach');
+  assert.equal(requestInit?.method, 'POST');
+  assert.equal(requestInit?.body, JSON.stringify({ lat: 38.71, lng: -9.15 }));
+  assert.equal(approach.destination_segment_id, 'segment-1');
+});
+
 test('ApiError exposes structured publication readiness', async () => {
   globalThis.fetch = (() =>
     Promise.resolve({

@@ -135,6 +135,19 @@ export interface RouteLeg {
   provider: string;
 }
 
+export interface RouteApproachRequest {
+  lat: number;
+  lng: number;
+}
+
+export interface RouteApproach {
+  geometry: RouteLeg['geometry'];
+  distance_m: number;
+  duration_s: number;
+  provider: string;
+  destination_segment_id: string;
+}
+
 export interface PublicRoute {
   id: string;
   slug?: string | null;
@@ -461,6 +474,7 @@ export interface RouteSession {
   phase: RouteSessionPhase;
   active_text_index: number;
   active_leg_position?: number | null;
+  approach_leg?: RouteApproach | null;
   consecutive_arrival_readings: number;
   updated_at: string;
 }
@@ -556,6 +570,16 @@ export class ApiClient {
 
   async getRoute(routeId: string, lang?: SupportedLanguage): Promise<PublicRoute> {
     return this.get<PublicRoute>(withQuery(`/api/v1/routes/${routeId}`, { lang }));
+  }
+
+  async calculateRouteApproach(
+    routeId: string,
+    location: RouteApproachRequest
+  ): Promise<RouteApproach> {
+    return this.post<RouteApproach>(
+      `/api/v1/routes/${routeId}/approach`,
+      location as unknown as RequestBody
+    );
   }
 
   async listAdminRoutes(token: string): Promise<AdminRoute[]> {
