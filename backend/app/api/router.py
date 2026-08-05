@@ -7,6 +7,7 @@ from app.api.routes.admin_entity_translations import router as admin_entity_tran
 from app.api.routes.admin_import import router as admin_import_router
 from app.api.routes.admin_languages import router as admin_languages_router
 from app.api.routes.admin_pronunciation import router as admin_pronunciation_router
+from app.api.routes.admin_users import router as admin_users_router
 from app.api.routes.health import router as health_router
 from app.api.routes.public_authors import router as authors_router
 from app.api.routes.public_languages import router as languages_router
@@ -23,6 +24,7 @@ api_router.include_router(admin_entity_translations_router)
 api_router.include_router(admin_import_router)
 api_router.include_router(admin_languages_router)
 api_router.include_router(admin_pronunciation_router)
+api_router.include_router(admin_users_router)
 api_router.include_router(authors_router)
 api_router.include_router(points_router)
 api_router.include_router(routes_router)
