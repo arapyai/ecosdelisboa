@@ -1,96 +1,45 @@
 import {
-  ApiClient,
+  type AdminAudioFile,
   type AdminAuthor,
+  type AdminLanguage,
   type AdminLoginResponse,
   type AdminPoint,
   type AdminRoute,
-  type AdminRouteItem,
   type AdminText,
-  type AdminUser
+  type AdminTranslation,
+  type AdminUser,
+  type AdminVoice,
 } from '@ecosdelisboa/shared';
-import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import './styles.css';
-
-type Resource = 'authors' | 'points' | 'texts' | 'routes';
-type ResourceItem = AdminAuthor | AdminPoint | AdminText | AdminRoute;
-type DraftValue = string | number | boolean | null | AdminRouteItem[];
-type Draft = Record<string, DraftValue>;
-type FieldOption = { value: string; label: string };
-type FieldConfig = {
-  name: string;
-  label: string;
-  type: 'text' | 'textarea' | 'checkbox' | 'number' | 'url' | 'select' | 'route-items';
-  options?: FieldOption[];
-  placeholder?: string;
-  min?: number;
-  max?: number;
-  step?: number | 'any';
-};
-type FieldContext = {
-  authors: AdminAuthor[];
-  authorsReady: boolean;
-  points: AdminPoint[];
-  pointsReady: boolean;
-};
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
-const client = new ApiClient(API_BASE);
-const queryClient = new QueryClient();
-const TOKEN_KEY = 'ecosdelisboa.admin.token';
-const autoSyncQueryOptions = {
-  refetchOnWindowFocus: true,
-  refetchOnReconnect: true
-};
-
-const mockAuthors: AdminAuthor[] = [
-  { id: 'author-pessoa', name: 'Fernando Pessoa', bio_pt: 'Poeta', birth_year: 1888, death_year: 1935 },
-  { id: 'author-saramago', name: 'Jose Saramago', bio_pt: 'Romancista', birth_year: 1922, death_year: 2010 }
-];
-
-const mockPoints: AdminPoint[] = [
-  {
-    id: 'point-chiado',
-    title_pt: 'Chiado',
-    address: 'Largo do Chiado',
-    neighborhood: 'Chiado',
-    lat: 38.7107,
-    lng: -9.1439
-  },
-  {
-    id: 'point-alfama',
-    title_pt: 'Alfama',
-    address: 'Miradouro de Santa Luzia',
-    neighborhood: 'Alfama',
-    lat: 38.7117,
-    lng: -9.1304
-  }
-];
-
-const mockTexts: AdminText[] = [
-  {
-    id: 'text-chiado',
-    point_id: 'point-chiado',
-    author_id: 'author-pessoa',
-    content_pt: 'Aqui a cidade tem passos de escritório, café e fantasma.',
-    source_work: 'Fragmento demonstrativo',
-    source_year: 2026,
-    content_type: 'prose'
-  }
-];
-
-const mockRoutes: AdminRoute[] = [
-  {
-    id: 'route-baixa',
-    title_pt: 'Baixa Literaria',
-    description_pt: 'Percurso pelo centro',
-    is_published: true,
-    estimated_distance_m: 1800,
-    estimated_duration_s: 3300,
-    items: [{ position: 1, point_id: 'point-chiado' }]
-  }
-];
+import { fallbackUnlessAuth, isAuthError, redirectIfAuthError } from './adminApi';
+import {
+  ENABLE_MOCKS,
+  TOKEN_KEY,
+  autoSyncQueryOptions,
+  client,
+  queryClient
+} from './adminConfig';
+import { fallbackFor, fallbackLanguages, mockAudioFiles, mockAuthors, mockPoints, mockTexts, mockTranslations } from './adminMocks';
+import { CsvPanel } from './csv/CsvPanel';
+import { BatchJobTray } from './batches/BatchJobTray';
+import { PronunciationPanel } from './pronunciation/PronunciationPanel';
+import { TextFilters, filterResourceItems } from './texts/TextFilters';
+import { TextVersionsEditor } from './texts/TextVersionsEditor';
+import { TextsPanel } from './texts/TextsPanel';
+import { UsersPanel } from './users/UsersPanel';
+import { ResourceFields } from './resources/ResourceFields';
+import { columnsFor, draftFromItem, emptyDraft, formatCell, serializeDraft } from './resources/resourceModel';
+import type {
+  Draft,
+  FieldContext,
+  Resource,
+  ResourceItem,
+  Section
+} from './adminTypes';
 
 const resourceLabels: Record<Resource, string> = {
   authors: 'Autores',
@@ -99,47 +48,18 @@ const resourceLabels: Record<Resource, string> = {
   routes: 'Percursos'
 };
 
-function fallbackFor(resource: Resource): ResourceItem[] {
-  if (resource === 'authors') return mockAuthors;
-  if (resource === 'points') return mockPoints;
-  if (resource === 'texts') return mockTexts;
-  return mockRoutes;
-}
+const sectionLabels: Record<Section, string> = {
+  csv: 'CSV',
+  authors: resourceLabels.authors,
+  points: resourceLabels.points,
+  texts: resourceLabels.texts,
+  routes: resourceLabels.routes,
+  pronunciation: 'Pronúncias',
+  users: 'Usuários',
+};
 
-function emptyDraft(resource: Resource): Draft {
-  if (resource === 'authors') {
-    return { name: '', bio_pt: '', birth_year: '', death_year: '', photo_url: '', elevenlabs_voice_id: '' };
-  }
-  if (resource === 'points') {
-    return {
-      title_pt: '',
-      address: '',
-      neighborhood: '',
-      lat: 38.7223,
-      lng: -9.1393
-    };
-  }
-  if (resource === 'texts') {
-    return {
-      point_id: '',
-      author_id: '',
-      content_pt: '',
-      source_work: '',
-      source_year: '',
-      content_type: 'prose'
-    };
-  }
-  return {
-    title_pt: '',
-    description_pt: '',
-    cover_image_url: '',
-    difficulty: 'easy',
-    is_published: false,
-    estimated_distance_m: '',
-    estimated_duration_s: '',
-    items: []
-  };
-}
+
+
 
 function AdminApp() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? '');
@@ -151,6 +71,7 @@ function AdminApp() {
 
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
+    queryClient.clear();
     setToken('');
   }
 
@@ -162,7 +83,7 @@ function AdminApp() {
 }
 
 function Login({ onLogin }: { onLogin: (token: string) => void }) {
-  const [email, setEmail] = useState('admin@example.com');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const mutation = useMutation({
@@ -184,15 +105,20 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
   return (
     <main className="login-screen">
       <section className="login-panel">
-        <span>Login Admin</span>
-        <h1>Lisboa por Outros</h1>
+        <div className="admin-brand">
+          <img src="/branding/literary-map-icon.png" alt="" />
+          <div>
+            <span>Administração</span>
+            <h1>Lisboa por Outros</h1>
+          </div>
+        </div>
         <form onSubmit={submit}>
           <label>
             Email
             <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" />
           </label>
           <label>
-            Password
+            Senha
             <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" />
           </label>
           {error ? <p className="form-error">{error}</p> : null}
@@ -206,7 +132,9 @@ function Login({ onLogin }: { onLogin: (token: string) => void }) {
 }
 
 function Dashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
-  const [resource, setResource] = useState<Resource>('authors');
+  const [section, setSection] = useState<Section>('authors');
+  const [importedTextIds, setImportedTextIds] = useState<string[]>([]);
+  const [reviewBatchId, setReviewBatchId] = useState<string>();
   const me = useQuery({
     queryKey: ['me', token],
     queryFn: () => client.get<AdminUser>('/api/v1/admin/auth/me', token),
@@ -214,16 +142,25 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
     retry: false
   });
 
+  useEffect(() => {
+    if (isAuthError(me.error)) onLogout();
+  }, [me.error, onLogout]);
+
   return (
     <main className="admin-shell">
       <aside className="sidebar">
-        <span>Admin</span>
-        <h1>Lisboa por Outros</h1>
+        <div className="admin-brand">
+          <img src="/branding/literary-map-icon.png" alt="" />
+          <div>
+            <span>Admin</span>
+            <h1>Lisboa por Outros</h1>
+          </div>
+        </div>
         <p>{me.data?.email ?? 'Sessão autenticada'}</p>
         <nav>
-          {(Object.keys(resourceLabels) as Resource[]).map((key) => (
-            <button key={key} className={resource === key ? 'active' : ''} type="button" onClick={() => setResource(key)}>
-              {resourceLabels[key]}
+          {(Object.keys(sectionLabels) as Section[]).map((key) => (
+            <button key={key} className={section === key ? 'active' : ''} type="button" onClick={() => setSection(key)}>
+              {sectionLabels[key]}
             </button>
           ))}
         </nav>
@@ -231,21 +168,76 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           Sair
         </button>
       </aside>
-      <ResourcePanel token={token} resource={resource} />
+      {section === 'csv' ? (
+        <CsvPanel
+          token={token}
+          onAuthExpired={onLogout}
+          onGenerate={(textIds) => {
+            setImportedTextIds(textIds);
+            setSection('texts');
+          }}
+        />
+      ) : null}
+      {section === 'pronunciation' ? (
+        <PronunciationPanel token={token} onAuthExpired={onLogout} />
+      ) : null}
+      {section === 'users' && me.data ? (
+        <UsersPanel currentUser={me.data} token={token} onAuthExpired={onLogout} />
+      ) : null}
+      {section === 'texts' ? (
+        <TextsPanel
+          token={token}
+          onAuthExpired={onLogout}
+          importedTextIds={importedTextIds}
+          reviewBatchId={reviewBatchId}
+          onImportedTextIdsConsumed={() => setImportedTextIds([])}
+        />
+      ) : null}
+      {section !== 'csv' && section !== 'pronunciation' && section !== 'users' && section !== 'texts' ? (
+        <ResourcePanel token={token} resource={section} onAuthExpired={onLogout} />
+      ) : null}
+      <BatchJobTray
+        token={token}
+        onAuthExpired={onLogout}
+        onReview={(batchId) => {
+          setReviewBatchId(batchId);
+          setSection('texts');
+        }}
+      />
     </main>
   );
 }
 
-function ResourcePanel({ token, resource }: { token: string; resource: Resource }) {
+function ResourcePanel({
+  token,
+  resource,
+  onAuthExpired
+}: {
+  token: string;
+  resource: Resource;
+  onAuthExpired: () => void;
+}) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<ResourceItem | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft(resource));
   const [isLocal, setIsLocal] = useState(false);
+  const [textSearch, setTextSearch] = useState('');
+  const [textLanguage, setTextLanguage] = useState('');
+  const [textStatus, setTextStatus] = useState('');
+  const [textOrigin, setTextOrigin] = useState('');
+  const [textAudio, setTextAudio] = useState('');
+  const [textGap, setTextGap] = useState('');
 
   useEffect(() => {
     setEditing(null);
     setDraft(emptyDraft(resource));
     setIsLocal(false);
+    setTextSearch('');
+    setTextLanguage('');
+    setTextStatus('');
+    setTextOrigin('');
+    setTextAudio('');
+    setTextGap('');
   }, [resource]);
 
   const query = useQuery({
@@ -254,7 +246,8 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
       try {
         setIsLocal(false);
         return await client.get<ResourceItem[]>(`/api/v1/admin/${resource}`, token);
-      } catch {
+      } catch (cause) {
+        fallbackUnlessAuth(cause, null, onAuthExpired);
         setIsLocal(true);
         return fallbackFor(resource);
       }
@@ -267,8 +260,8 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
     queryFn: async () => {
       try {
         return await client.get<AdminAuthor[]>('/api/v1/admin/authors', token);
-      } catch {
-        return mockAuthors;
+      } catch (cause) {
+        return fallbackUnlessAuth(cause, mockAuthors, onAuthExpired);
       }
     },
     ...autoSyncQueryOptions
@@ -279,20 +272,80 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
     queryFn: async () => {
       try {
         return await client.get<AdminPoint[]>('/api/v1/admin/points', token);
-      } catch {
-        return mockPoints;
+      } catch (cause) {
+        return fallbackUnlessAuth(cause, mockPoints, onAuthExpired);
       }
     },
     ...autoSyncQueryOptions
   });
 
-  const items = query.data ?? fallbackFor(resource);
-  const metrics = useMemo(() => items.length, [items.length]);
+  const languagesQuery = useQuery({
+    queryKey: ['admin-languages', token],
+    queryFn: async () =>
+      client
+        .get<AdminLanguage[]>('/api/v1/admin/languages?active=true', token)
+        .catch((cause) => fallbackUnlessAuth(cause, fallbackLanguages, onAuthExpired)),
+    enabled: resource === 'texts',
+    ...autoSyncQueryOptions
+  });
+
+  const translationsQuery = useQuery({
+    queryKey: ['admin-translations', token],
+    queryFn: async () =>
+      client
+        .get<AdminTranslation[]>('/api/v1/admin/translations', token)
+        .catch((cause) => fallbackUnlessAuth(cause, mockTranslations, onAuthExpired)),
+    enabled: resource === 'texts',
+    ...autoSyncQueryOptions
+  });
+
+  const voicesQuery = useQuery({
+    queryKey: ['admin-voices', token],
+    queryFn: async () =>
+      client
+        .get<AdminVoice[]>('/api/v1/admin/voices', token)
+        .catch((cause) => fallbackUnlessAuth(cause, [], onAuthExpired)),
+    enabled: resource === 'texts',
+    ...autoSyncQueryOptions
+  });
+
+  const audioQuery = useQuery({
+    queryKey: ['admin-audio', token],
+    queryFn: async () =>
+      client
+        .get<AdminAudioFile[]>('/api/v1/admin/audio', token)
+        .catch((cause) => fallbackUnlessAuth(cause, mockAudioFiles, onAuthExpired)),
+    enabled: resource === 'texts',
+    ...autoSyncQueryOptions
+  });
+
+  const items = query.data ?? (ENABLE_MOCKS ? fallbackFor(resource) : []);
+  const languages = languagesQuery.data ?? (ENABLE_MOCKS ? fallbackLanguages : []);
+  const translations = translationsQuery.data ?? (ENABLE_MOCKS ? mockTranslations : []);
+  const voices = voicesQuery.data ?? [];
+  const audios = audioQuery.data ?? (ENABLE_MOCKS ? mockAudioFiles : []);
+  const sourceLanguage = languages.find((language) => language.is_source)?.code ?? 'pt';
+  const filteredItems = useMemo(
+    () =>
+      filterResourceItems(resource, items, {
+        textSearch,
+        textLanguage,
+        textStatus,
+        textOrigin,
+        textAudio,
+        textGap,
+        translations,
+        audios,
+        sourceLanguage
+      }),
+    [audios, items, resource, sourceLanguage, textAudio, textGap, textLanguage, textOrigin, textSearch, textStatus, translations]
+  );
+  const metrics = useMemo(() => filteredItems.length, [filteredItems.length]);
   const fieldContext = useMemo<FieldContext>(
     () => ({
-      authors: authorsQuery.data ?? mockAuthors,
+      authors: authorsQuery.data ?? (ENABLE_MOCKS ? mockAuthors : []),
       authorsReady: Boolean(authorsQuery.data),
-      points: pointsQuery.data ?? mockPoints,
+      points: pointsQuery.data ?? (ENABLE_MOCKS ? mockPoints : []),
       pointsReady: Boolean(pointsQuery.data)
     }),
     [authorsQuery.data, pointsQuery.data]
@@ -301,43 +354,54 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = serializeDraft(resource, draft);
-      if (isLocal) return payload as unknown as ResourceItem;
       if (editing) {
         return client.put<ResourceItem>(`/api/v1/admin/${resource}/${editing.id}`, payload, token);
       }
       return client.post<ResourceItem>(`/api/v1/admin/${resource}`, payload, token);
     },
     onSuccess: (saved) => {
+      const savedItem = editing ? ({ ...editing, ...saved, id: editing.id } as ResourceItem) : saved;
       queryClient.setQueryData<ResourceItem[]>(['admin-resource', resource, token], (current) => {
-        const list = current ?? fallbackFor(resource);
-        if (editing) return list.map((item) => (item.id === editing.id ? { ...item, ...saved, id: editing.id } : item));
-        return [{ ...saved, id: `local-${Date.now()}` }, ...list];
+        const list = current ?? (ENABLE_MOCKS ? fallbackFor(resource) : []);
+        if (editing) return list.map((item) => (item.id === editing.id ? savedItem : item));
+        return [savedItem, ...list];
       });
-      syncRelationshipOptions(saved);
+      syncRelationshipOptions(savedItem);
       invalidateRelatedQueries();
+      if (resource === 'texts') {
+        setEditing(savedItem);
+        setDraft(draftFromItem(resource, savedItem));
+        return;
+      }
       setEditing(null);
       setDraft(emptyDraft(resource));
+    },
+    onError: (cause) => {
+      redirectIfAuthError(cause, onAuthExpired);
     }
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      if (!isLocal) await client.delete<{ deleted: boolean }>(`/api/v1/admin/${resource}/${id}`, token);
+      await client.delete<{ deleted: boolean }>(`/api/v1/admin/${resource}/${id}`, token);
       return id;
     },
     onSuccess: (id) => {
       queryClient.setQueryData<ResourceItem[]>(['admin-resource', resource, token], (current) =>
-        (current ?? fallbackFor(resource)).filter((item) => item.id !== id)
+        (current ?? (ENABLE_MOCKS ? fallbackFor(resource) : [])).filter((item) => item.id !== id)
       );
       removeRelationshipOption(id);
       invalidateRelatedQueries();
+    },
+    onError: (cause) => {
+      redirectIfAuthError(cause, onAuthExpired);
     }
   });
 
   function syncRelationshipOptions(saved: ResourceItem) {
     if (resource !== 'authors' && resource !== 'points') return;
     queryClient.setQueryData<ResourceItem[]>(['admin-options', resource, token], (current) => {
-      const list = current ?? fallbackFor(resource);
+      const list = current ?? (ENABLE_MOCKS ? fallbackFor(resource) : []);
       if (editing) return list.map((item) => (item.id === editing.id ? { ...item, ...saved, id: editing.id } : item));
       return [{ ...saved, id: saved.id ?? `local-${Date.now()}` }, ...list];
     });
@@ -346,7 +410,7 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
   function removeRelationshipOption(id: string) {
     if (resource !== 'authors' && resource !== 'points') return;
     queryClient.setQueryData<ResourceItem[]>(['admin-options', resource, token], (current) =>
-      (current ?? fallbackFor(resource)).filter((item) => item.id !== id)
+      (current ?? (ENABLE_MOCKS ? fallbackFor(resource) : [])).filter((item) => item.id !== id)
     );
   }
 
@@ -370,7 +434,7 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    saveMutation.mutate();
+    saveMutation.mutate(undefined);
   }
 
   return (
@@ -379,13 +443,55 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
         <div>
           <span>{resourceLabels[resource]}</span>
           <h2>{metrics} registos</h2>
-          {isLocal ? <p>Usando mocks locais enquanto o endpoint admin não responde.</p> : null}
+          {isLocal ? <p>Usando mocks locais por flag explícita de desenvolvimento.</p> : null}
         </div>
       </div>
+
+      {query.isError && !isLocal ? (
+        <div className="admin-state error-state">
+          <p>Não foi possível carregar {resourceLabels[resource].toLowerCase()}.</p>
+          <button type="button" onClick={() => query.refetch()}>Tentar novamente</button>
+        </div>
+      ) : null}
+
+      {resource === 'texts' ? (
+        <TextFilters
+          languages={languages}
+          language={textLanguage}
+          audio={textAudio}
+          gap={textGap}
+          origin={textOrigin}
+          search={textSearch}
+          status={textStatus}
+          onAudio={setTextAudio}
+          onGap={setTextGap}
+          onLanguage={setTextLanguage}
+          onOrigin={setTextOrigin}
+          onSearch={setTextSearch}
+          onStatus={setTextStatus}
+        />
+      ) : null}
 
       <form className="editor" onSubmit={submit}>
         <h3>{editing ? 'Editar' : 'Criar'} {resourceLabels[resource].toLowerCase()}</h3>
         <ResourceFields resource={resource} draft={draft} context={fieldContext} onDraft={setDraft} />
+        {resource === 'texts' ? (
+          <TextVersionsEditor
+            baseDraft={draft}
+            languages={languages}
+            text={editing as AdminText | null}
+            token={token}
+            translations={translations}
+            audios={audios}
+            voices={voices}
+            audioLoading={audioQuery.isLoading}
+            audioError={audioQuery.isError}
+            onAuthExpired={onAuthExpired}
+            onBaseDraft={setDraft}
+            onTranslationsChanged={() => translationsQuery.refetch()}
+            onAudiosChanged={() => audioQuery.refetch()}
+          />
+        ) : null}
         <div className="form-actions">
           <button type="submit">{editing ? 'Guardar' : 'Criar'}</button>
           <button
@@ -412,10 +518,10 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
+            {filteredItems.map((item) => (
               <tr key={item.id}>
                 {columnsFor(resource).map((column) => (
-                  <td key={column}>{formatCell(item, column)}</td>
+                  <td key={column}>{formatCell(item, column, { translations, audios, sourceLanguage })}</td>
                 ))}
                 <td>
                   <div className="row-actions">
@@ -436,349 +542,9 @@ function ResourcePanel({ token, resource }: { token: string; resource: Resource 
   );
 }
 
-function ResourceFields({
-  resource,
-  draft,
-  context,
-  onDraft
-}: {
-  resource: Resource;
-  draft: Draft;
-  context: FieldContext;
-  onDraft: (draft: Draft) => void;
-}) {
-  const fields = fieldsFor(resource, context);
 
-  useEffect(() => {
-    const nextDraft = { ...draft };
-    let changed = false;
 
-    fields.forEach((field) => {
-      if (field.type !== 'select') return;
-      if (field.name === 'author_id' && resource === 'texts' && !context.authorsReady) return;
-      if (field.name === 'point_id' && !context.pointsReady) return;
-      const currentValue = String(draft[field.name] ?? '');
-      if (!currentValue) return;
-      if (field.options?.some((option) => option.value === currentValue)) return;
-      nextDraft[field.name] = '';
-      changed = true;
-    });
 
-    const currentItems = routeItemsFromDraft(draft.items);
-    if (context.pointsReady && currentItems.length > 0) {
-      const pointIds = new Set(context.points.map((point) => point.id));
-      const nextItems = currentItems.map((item) => {
-        if (!item.point_id || pointIds.has(item.point_id)) return item;
-        changed = true;
-        return { ...item, point_id: null };
-      });
-      nextDraft.items = nextItems;
-    }
-
-    if (changed) onDraft(nextDraft);
-  }, [context.authorsReady, context.points, context.pointsReady, draft, fields, onDraft]);
-
-  return (
-    <div className="field-grid">
-      {fields.map((field) =>
-        field.type === 'route-items' ? (
-          <div key={field.name} className={fieldClassName(field)}>
-            <span>{field.label}</span>
-            <RouteItemsEditor
-              items={routeItemsFromDraft(draft[field.name])}
-              points={context.points}
-              onChange={(items) => onDraft({ ...draft, [field.name]: items })}
-            />
-          </div>
-        ) : (
-          <label key={field.name} className={fieldClassName(field)}>
-          {field.type === 'checkbox' ? (
-            <>
-              <input
-                checked={Boolean(draft[field.name])}
-                onChange={(event) => onDraft({ ...draft, [field.name]: event.target.checked })}
-                type="checkbox"
-              />
-              <span>{field.label}</span>
-            </>
-          ) : (
-            <>
-              <span>{field.label}</span>
-              {field.type === 'textarea' ? (
-                <textarea
-                  value={String(draft[field.name] ?? '')}
-                  placeholder={field.placeholder}
-                  onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })}
-                />
-              ) : field.type === 'select' ? (
-                <select
-                  value={String(draft[field.name] ?? '')}
-                  onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })}
-                >
-                  {selectOptions(field, draft).map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  value={String(draft[field.name] ?? '')}
-                  onChange={(event) => onDraft({ ...draft, [field.name]: event.target.value })}
-                  type={field.type}
-                  min={field.min}
-                  max={field.max}
-                  step={field.step}
-                  placeholder={field.placeholder}
-                />
-              )}
-            </>
-          )}
-          </label>
-        )
-      )}
-    </div>
-  );
-}
-
-function fieldsFor(resource: Resource, context: FieldContext): FieldConfig[] {
-  if (resource === 'authors') {
-    return [
-      { name: 'name', label: 'Nome', type: 'text' },
-      { name: 'bio_pt', label: 'Bio PT', type: 'textarea', placeholder: 'Resumo biográfico em português' },
-      { name: 'birth_year', label: 'Ano de nascimento', type: 'number', min: 0, max: 2100, step: 1 },
-      { name: 'death_year', label: 'Ano de morte', type: 'number', min: 0, max: 2100, step: 1 },
-      { name: 'photo_url', label: 'Foto URL', type: 'url' },
-      { name: 'elevenlabs_voice_id', label: 'Voz ElevenLabs', type: 'text', placeholder: 'ID da voz no ElevenLabs' }
-    ];
-  }
-  if (resource === 'points') {
-    return [
-      { name: 'title_pt', label: 'Título PT', type: 'text' },
-      { name: 'address', label: 'Morada', type: 'text' },
-      { name: 'neighborhood', label: 'Bairro', type: 'text' },
-      { name: 'lat', label: 'Latitude', type: 'number', min: -90, max: 90, step: 'any' },
-      { name: 'lng', label: 'Longitude', type: 'number', min: -180, max: 180, step: 'any' }
-    ];
-  }
-  if (resource === 'texts') {
-    return [
-      { name: 'point_id', label: 'Ponto', type: 'select', options: relationOptions(context.points, 'Selecione um ponto') },
-      { name: 'author_id', label: 'Autor', type: 'select', options: relationOptions(context.authors, 'Selecione um autor') },
-      { name: 'content_pt', label: 'Conteúdo PT', type: 'textarea', placeholder: 'Texto original em português' },
-      { name: 'source_work', label: 'Obra', type: 'text', placeholder: 'Nome da obra ou fonte' },
-      { name: 'source_year', label: 'Ano da obra', type: 'number', min: 0, max: 2100, step: 1 },
-      { name: 'content_type', label: 'Tipo', type: 'select', options: contentTypeOptions }
-    ];
-  }
-  return [
-    { name: 'title_pt', label: 'Título PT', type: 'text' },
-    { name: 'description_pt', label: 'Descrição PT', type: 'textarea', placeholder: 'Resumo curto do percurso' },
-    { name: 'cover_image_url', label: 'Imagem de capa URL', type: 'url' },
-    { name: 'difficulty', label: 'Dificuldade', type: 'select', options: difficultyOptions },
-    { name: 'is_published', label: 'Publicado', type: 'checkbox' },
-    { name: 'estimated_distance_m', label: 'Distância m', type: 'number', min: 0, step: 1 },
-    { name: 'estimated_duration_s', label: 'Duração s', type: 'number', min: 0, step: 1 },
-    { name: 'items', label: 'Etapas do percurso', type: 'route-items' }
-  ];
-}
-
-function fieldClassName(field: FieldConfig) {
-  if (field.type === 'checkbox') return 'checkbox-field';
-  if (field.type === 'textarea' || field.type === 'route-items') return 'textarea-field';
-  return undefined;
-}
-
-function RouteItemsEditor({
-  items,
-  points,
-  onChange
-}: {
-  items: AdminRouteItem[];
-  points: AdminPoint[];
-  onChange: (items: AdminRouteItem[]) => void;
-}) {
-  const pointOptions = relationOptions(points, 'Sem ponto cadastrado');
-
-  function addItem() {
-    onChange([
-      ...items,
-      {
-        position: items.length + 1,
-        point_id: '',
-        waypoint_lat: null,
-        waypoint_lng: null,
-        transition_text_pt: ''
-      }
-    ]);
-  }
-
-  function updateItem(index: number, nextItem: AdminRouteItem) {
-    onChange(items.map((item, currentIndex) => (currentIndex === index ? nextItem : item)));
-  }
-
-  function removeItem(index: number) {
-    onChange(items.filter((_, currentIndex) => currentIndex !== index).map((item, currentIndex) => ({ ...item, position: currentIndex + 1 })));
-  }
-
-  return (
-    <div className="route-items-editor">
-      {items.length === 0 ? <p>Nenhuma etapa adicionada.</p> : null}
-      {items.map((item, index) => (
-        <div className="route-item-row" key={item.id ?? index}>
-          <label>
-            Ordem
-            <input
-              min={1}
-              type="number"
-              value={item.position}
-              onChange={(event) => updateItem(index, { ...item, position: Number(event.target.value) })}
-            />
-          </label>
-          <label>
-            Ponto
-            <select
-              value={item.point_id ?? ''}
-              onChange={(event) => updateItem(index, { ...item, point_id: event.target.value || null })}
-            >
-              {selectOptions(
-                { name: 'point_id', label: 'Ponto', type: 'select', options: pointOptions },
-                { point_id: item.point_id ?? '' }
-              ).map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Latitude manual
-            <input
-              max={90}
-              min={-90}
-              step="any"
-              type="number"
-              value={item.waypoint_lat ?? ''}
-              onChange={(event) => updateItem(index, { ...item, waypoint_lat: nullableNumber(event.target.value) })}
-            />
-          </label>
-          <label>
-            Longitude manual
-            <input
-              max={180}
-              min={-180}
-              step="any"
-              type="number"
-              value={item.waypoint_lng ?? ''}
-              onChange={(event) => updateItem(index, { ...item, waypoint_lng: nullableNumber(event.target.value) })}
-            />
-          </label>
-          <label className="route-transition-field">
-            Texto de transição PT
-            <textarea
-              placeholder="Narração entre esta etapa e a seguinte"
-              value={item.transition_text_pt ?? ''}
-              onChange={(event) => updateItem(index, { ...item, transition_text_pt: event.target.value })}
-            />
-          </label>
-          <button className="danger" type="button" onClick={() => removeItem(index)}>
-            Remover
-          </button>
-        </div>
-      ))}
-      <button className="secondary-action" type="button" onClick={addItem}>
-        Adicionar etapa
-      </button>
-    </div>
-  );
-}
-
-const contentTypeOptions: FieldOption[] = [
-  { value: 'prose', label: 'Prosa' },
-  { value: 'poetry', label: 'Poesia' },
-  { value: 'lyrics', label: 'Letra de música' }
-];
-
-const difficultyOptions: FieldOption[] = [
-  { value: '', label: 'Sem dificuldade definida' },
-  { value: 'easy', label: 'Fácil' },
-  { value: 'medium', label: 'Média' },
-  { value: 'hard', label: 'Difícil' }
-];
-
-function relationOptions(items: Array<{ id: string; name?: string; title_pt?: string }>, emptyLabel: string): FieldOption[] {
-  return [
-    { value: '', label: emptyLabel },
-    ...items.map((item) => ({
-      value: item.id,
-      label: item.name ?? item.title_pt ?? item.id
-    }))
-  ];
-}
-
-function selectOptions(field: FieldConfig, draft: Draft): FieldOption[] {
-  return field.options ?? [];
-}
-
-function columnsFor(resource: Resource) {
-  if (resource === 'authors') return ['name', 'bio_pt', 'birth_year'];
-  if (resource === 'points') return ['title_pt', 'neighborhood', 'lat', 'lng'];
-  if (resource === 'texts') return ['content_pt', 'author_id', 'source_work', 'content_type'];
-  return ['title_pt', 'is_published', 'estimated_distance_m', 'estimated_duration_s'];
-}
-
-function formatCell(item: ResourceItem, column: string) {
-  const value = (item as unknown as Record<string, unknown>)[column];
-  if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
-  if (value === null || value === undefined || value === '') return '-';
-  return String(value).slice(0, 100);
-}
-
-function draftFromItem(resource: Resource, item: ResourceItem): Draft {
-  const draft = emptyDraft(resource);
-  Object.keys(draft).forEach((key) => {
-    const value = (item as unknown as Record<string, unknown>)[key];
-    if (value !== undefined) draft[key] = key === 'items' ? routeItemsFromDraft(value) : (value as DraftValue);
-  });
-  return draft;
-}
-
-function serializeDraft(resource: Resource, draft: Draft) {
-  const clean = Object.fromEntries(
-    Object.entries(draft).map(([key, value]) => {
-      if (value === '') return [key, null];
-      if (['birth_year', 'death_year', 'source_year', 'estimated_distance_m', 'estimated_duration_s', 'lat', 'lng'].includes(key)) {
-        return [key, value === null ? null : Number(value)];
-      }
-      return [key, value];
-    })
-  );
-
-  if (resource === 'routes') {
-    return {
-      ...clean,
-      items: routeItemsFromDraft(draft.items)
-        .map((item) => ({
-          ...item,
-          point_id: item.point_id || null,
-          waypoint_lat: item.waypoint_lat ?? null,
-          waypoint_lng: item.waypoint_lng ?? null,
-          transition_text_pt: item.transition_text_pt || null
-        }))
-        .filter((item) => item.point_id || (item.waypoint_lat !== null && item.waypoint_lng !== null))
-    };
-  }
-
-  return clean;
-}
-
-function routeItemsFromDraft(value: unknown): AdminRouteItem[] {
-  return Array.isArray(value) ? (value as AdminRouteItem[]) : [];
-}
-
-function nullableNumber(value: string) {
-  return value === '' ? null : Number(value);
-}
 
 createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={queryClient}>

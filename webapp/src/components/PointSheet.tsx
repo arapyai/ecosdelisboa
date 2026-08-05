@@ -8,13 +8,22 @@ interface Props {
   point: Point | null;
   lang: Lang;
   onClose: () => void;
+  selectedTextId?: string | null;
 }
 
-export function PointSheet({ point, lang, onClose }: Props) {
+export function PointSheet({ point, lang, onClose, selectedTextId }: Props) {
   if (!point) return null;
 
-  const text = point.texts?.[0];
-  const audio = point.audios?.find((item) => item.lang === lang) ?? point.audios?.[0];
+  const text = selectedTextId
+    ? point.texts?.find((t) => t.id === selectedTextId) || point.texts?.[0]
+    : point.texts?.[0];
+
+  const authorName = text?.author?.name ?? point.author?.name;
+  const availableAudios = text?.audios?.filter((item) => item.url) ?? [];
+  const audio =
+    availableAudios.find((item) => item.lang === lang) ??
+    availableAudios.find((item) => item.lang === 'pt') ??
+    availableAudios[0];
 
   return (
     <aside className="point-sheet" aria-label={localized(point, 'title', lang)}>
@@ -26,8 +35,8 @@ export function PointSheet({ point, lang, onClose }: Props) {
         {point.neighborhood ?? point.address}
       </div>
       <h2>{localized(point, 'title', lang)}</h2>
-      <p className="byline">{point.author?.name}</p>
-      <AudioPlayer track={audio} label={t(lang, 'listen')} />
+      <p className="byline">{authorName}</p>
+      {text ? <AudioPlayer track={audio} label={t(lang, 'listen')} unavailableLabel={t(lang, 'audioUnavailable')} /> : null}
       {text ? (
         <div className="text-block">
           <span>{t(lang, 'transcript')}</span>

@@ -1,5 +1,6 @@
 import {
   ApiClient,
+  type PublicAudioFile,
   type PublicAuthorSummary,
   type PublicDefaultVoice,
   type PublicPointDetail,
@@ -10,6 +11,7 @@ import type { Author, DefaultVoice, Lang, Point, Route } from '../types';
 import { mockAuthors, mockPoints, mockRoutes, mockVoice } from './mock';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+const ENABLE_MOCKS = import.meta.env.VITE_ENABLE_MOCKS === 'true' || import.meta.env.STORYBOOK === 'true';
 const client = new ApiClient(API_BASE);
 
 export interface PointQuery {
@@ -29,12 +31,33 @@ function toQuery(params: Record<string, string | number | undefined>) {
   return query ? `?${query}` : '';
 }
 
+function toAssetUrl(url?: string | null) {
+  if (!url) return '';
+  if (/^https?:\/\//.test(url)) return url;
+  return `${API_BASE}${url}`;
+}
+
+function normalizeAudio(audio: PublicAudioFile) {
+  return {
+    id: audio.id,
+    lang: audio.lang,
+    url: toAssetUrl(audio.public_url),
+    duration_sec: audio.duration_s ?? undefined,
+    voice_id: audio.voice_id
+  };
+}
+
 async function withMockFallback<T>(call: () => Promise<T>, fallback: T): Promise<{ data: T; isMock: boolean }> {
   try {
     return { data: await call(), isMock: false };
-  } catch {
+  } catch (cause) {
+    if (!ENABLE_MOCKS) throw cause;
     return { data: fallback, isMock: true };
   }
+}
+
+export function mocksEnabled() {
+  return ENABLE_MOCKS;
 }
 
 function normalizeAuthor(author: PublicAuthorSummary | Author): Author {
@@ -56,16 +79,12 @@ function normalizePoint(point: Point | PublicPointSummary | PublicPointDetail, l
     content_en: lang === 'en' && 'content' in text ? text.content : undefined,
     source_work: text.source_work,
     source_year: text.source_year,
-    content_type: text.content_type
+    content_type: text.content_type,
+    audios: text.audio_files?.map(normalizeAudio).filter((audio) => audio.url) ?? []
   }));
 
   const audios = backendPoint.texts?.flatMap((text) =>
-    text.audio_files?.map((audio) => ({
-      id: audio.id,
-      lang: audio.lang,
-      url: audio.public_url ?? '',
-      duration_sec: audio.duration_s ?? undefined
-    })) ?? []
+    text.audio_files?.map(normalizeAudio).filter((audio) => audio.url) ?? []
   );
 
   return {

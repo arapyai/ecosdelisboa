@@ -1,4 +1,3 @@
-import { Landmark } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { cityConfig } from '../config/city';
@@ -14,10 +13,12 @@ interface Props {
 export function Onboarding({ lang, onLanguage, onDone }: Props) {
   return (
     <main className="onboarding" style={{ '--onboarding-bg': `url("${cityConfig.assets.onboardingBackground}")` } as CSSProperties}>
-      <div className="brand-mark">
-        <Landmark size={34} />
+      <div className="onboarding-title">
+        <div className="brand-mark">
+          <img src="/branding/literary-map-icon.png" alt="" />
+        </div>
+        <h1>{cityConfig.appName}</h1>
       </div>
-      <h1>{cityConfig.appName}</h1>
       <p>{t(lang, 'tagline')}</p>
       <div className="language-card">
         <span>{t(lang, 'chooseLanguage')}</span>

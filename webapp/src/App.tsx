@@ -36,8 +36,11 @@ export function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="wordmark">
-          <strong>{cityConfig.appName}</strong>
-          <span>{t(lang, 'tagline')}</span>
+          <img src="/branding/literary-map-icon.png" alt="" />
+          <div>
+            <strong>{cityConfig.appName}</strong>
+            <span>{t(lang, 'tagline')}</span>
+          </div>
         </div>
         <nav className="main-nav" aria-label="Main">
           <button type="button" className={tab === 'map' ? 'active' : ''} onClick={() => setTab('map')}>

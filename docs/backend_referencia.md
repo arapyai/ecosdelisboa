@@ -66,9 +66,11 @@ Nota:
 - `point_id`
 - `author_id`
 - `content_pt`
+- `phonetic_content`
 - `source_work`
 - `source_year`
 - `content_type`
+- `origin`
 
 Relacoes:
 
@@ -81,14 +83,38 @@ Relacoes:
 - `text_id`
 - `lang`
 - `content`
+- `phonetic_content`
 - `status`
 - `auto_translated`
+- `origin`
 - `reviewed_by`
 - `reviewed_at`
 
 Restricao:
 
 - unicidade por `text_id + lang`
+
+#### `author_translations` e `route_translations`
+
+Autores e percursos seguem o mesmo contrato editorial de `translations`: idioma, `status`,
+`auto_translated`, `origin`, revisor e data de revisão. As tabelas guardam respectivamente a
+biografia do autor e o título/descrição do percurso, com unicidade por entidade + idioma.
+
+Os campos `authors.bio_pt`, `routes.title_pt` e `routes.description_pt` continuam sendo a fonte
+canônica e o fallback. Nome, datas, foto, voz e demais campos comuns não são duplicados nas
+traduções.
+
+#### `languages`
+
+- `code`
+- `locale`
+- `country_code`
+- `name`
+- `is_active`
+- `is_source`
+
+Uma lingua removida e desativada para preservar traducoes, audios e jobs historicos.
+Exatamente uma lingua ativa deve ser marcada como fonte.
 
 #### `audio_files`
 
@@ -112,8 +138,17 @@ Restricao:
 - `elevenlabs_id`
 - `name`
 - `preview_url`
+- `gender`
 - `is_default`
 - `synced_at`
+
+#### `voice_languages`
+
+- `voice_id`
+- `language_code`
+
+Uma voz pode estar associada a varias linguas. O pool default tambem pode conter varias
+vozes.
 
 #### `routes`
 
@@ -152,6 +187,7 @@ Regras:
 - `id`
 - `status`
 - `requested_by`
+- `preferred_voice_id`
 - `total`
 - `processed`
 - `succeeded`
@@ -165,13 +201,13 @@ Regras:
 | GET | `/health` | healthcheck |
 | GET | `/api/v1/points` | filtros por localizacao, idioma e autor dos textos |
 | GET | `/api/v1/points/{id}` | inclui autores derivados dos textos, textos e audios |
-| GET | `/api/v1/authors` | lista de autores |
-| GET | `/api/v1/authors/{id}` | detalhe do autor |
-| GET | `/api/v1/routes` | apenas publicados |
-| GET | `/api/v1/routes/{id}` | detalhe do percurso |
-| GET | `/api/v1/routes/{id}/gpx` | export de navegacao |
-| GET | `/api/v1/routes/{id}/podcast.rss` | feed de audio |
-| GET | `/api/v1/voices/default` | voz padrao exposta ao app |
+| GET | `/api/v1/authors?lang=en` | lista de autores; biografia aprovada ou fallback em português |
+| GET | `/api/v1/authors/{id}?lang=en` | detalhe do autor com o mesmo fallback |
+| GET | `/api/v1/routes?lang=en` | apenas publicados; título e descrição localizados |
+| GET | `/api/v1/routes/{id}?lang=en` | detalhe do percurso localizado |
+| GET | `/api/v1/routes/{id}/gpx?lang=en` | export de navegacao com título localizado |
+| GET | `/api/v1/routes/{id}/podcast.rss?lang=en` | feed com título e descrição localizados |
+| GET | `/api/v1/voices/default` | uma voz sorteada do pool default |
 
 ## API Admin
 
@@ -186,11 +222,18 @@ Regras:
 - CRUD de pontos em `/api/v1/admin/points`
 - CRUD de textos em `/api/v1/admin/texts`
 - CRUD de percursos em `/api/v1/admin/routes`
+- traduções de autor em `/api/v1/admin/authors/{id}/translations[/{lang}]`
+- traduções de percurso em `/api/v1/admin/routes/{id}/translations[/{lang}]`
 
 ### Importacao CSV
 
+- `GET /api/v1/admin/points/import/template`
 - `POST /api/v1/admin/points/import/preview`
 - `POST /api/v1/admin/points/import/confirm`
+
+O CSV cria ou reutiliza autores, pontos e textos, faz geocoding quando necessário e aceita
+traduções nas colunas `content_<código-do-idioma>` e `author_bio_<código-do-idioma>`. O contrato completo está em
+`docs/importacao_csv_conteudo.md`.
 
 ### Traducao e audio
 
@@ -199,16 +242,41 @@ Regras:
 - sincronizacao e configuracao de vozes em `/api/v1/admin/voices/*`
 - geracao, upload e jobs de audio em `/api/v1/admin/audio/*`
 
+Criar um job em lote retorna imediatamente com `status=pending`. O worker interno do backend
+processa a fila persistida fora da requisição, e o endpoint SSE lê o progresso gravado no banco.
+Jobs interrompidos em `running` são recuperados no startup sem repetir itens concluídos.
+
+O upload real usa multipart:
+
+```text
+PUT /api/v1/admin/audio/{text_id}/{lang}/upload
+Content-Type: multipart/form-data
+file=<arquivo.mp3>
+```
+
+O idioma precisa estar ativo. O backend valida extensão, MIME type, assinatura MP3 e o limite
+`AUDIO_UPLOAD_MAX_BYTES`; grava o arquivo e atualiza o único registro `audio_files` daquele
+`text_id + lang`.
+
+### Linguas e vozes
+
+- CRUD e ativacao em `/api/v1/admin/languages/*`
+- importacao em `POST /api/v1/admin/languages/import?replace=false`
+- associacao individual em `/api/v1/admin/voices/{voice_id}/languages/{language_code}`
+- pool default em `/api/v1/admin/voices/{voice_id}/default`
+- lista publica de linguas ativas em `GET /api/v1/languages`
+
 ## Exemplo de CSV de Importacao
 
 ```csv
 point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,content_pt,content_type,source_work,source_year
-Tabacaria do Rossio,Rossio 59,Baixa,Lisboa,Portugal,38.7134,-9.1392,Fernando Pessoa,"Nao sou nada...",poetry,Tabacaria,1928
-O Ramalhete,Rua das Janelas Verdes,Santos,Lisboa,Portugal,,,Eca de Queiros,"Ali vivia...",prose,Os Maias,1888
+Chiado,Largo do Chiado,Chiado,Lisboa,Portugal,,,Fernando Pessoa,"Aqui a cidade tem passos de escritorio, cafe e fantasma.",prose,Fragmento demonstrativo,2026
+Terreiro do Paco,Praca do Comercio,Baixa,Lisboa,Portugal,38.7076,-9.1365,Fernando Pessoa,"O rio abre a cidade como uma pagina larga.",poetry,Fragmento demonstrativo,2026
 ```
 
-Na importacao, `point_name/address` definem ou atualizam o ponto; `author_name` define o autor do texto criado ou atualizado para aquele ponto.
-Quando `lat_override` e `lng_override` estao vazios, o importador tenta geocodificar o endereco usando `address`, `neighborhood`, `city` e `country`.
+Na importação, `point_name/address/neighborhood` resolvem o ponto e `author_name` resolve o autor
+do texto. `lat_override/lng_override` podem ficar vazios quando existe endereço suficiente para
+geocoding; quando preenchidos, os dois valores devem ser enviados juntos.
 
 ## Integracoes Externas
 
@@ -218,20 +286,23 @@ Uso:
 
 - listar vozes disponiveis
 - gerar audio por `voice_id`
-- fazer preview de voz
+- expor a URL de preview recebida no catálogo de vozes
 
 Fluxo:
 
 1. backend envia texto aprovado para a API da ElevenLabs
 2. recebe o MP3
-3. faz upload para o R2
+3. grava o MP3 no filesystem local configurado
 4. atualiza `audio_files`
 
-### Google Gemini
+A escolha automatica segue: override explicito, voz do autor, pool da lingua, pool default e
+`ELEVENLABS_DEFAULT_VOICE_ID`.
 
-Uso:
+### Provider de tradução
 
-- gerar traducao automatica de texto literario com contexto do autor e da obra
+O provider é selecionado por `TRANSLATION_LLM_PROVIDER`; Claude é o padrão atual. A integração
+aceita endpoint, modelo e credencial configuráveis para não acoplar o domínio editorial a um
+único fornecedor.
 
 Regras:
 
@@ -246,14 +317,15 @@ punctuation style and register. Do not modernize or simplify.
 Return only the translated text.
 ```
 
-### Cloudflare R2
+### Storage de audio
 
 Uso:
 
-- armazenar MP3 gerado ou enviado manualmente
-- expor URL publica sem proxy da API
+- a implementacao atual grava em `AUDIO_STORAGE_DIR`
+- a API serve os arquivos pelo prefixo `AUDIO_PUBLIC_BASE_URL`
+- o diretório deve estar em volume persistente nos ambientes publicados
 
-Estrutura de keys esperada:
+Estrutura atual:
 
 ```text
 audio/
@@ -261,7 +333,20 @@ audio/
     pt.mp3
     en.mp3
     es.mp3
+  manual/
+    {text_id}/
+      pt.mp3
+      en.mp3
 ```
+
+Arquivos gerados mantêm o caminho histórico. Uploads manuais usam o prefixo `audio/manual/`,
+mas conservam o mesmo nome determinístico por texto e idioma. Repetir um upload sobrescreve a
+mesma chave; trocar de gerado para manual remove o arquivo gerado anterior somente depois de a
+base apontar para o novo arquivo.
+
+O campo `audio_files.r2_key` mantém o nome histórico por compatibilidade, mas atualmente guarda
+a chave relativa dentro do filesystem local. O procedimento conjunto de backup e restore está
+em `docs/runbook_audio_storage.md`.
 
 ### Railway
 
@@ -270,6 +355,9 @@ Uso:
 - hospedar API
 - fornecer PostgreSQL gerido
 - gerir variaveis de ambiente e deploy
+
+Os MP3 precisam de um volume persistente montado em `AUDIO_STORAGE_DIR`. Cloudflare R2 não faz
+parte da arquitetura atual.
 
 ## Regras de Implementacao
 

@@ -12,26 +12,58 @@ def test_expected_tables_exist() -> None:
         "audio_files",
         "audio_generation_job_items",
         "audio_generation_jobs",
+        "content_generation_batches",
+        "author_translations",
         "authors",
+        "languages",
         "points",
+        "pronunciation_dictionaries",
         "route_items",
         "routes",
+        "route_translations",
         "texts",
         "translations",
+        "translation_generation_job_items",
+        "translation_generation_jobs",
         "voices",
+        "voice_languages",
     }
 
 
-def test_translation_uniqueness_and_non_pt_constraint() -> None:
+def test_translation_uniqueness() -> None:
     translations = Base.metadata.tables["translations"]
     unique_constraints = [c for c in translations.constraints if isinstance(c, UniqueConstraint)]
-    check_constraints = [c for c in translations.constraints if isinstance(c, CheckConstraint)]
-
     assert any(
         {"text_id", "lang"} == {column.name for column in constraint.columns}
         for constraint in unique_constraints
     )
-    assert any("lang != 'pt'" in str(constraint.sqltext) for constraint in check_constraints)
+
+
+def test_entity_translation_uniqueness() -> None:
+    expected_constraints = {
+        "author_translations": {"author_id", "lang"},
+        "route_translations": {"route_id", "lang"},
+    }
+
+    for table_name, expected_columns in expected_constraints.items():
+        table = Base.metadata.tables[table_name]
+        unique_constraints = [
+            constraint
+            for constraint in table.constraints
+            if isinstance(constraint, UniqueConstraint)
+        ]
+        assert any(
+            expected_columns == {column.name for column in constraint.columns}
+            for constraint in unique_constraints
+        )
+
+
+def test_voice_languages_has_composite_primary_key() -> None:
+    association = Base.metadata.tables["voice_languages"]
+    assert {column.name for column in association.primary_key.columns} == {
+        "voice_id",
+        "language_code",
+    }
 
 
 def test_route_items_allow_point_or_free_waypoint() -> None:

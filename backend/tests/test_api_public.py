@@ -1,11 +1,22 @@
 from datetime import UTC, datetime
 
-from app.models.entities import AudioFile, Author, Point, Route, RouteItem, Text, Translation, Voice
-from app.models.enums import ContentType, SupportedLanguage, TranslationStatus
+from app.models.entities import (
+    AudioFile,
+    Author,
+    Language,
+    Point,
+    Route,
+    RouteItem,
+    Text,
+    Translation,
+    Voice,
+)
+from app.models.enums import ContentType, TranslationStatus
 
 
 def seed_public_data(db_session):
     voice = Voice(elevenlabs_id="voice-default", name="Default Voice", is_default=True)
+    voice.languages.append(db_session.get(Language, "en"))
     author = Author(name="Fernando Pessoa", bio_pt="Poeta", elevenlabs_voice_id="voice-default")
     point = Point(
         title_pt="Tabacaria do Rossio",
@@ -24,13 +35,13 @@ def seed_public_data(db_session):
     )
     translation = Translation(
         text=text,
-        lang=SupportedLanguage.EN,
+        lang="en",
         content="I am nothing.",
         status=TranslationStatus.APPROVED,
     )
     audio = AudioFile(
         text=text,
-        lang=SupportedLanguage.EN,
+        lang="en",
         public_url="https://audio.example/1/en.mp3",
         duration_s=31.0,
         voice_id="voice-default",
@@ -118,6 +129,37 @@ def test_get_default_voice_returns_current_voice(client, db_session) -> None:
 
     assert response.status_code == 200
     assert response.json()["data"]["elevenlabs_id"] == "voice-default"
+
+
+def test_list_voices_filters_by_lang(client, db_session) -> None:
+    pt_voice = Voice(elevenlabs_id="v-pt", name="PT Voice")
+    en_voice = Voice(elevenlabs_id="v-en", name="EN Voice")
+    fr_voice = Voice(elevenlabs_id="v-fr", name="FR Voice")
+    pt_voice.languages.append(db_session.get(Language, "pt"))
+    en_voice.languages.append(db_session.get(Language, "en"))
+    fr_voice.languages.append(db_session.get(Language, "fr"))
+    db_session.add_all([pt_voice, en_voice, fr_voice])
+    db_session.commit()
+
+    all_resp = client.get("/api/v1/voices")
+    assert all_resp.status_code == 200
+    assert len(all_resp.json()["data"]) == 3
+
+    pt_resp = client.get("/api/v1/voices?lang=pt")
+    assert len(pt_resp.json()["data"]) == 1
+    assert pt_resp.json()["data"][0]["elevenlabs_id"] == "v-pt"
+
+
+def test_list_active_languages(client, db_session) -> None:
+    db_session.get(Language, "de").is_active = False
+    db_session.commit()
+
+    response = client.get("/api/v1/languages")
+
+    assert response.status_code == 200
+    codes = {language["code"] for language in response.json()["data"]}
+    assert "pt" in codes
+    assert "de" not in codes
 
 
 def test_get_route_gpx_returns_xml_payload(client, db_session) -> None:

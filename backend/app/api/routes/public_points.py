@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.db import get_db
 from app.models.entities import AudioFile, Point, Text
-from app.models.enums import SupportedLanguage, TranslationStatus
+from app.models.enums import TranslationStatus
 from app.schemas.common import EnvelopeMeta, envelope
+from app.services.editorial_translations import resolve_language_selection
 
 router = APIRouter(prefix="/api/v1/points", tags=["points"])
 
@@ -18,15 +19,12 @@ def haversine_distance_m(lat1: float, lng1: float, lat2: float, lng2: float) -> 
     radius_m = 6_371_000
     d_lat = radians(lat2 - lat1)
     d_lng = radians(lng2 - lng1)
-    a = (
-        sin(d_lat / 2) ** 2
-        + cos(radians(lat1)) * cos(radians(lat2)) * sin(d_lng / 2) ** 2
-    )
+    a = sin(d_lat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(d_lng / 2) ** 2
     return 2 * radius_m * asin(sqrt(a))
 
 
-def resolve_text_content(text: Text, lang: SupportedLanguage) -> str:
-    if lang == SupportedLanguage.PT:
+def resolve_text_content(text: Text, lang: str, source_language: str) -> str:
+    if lang == source_language:
         return text.content_pt
 
     approved = next(
@@ -60,6 +58,7 @@ def serialize_point_summary(point: Point) -> dict[str, object]:
         "neighborhood": point.neighborhood,
         "lat": point.lat,
         "lng": point.lng,
+        "texts_count": len(point.texts),
     }
 
 
@@ -97,8 +96,12 @@ def list_points(
 def get_point(
     point_id: UUID,
     db: Annotated[Session, Depends(get_db)],
-    lang: SupportedLanguage = SupportedLanguage.PT,
+    lang: str | None = None,
 ) -> dict[str, object]:
+    try:
+        source_language, selected_language = resolve_language_selection(db, lang)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     point = db.scalar(
         select(Point)
         .options(
@@ -122,7 +125,7 @@ def get_point(
                 "name": text.author.name,
                 "photo_url": text.author.photo_url,
             },
-            "content": resolve_text_content(text, lang),
+            "content": resolve_text_content(text, selected_language, source_language),
             "content_pt": text.content_pt,
             "source_work": text.source_work,
             "source_year": text.source_year,
@@ -131,13 +134,13 @@ def get_point(
         }
         for text in point.texts
     ]
-    return envelope(payload, EnvelopeMeta(extra={"lang": lang.value}))
+    return envelope(payload, EnvelopeMeta(extra={"lang": selected_language}))
 
 
 def serialize_audio_file(audio: AudioFile) -> dict[str, object]:
     return {
         "id": str(audio.id),
-        "lang": audio.lang.value,
+        "lang": audio.lang,
         "public_url": audio.public_url,
         "duration_s": audio.duration_s,
         "voice_id": audio.voice_id,

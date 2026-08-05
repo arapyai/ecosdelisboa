@@ -7,13 +7,10 @@ class ContentType(StrEnum):
     LYRICS = "lyrics"
 
 
-class SupportedLanguage(StrEnum):
-    PT = "pt"
-    EN = "en"
-    ES = "es"
-    FR = "fr"
-    DE = "de"
-    ZH = "zh"
+class TextOrigin(StrEnum):
+    MANUAL = "manual"
+    IMPORT = "import"
+    AUTOMATIC = "automatic"
 
 
 class TranslationStatus(StrEnum):

@@ -1,5 +1,5 @@
-const CACHE_NAME = 'por-outros-app-shell-v1';
-const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon.svg'];
+const CACHE_NAME = 'lisbon-literary-map-app-shell-v2';
+const APP_SHELL = ['/manifest.webmanifest', '/branding/literary-map-icon.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -19,6 +19,19 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
 
   if (request.method !== 'GET') return;
+
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          return response;
+        })
+        .catch(() => caches.match(request).then((cached) => cached || caches.match('/')))
+    );
+    return;
+  }
 
   if (new URL(request.url).pathname.startsWith('/api/')) {
     event.respondWith(

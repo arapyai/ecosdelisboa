@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import get_current_admin
 from app.core.db import get_db
 from app.models.entities import AdminUser, Author, Point, Route, RouteItem, Text
-from app.models.enums import ContentType
+from app.models.enums import ContentType, TextOrigin
 from app.schemas.common import EnvelopeMeta, envelope
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-content"])
@@ -36,6 +36,7 @@ class TextWrite(BaseModel):
     point_id: UUID
     author_id: UUID
     content_pt: str
+    phonetic_content: str | None = None
     source_work: str | None = None
     source_year: int | None = None
     content_type: ContentType
@@ -89,9 +90,11 @@ def serialize_text(text: Text) -> dict[str, object]:
         "point_id": str(text.point_id),
         "author_id": str(text.author_id),
         "content_pt": text.content_pt,
+        "phonetic_content": text.phonetic_content,
         "source_work": text.source_work,
         "source_year": text.source_year,
         "content_type": text.content_type.value,
+        "origin": text.origin,
     }
 
 
@@ -263,6 +266,7 @@ def create_text(
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
     text = Text(**payload.model_dump())
+    text.origin = TextOrigin.MANUAL.value
     db.add(text)
     db.commit()
     db.refresh(text)
@@ -281,6 +285,7 @@ def update_text(
         raise HTTPException(status_code=404, detail="Text not found")
     for field, value in payload.model_dump().items():
         setattr(text, field, value)
+    text.origin = TextOrigin.MANUAL.value
     db.commit()
     db.refresh(text)
     return envelope(serialize_text(text), EnvelopeMeta())

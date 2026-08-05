@@ -1,56 +1,65 @@
 # Arquitetura do Projeto
 
-Este documento resume a arquitetura geral descrita em `docs/lisboa_spec_geral.md` e a traduz para a estrutura atual do monorepo.
+Leitura curta da estrutura atual do Lisboa por Outros. A visão de produto e o estado das
+capacidades ficam em `lisboa_spec_geral.md`; contratos detalhados ficam em
+`backend_referencia.md`.
 
-## Visao do sistema
-
-O projeto Lisboa por Outros e composto por:
-
-- clientes: app mobile, web PWA e painel admin
-- backend: API FastAPI responsavel por conteudo, autenticacao admin, traducoes e audio
-- persistencia: PostgreSQL com PostGIS
-- integracoes externas: ElevenLabs, Gemini e Cloudflare R2
-
-## Estrutura de repositorio alvo
-
-Segundo a especificacao geral, o monorepo deve evoluir para workspaces separados por superficie de produto:
+## Componentes
 
 ```text
-.
-├── backend/
-├── mobile/
-├── webapp/
-├── admin/
-├── docs/
-└── .github/workflows/
+PWA pública ─────┐
+Admin editorial ─┼── HTTPS / REST JSON / SSE ── API FastAPI
+Apps Expo* ──────┘                                  │
+                                                   ├── PostgreSQL + PostGIS
+                                                   ├── provider LLM configurável
+                                                   ├── ElevenLabs
+                                                   └── volume persistente de MP3
+
+* fundação existente; entrega Android/iOS ocorre após o MVP PWA + admin
 ```
 
-## Estrutura atual
+- `webapp/` oferece mapa, autores, pontos, percursos, áudio e cache offline da PWA;
+- `admin/` opera conteúdo e consome os contratos administrativos;
+- `backend/` concentra regras editoriais, autenticação, persistência e integrações;
+- `mobile/` é a fundação Expo para a etapa pós-MVP;
+- `shared/` contém tipos e cliente HTTP reutilizáveis;
+- `docs/` concentra decisões transversais e procedimentos operacionais.
 
-Neste momento o repositorio contem:
+## Limites de responsabilidade
 
-- `backend/`: implementacao completa do servidor e seus artefatos locais
-- `mobile/`: shell inicial do app publico mobile
-- `webapp/`: web PWA publica
-- `admin/`: shell inicial do painel administrativo
-- `shared/`: tipos basicos e cliente HTTP compartilhavel entre superficies frontend
-- `docs/`: especificacao geral e documentacao transversal
+- pontos representam lugares; a autoria pertence aos textos;
+- o banco é a fonte de verdade de conteúdo, traduções, proveniência e referências de áudio;
+- MP3 ficam em `AUDIO_STORAGE_DIR`, montado em volume persistente nos ambientes publicados;
+- importação cria ou reutiliza autores, pontos, textos e traduções fornecidas, mas não dispara
+  tradução automática nem áudio;
+- tradução automática sempre entra em revisão editorial;
+- áudio manual tem precedência e não é sobrescrito por geração automática em lote;
+- idiomas ativos e a língua-fonte são dados configuráveis, não uma lista fixa no código.
 
-Isso deixa as principais superficies da Semana 1 separadas por workspace, com a web publica mais avancada e os demais shells prontos para evoluir.
+## Estado das superfícies
 
-## Backend no monorepo
+O backend já expõe os contratos de conteúdo, idiomas, traduções de textos/autores/percursos,
+vozes, importação e upload manual de MP3. A PWA pública e o admin inicial existem. A integração
+das capacidades editoriais mais recentes na interface administrativa — mapa/geocoding,
+edição multilíngue, import/export unificado e áudio dentro da edição de texto — continua no
+roadmap e não deve ser inferida apenas pela existência da API.
 
-O workspace `backend/` concentra tudo que pertence ao servidor:
+Jobs de áudio usam o banco como fila durável. Um worker em thread própria, iniciado junto com a
+API, processa os itens fora do ciclo da requisição e grava progresso para o SSE. API e worker
+permanecem no mesmo serviço para compartilhar o volume local de MP3; jobs interrompidos são
+retomados no startup.
 
-- codigo da aplicacao em `backend/app`
-- migrations em `backend/alembic`
-- testes em `backend/tests`
-- lockfiles e configuracao do ambiente Python/Nix
-- caches e artefatos locais de desenvolvimento do backend
+## Nomes técnicos legados
 
-## Fonte de verdade documental
+Pacotes `@ecosdelisboa/*`, identificadores `lisbon-literary-map` e domínios em
+`literarymap.org` continuam em uso técnico. Eles não alteram o nome de produto Lisboa por
+Outros e só devem ser renomeados como uma migração coordenada de código, deploy e DNS.
 
-- `docs/lisboa_spec_geral.md`: fonte principal de produto e arquitetura
-- `docs/backend_referencia.md`: referencia tecnica do backend e das integracoes
-- `backend/README.md`: operacao e desenvolvimento do backend
-- `README.md`: leitura rapida da organizacao do monorepo
+## Fontes de verdade
+
+- produto, decisões e estado funcional: `lisboa_spec_geral.md`;
+- planejamento e responsáveis: [GitHub Project](https://github.com/orgs/arapyai/projects/1);
+- API e modelo de dados: código do backend, OpenAPI e `backend_referencia.md`;
+- importação editorial: `importacao_csv_conteudo.md` e o template servido pela API;
+- ambientes e operação: `infrastructure.md` e runbooks;
+- comandos locais: README do workspace correspondente.

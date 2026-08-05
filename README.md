@@ -1,57 +1,42 @@
-# Lisboa por Outros Monorepo
+# Lisboa por Outros
 
-Monorepo do projeto Lisboa por Outros. A raiz organiza os workspaces por area de responsabilidade, mantendo o backend autocontido em `backend/` e a documentacao transversal em `docs/`.
+Monorepo do produto cultural Lisboa por Outros: uma experiência pública para descobrir Lisboa
+por meio de pontos literários, autores, percursos e áudio multilíngue.
 
-## Arquitetura Geral
+## Estratégia de entrega
 
-Hoje o repositorio contem:
+O primeiro lançamento é **PWA pública + painel administrativo**, com conteúdo em português e
+inglês. Android e iOS são a etapa seguinte; o workspace mobile existe como fundação, mas não
+faz parte do MVP PWA.
 
-- `backend/`: workspace do servidor, com codigo, configuracao, lockfiles, testes e artefatos locais de desenvolvimento.
-- `mobile/`: shell inicial do app publico em Expo.
-- `webapp/`: PWA publico em React/Vite.
-- `admin/`: shell inicial do painel interno em React/Vite/TanStack Query.
-- `shared/`: tipos basicos e cliente HTTP compartilhavel entre frontend.
-- `docs/`: documentacao geral do produto, arquitetura e referencias compartilhadas entre workspaces.
+O roadmap, os responsáveis e o estado de cada entrega ficam no
+[GitHub Project](https://github.com/orgs/arapyai/projects/1). O arquivo `TODO.md` apenas explica
+como esse planejamento é mantido e não duplica o quadro.
 
-Essa estrutura prepara o repositorio para crescer com `mobile/`, `webapp/` e `admin/` quando esses workspaces forem adicionados, sem misturar implementacao de servicos com documentacao global.
+## Workspaces
 
-## Estrutura
+- `backend/`: API FastAPI, banco, migrations, integrações, testes e ambiente Nix;
+- `webapp/`: PWA pública em React/Vite;
+- `admin/`: painel editorial interno em React/Vite/TanStack Query;
+- `mobile/`: fundação Expo para a etapa Android/iOS pós-MVP;
+- `shared/`: tipos e cliente HTTP compartilhados pelos frontends;
+- `docs/`: especificação consolidada, arquitetura, referências e runbooks.
 
-```text
-.
-├── backend/
-│   ├── app/
-│   ├── alembic/
-│   ├── tests/
-│   ├── .venv/
-│   ├── .pytest_cache/
-│   ├── .ruff_cache/
-│   ├── .coverage
-│   ├── pyproject.toml
-│   ├── flake.nix
-│   └── README.md
-├── mobile/
-├── webapp/
-├── admin/
-├── shared/
-└── docs/
-    ├── arquitetura.md
-    ├── README.md
-    └── lisboa_spec_geral.md
+Os identificadores técnicos `ecosdelisboa`, `lisbon-literary-map` e alguns domínios em
+`literarymap.org` são nomes legados de pacotes e infraestrutura. O nome do produto é Lisboa por
+Outros.
+
+## Desenvolvimento
+
+Instale as dependências JavaScript na raiz:
+
+```bash
+npm install
+npm run webapp:dev
+npm run admin:dev
 ```
 
-## Backend
-
-Tudo que e pertinente ao servidor fica dentro de `backend/`, incluindo:
-
-- codigo da API em `backend/app`
-- migrations em `backend/alembic`
-- testes em `backend/tests`
-- configuracao Python em `backend/pyproject.toml`
-- ambiente de desenvolvimento Nix em `backend/flake.nix`
-- ambiente virtual, caches e cobertura locais do backend em `backend/.venv`, `backend/.pytest_cache`, `backend/.ruff_cache` e `backend/.coverage`
-
-Para trabalhar no servidor:
+Para o backend, use o ambiente Nix e `uv`:
 
 ```bash
 cd backend
@@ -60,13 +45,15 @@ uv sync --dev
 uv run uvicorn app.main:app --reload
 ```
 
-## Documentacao
+Os comandos e variáveis completos estão nos READMEs de cada workspace e em
+`docs/infrastructure.md`.
 
-- `docs/lisboa_spec_geral.md`: guia geral e especificacao tecnica do projeto
-- `docs/backend_referencia.md`: referencia tecnica do backend e das integracoes
-- `docs/arquitetura.md`: leitura curta da arquitetura e da estrutura do monorepo
-- `docs/README.md`: indice da documentacao global
+## Documentação
 
-## Evolucao esperada
-
-O objetivo dessa organizacao e permitir que cada parte do sistema evolua com fronteiras claras: implementacao e ferramental local ficam no workspace correspondente; a raiz e `docs/` descrevem a arquitetura do conjunto.
+- `docs/lisboa_spec_geral.md`: escopo, decisões e estado funcional;
+- `docs/arquitetura.md`: componentes, limites e fluxo de dados;
+- `docs/backend_referencia.md`: contratos e regras do backend;
+- `docs/importacao_csv_conteudo.md`: contrato do importador editorial;
+- `docs/infrastructure.md`: ambientes, deploy e configuração;
+- `docs/runbook_audio_storage.md`: volume, backup e restore de áudio;
+- `docs/runbook_elevenlabs_vozes.md`: vozes e geração de áudio.

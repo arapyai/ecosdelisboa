@@ -1,10 +1,11 @@
 {
   "expo": {
-    "name": "Lisboa por Outros",
-    "slug": "lisboa-por-outros",
+    "name": "Lisbon Literary Map",
+    "slug": "lisbon-literary-map",
     "version": "0.1.0",
     "orientation": "portrait",
-    "scheme": "lisboaporoutros",
+    "scheme": "lisbonliterarymap",
+    "icon": "./assets/literary-map-icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -12,7 +13,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#163832"
+        "foregroundImage": "./assets/literary-map-icon.png",
+        "backgroundColor": "#f4efe7"
       }
     }
   }

@@ -1,6 +1,7 @@
 import { Footprints, Headphones, MapIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { EmptyState, ErrorState } from '../components/AsyncState';
 import { localized, t } from '../i18n/messages';
 import type { Lang, Route } from '../types';
 
@@ -11,13 +12,34 @@ interface Props {
 export function RoutesPage({ lang }: Props) {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [selected, setSelected] = useState<Route | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    api.getRoutes().then((result) => {
-      setRoutes(result.data);
-      setSelected(result.data[0] ?? null);
-    });
-  }, []);
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    api
+      .getRoutes()
+      .then((result) => {
+        if (cancelled) return;
+        setRoutes(result.data);
+        setSelected(result.data[0] ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRoutes([]);
+        setSelected(null);
+        setError('Não foi possível carregar os percursos.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   return (
     <main className="routes-page">
@@ -27,6 +49,9 @@ export function RoutesPage({ lang }: Props) {
           <strong>{routes.length}</strong>
         </div>
         <div className="route-grid">
+          {error ? <ErrorState message={error} onRetry={() => setReloadKey((current) => current + 1)} /> : null}
+          {loading ? <EmptyState message="A carregar..." /> : null}
+          {!loading && !error && routes.length === 0 ? <EmptyState message={t(lang, 'empty')} /> : null}
           {routes.map((route) => (
             <button key={route.id} type="button" className="route-card" onClick={() => setSelected(route)}>
               {route.cover_image_url ? <img src={route.cover_image_url} alt="" /> : null}

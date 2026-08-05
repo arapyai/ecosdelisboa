@@ -1,4 +1,4 @@
-export type SupportedLanguage = 'pt' | 'en' | 'es' | 'fr' | 'de' | 'zh';
+export type SupportedLanguage = string;
 
 export interface EnvelopeMeta {
   page?: number | null;
@@ -21,12 +21,14 @@ export interface PublicPointSummary {
   neighborhood?: string | null;
   lat: number;
   lng: number;
+  texts_count?: number;
 }
 
 export interface PublicAuthorSummary {
   id: string;
   name: string;
   bio_pt?: string | null;
+  bio?: string | null;
   birth_year?: number | null;
   death_year?: number | null;
   photo_url?: string | null;
@@ -85,6 +87,8 @@ export interface PublicRoute {
   id: string;
   title_pt: string;
   description_pt?: string | null;
+  title: string;
+  description?: string | null;
   cover_image_url?: string | null;
   difficulty?: string | null;
   is_published?: boolean;
@@ -98,12 +102,172 @@ export interface PublicDefaultVoice {
   elevenlabs_id: string;
   name?: string;
   preview_url?: string | null;
+  gender?: string | null;
+  languages?: SupportedLanguage[];
+  lang?: SupportedLanguage | null;
+  is_default?: boolean;
+}
+
+export interface AdminLanguage {
+  code: SupportedLanguage;
+  locale: string;
+  country_code?: string | null;
+  name: string;
+  is_active: boolean;
+  is_source: boolean;
+}
+
+export interface AdminVoice {
+  id: string;
+  elevenlabs_id: string;
+  name: string;
+  preview_url?: string | null;
+  gender?: string | null;
+  languages?: SupportedLanguage[];
+  lang?: SupportedLanguage | null;
+  is_default?: boolean;
+}
+
+export type PronunciationRule =
+  | {
+      type: 'alias';
+      string_to_replace: string;
+      alias: string;
+    }
+  | {
+      type: 'phoneme';
+      string_to_replace: string;
+      alphabet: 'ipa';
+      phoneme: string;
+    };
+
+export interface AdminPronunciationDictionary {
+  id: string;
+  language_code: SupportedLanguage;
+  elevenlabs_id: string;
+  version_id: string;
+  name: string;
+  last_published_at?: string | null;
+  last_published_by?: string | null;
+  rules?: PronunciationRule[];
+}
+
+export interface PronunciationPreviewAudio {
+  content_type: 'audio/mpeg';
+  audio_base64: string;
+}
+
+export interface PronunciationPreview {
+  voice_id: string;
+  text: string;
+  without_dictionary: PronunciationPreviewAudio;
+  with_dictionary: PronunciationPreviewAudio;
+}
+
+export interface AdminAudioFile {
+  id: string;
+  text_id: string;
+  lang: SupportedLanguage;
+  public_url?: string | null;
+  duration_s?: number | null;
+  voice_id?: string | null;
+  generated_at?: string | null;
+  manually_uploaded?: boolean;
+  recipe_hash?: string | null;
+  content_hash?: string | null;
+  generation_spec?: Record<string, unknown> | null;
+}
+
+export type AudioBundleImportAction =
+  | 'create'
+  | 'replace_automatic'
+  | 'already_current'
+  | 'preserve_manual'
+  | 'unmatched'
+  | 'invalid';
+
+export interface AudioBundlePreviewRow {
+  recipe_hash?: string;
+  text_id?: string | null;
+  text?: string | null;
+  lang?: string | null;
+  action?: AudioBundleImportAction;
+  status?: 'exportable' | 'missing' | 'manual' | 'legacy' | 'invalid';
+  reason: string;
+}
+
+export interface AudioBundlePreview {
+  artifact_count: number;
+  counts: Record<string, number>;
+  rows: AudioBundlePreviewRow[];
+}
+
+export type GenerationPolicy = 'missing_only' | 'replace_automatic';
+export type GenerationBatchStatus =
+  | 'pending'
+  | 'running'
+  | 'awaiting_review'
+  | 'completed'
+  | 'partial_failure'
+  | 'failed';
+
+export interface GenerationProgress {
+  total: number;
+  processed: number;
+  succeeded: number;
+  skipped: number;
+  failed: number;
+}
+
+export interface GenerationBatchReview {
+  text_id: string;
+  lang: SupportedLanguage;
+  translation_id: string;
+}
+
+export interface GenerationBatchError {
+  kind: 'translation' | 'audio';
+  text_id: string;
+  lang: SupportedLanguage;
+  message?: string | null;
+}
+
+export interface GenerationBatchItem {
+  kind: 'translation' | 'audio';
+  text_id: string;
+  lang: SupportedLanguage;
+  status: string;
+  skipped: boolean;
+}
+
+export interface ContentGenerationBatch {
+  id: string;
+  status: GenerationBatchStatus;
+  current_stage:
+    | 'generating_translations'
+    | 'awaiting_review'
+    | 'ready_for_translated_audio'
+    | 'generating_audio'
+    | 'completed';
+  source: 'texts' | 'csv';
+  voice_overrides: Record<string, string>;
+  auto_approve_translations: boolean;
+  generate_translated_audio: boolean;
+  created_at: string;
+  progress: GenerationProgress;
+  pending_reviews: GenerationBatchReview[];
+  errors: GenerationBatchError[];
+  items?: GenerationBatchItem[];
 }
 
 export interface AdminUser {
   id: string;
   email: string;
   is_active: boolean;
+}
+
+export interface AdminManagedUser extends AdminUser {
+  created_at: string;
 }
 
 export interface AdminLoginResponse {
@@ -135,9 +299,11 @@ export interface AdminText {
   point_id: string;
   author_id: string;
   content_pt: string;
+  phonetic_content?: string | null;
   source_work?: string | null;
   source_year?: number | null;
   content_type: ContentType;
+  origin?: TextOrigin;
 }
 
 export interface AdminRouteItem {
@@ -161,10 +327,63 @@ export interface AdminRoute {
   items?: AdminRouteItem[];
 }
 
+export type TranslationStatus = 'pending' | 'approved' | 'rejected';
+export type TextOrigin = 'manual' | 'automatic' | 'import';
+
+export interface AdminTranslation {
+  id: string;
+  text_id: string;
+  lang: SupportedLanguage;
+  content?: string | null;
+  phonetic_content?: string | null;
+  status: TranslationStatus;
+  auto_translated?: boolean;
+  origin?: TextOrigin;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+}
+
+export interface AdminEditorialTranslation {
+  id: string;
+  lang: SupportedLanguage;
+  status: TranslationStatus;
+  auto_translated: boolean;
+  origin: TextOrigin;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+}
+
+export interface AdminAuthorTranslation extends AdminEditorialTranslation {
+  author_id: string;
+  bio: string;
+}
+
+export interface AdminRouteTranslation extends AdminEditorialTranslation {
+  route_id: string;
+  title: string;
+  description?: string | null;
+}
+
 type RequestBody = Record<string, unknown> | Array<unknown>;
 
+export class ApiError extends Error {
+  readonly status: number;
+  readonly path: string;
+
+  constructor(message: string, status: number, path: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.path = path;
+  }
+}
+
 export class ApiClient {
-  constructor(private readonly baseUrl = '') {}
+  private readonly baseUrl: string;
+
+  constructor(baseUrl = '') {
+    this.baseUrl = baseUrl;
+  }
 
   async get<T>(path: string, token?: string): Promise<T> {
     return this.request<T>(path, { method: 'GET' }, token);
@@ -193,7 +412,7 @@ export class ApiClient {
     });
 
     if (!response.ok) {
-      throw new Error(`API request failed: ${path}`);
+      throw new ApiError(`API request failed: ${path}`, response.status, path);
     }
 
     const payload = (await response.json()) as T | ApiEnvelope<T>;

@@ -14,7 +14,7 @@ function DesignOverview() {
   return (
     <main style={{ padding: 32, color: '#16211f' }}>
       <section style={{ maxWidth: 960 }}>
-        <h1 style={{ marginTop: 0 }}>Lisboa por Outros UI</h1>
+        <h1 style={{ marginTop: 0 }}>Lisbon Literary Map UI</h1>
         <p style={{ color: '#69736e', lineHeight: 1.5 }}>
           Catalogo dos elementos visuais usados no PWA: selecao de idioma, player, detalhe de ponto, mapa e telas
           principais.

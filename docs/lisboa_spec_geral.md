@@ -1,244 +1,210 @@
 # Lisboa por Outros
 
-A Cidade Escrita em Voz Alta
+**Especificação consolidada — julho de 2026**
 
-Especificacao tecnica de referencia v2.0  
-Abril de 2025 · Uso interno da equipa
+Documento interno de produto e arquitetura.
 
-## Visao Geral
+## Visão do produto
 
-Lisboa por Outros e um produto cultural digital que guia utilizadores por Lisboa atraves de pontos literarios, percursos e audios narrados com apoio de IA.
+Lisboa por Outros guia pessoas pela cidade por meio de pontos literários, autores, percursos e
+áudios. A experiência é multilíngue e combina curadoria humana com apoio de IA para tradução e
+síntese de voz.
 
-O objetivo do projeto e combinar geografia, literatura e audio para criar uma experiencia multilíngue de descoberta da cidade.
+O primeiro lançamento é composto pela **PWA pública e pelo painel administrativo**, com corpus
+editorial em português e inglês. Android e iOS são a etapa posterior, ainda que o repositório já
+contenha uma fundação Expo.
 
-## Objetivos do Produto
+## Objetivos
 
-- oferecer uma experiencia publica simples para explorar autores, pontos e percursos
-- publicar conteudo literario em PT e EN no lancamento, com expansao posterior para ES, FR, DE e ZH
-- permitir gestao editorial interna por um painel administrativo proprio
-- suportar traducao assistida por IA com revisao humana obrigatoria
-- suportar geracao e gestao de audio por lingua e por autor
+- explorar pontos, autores e percursos em mapa e lista;
+- ler e ouvir textos no idioma selecionado;
+- oferecer uma experiência pública responsiva e instalável como PWA;
+- permitir que a equipe importe, revise, traduza e publique conteúdo;
+- manter proveniência e revisão humana nas traduções;
+- produzir, substituir e remover áudio por texto e idioma;
+- ampliar idiomas sem alterar o modelo de dados.
 
-## Superficies do Sistema
+## Decisões vigentes
 
-O produto e composto por quatro superficies principais:
+| Tema | Decisão |
+| --- | --- |
+| Sequência de lançamento | PWA + admin primeiro; Android/iOS depois |
+| Escopo editorial do MVP | português e inglês |
+| Idiomas | cadastro dinâmico, com exatamente uma língua-fonte ativa |
+| Backend | FastAPI, Python 3.12, SQLAlchemy e Alembic |
+| Persistência | PostgreSQL 16 com PostGIS nos ambientes publicados |
+| Tradução | provider LLM configurável; Claude é o padrão atual |
+| Regra editorial | tradução automática nunca é aprovada sem revisão humana |
+| Síntese de voz | ElevenLabs, com vozes por autor e pools por idioma |
+| Storage de áudio | diretório/volume local persistente; Cloudflare R2 está fora do escopo |
+| Fluxos | importação, tradução automática e geração de áudio são independentes |
+| Planejamento | GitHub Project, separado por `INFRA`, `BACK`, `FRONT` e `CONTEÚDO` |
 
-- app mobile para iOS e Android
-- web app publica em modo PWA
-- painel administrativo para a equipa interna
-- backend responsavel por API, persistencia e integracoes externas
+## Superfícies e estado
 
-## Decisoes Principais
+| Superfície | Papel | Estado em julho de 2026 |
+| --- | --- | --- |
+| PWA (`webapp/`) | experiência pública | base funcional entregue; validação, conteúdo e polimento no roadmap |
+| Admin (`admin/`) | operação editorial | CRUD/importação/áudio iniciais entregues; nova UX multilíngue e de mapas no roadmap |
+| Backend (`backend/`) | API, regras e integrações | contratos principais e worker durável de áudio implementados |
+| Mobile (`mobile/`) | Android e iOS | fundação Expo; desenvolvimento funcional pós-MVP |
 
-| Tema | Decisao |
-| :--- | :--- |
-| Plataformas | iOS, Android e Web PWA |
-| Idiomas no lancamento | PT e EN |
-| Idiomas posteriores | ES, FR, DE, ZH |
-| Backend | FastAPI em Python 3.12 |
-| Base de dados | PostgreSQL 16 com PostGIS |
-| Infra principal | Railway |
-| Storage de audio | Cloudflare R2 |
-| Sintese de voz | ElevenLabs |
-| Traducao automatica | Google Gemini |
-| Modelo editorial | revisao humana obrigatoria para traducoes |
+O estado detalhado e as datas pertencem ao
+[GitHub Project](https://github.com/orgs/arapyai/projects/1). Esta spec registra capacidades e
+decisões, não replica a checklist do quadro.
 
-## Arquitetura de Alto Nivel
-
-```text
-Clientes
-  mobile app (React Native / Expo)
-  web PWA (React / Vite)
-  admin UI (React / Vite)
-        |
-        | HTTPS / REST JSON / SSE
-        v
-Backend API (FastAPI)
-  public API
-  admin API
-  content workflows
-  translation workflows
-  audio workflows
-        |
-        +--> PostgreSQL + PostGIS
-        +--> ElevenLabs
-        +--> Google Gemini
-        +--> Cloudflare R2
-```
-
-## Estrutura do Monorepo
-
-A estrutura alvo do repositorio segue a separacao por workspace:
+## Arquitetura
 
 ```text
-.
-├── backend/
-├── mobile/
-├── webapp/
-├── admin/
-├── docs/
-└── .github/workflows/
+PWA pública / Admin / Apps Expo
+              │
+              │ HTTPS · REST JSON · SSE
+              ▼
+         Backend FastAPI
+              │
+              ├── PostgreSQL + PostGIS
+              ├── provider LLM configurável
+              ├── ElevenLabs
+              └── volume local persistente de MP3
 ```
 
-No estado atual, `backend/` e `docs/` ja estao organizados como workspaces separados.
+Mais detalhes em `arquitetura.md`.
 
-## Stack Tecnologica
+## Modelo de conteúdo
 
-| Camada | Tecnologia | Observacao |
-| :--- | :--- | :--- |
-| Backend API | Python 3.12 + FastAPI | OpenAPI automatica e suporte async |
-| Persistencia | PostgreSQL 16 + PostGIS | consultas geoespaciais |
-| Mobile | React Native + Expo | app publica |
-| Web publica | React 18 + Vite | PWA |
-| Admin UI | React 18 + Vite + TanStack Query | SPA interna |
-| Audio | ElevenLabs | voz por autor com fallback |
-| Traducao | Google Gemini | traducao assistida com contexto literario |
-| Storage | Cloudflare R2 | armazenamento de MP3 |
-| CI/CD | GitHub Actions + Railway | testes e deploy |
-| Observabilidade | Railway Metrics + Sentry | logs e erros |
+- `authors`: identidade, biografia-fonte e configuração de voz;
+- `author_translations`: biografia por idioma e estado editorial;
+- `points`: lugares georreferenciados, sem autoria direta;
+- `texts`: texto-fonte associado a um ponto e um autor;
+- `translations`: conteúdo traduzido por texto e idioma;
+- `routes`: dados-fonte, publicação e estimativas de percurso;
+- `route_translations`: título e descrição por idioma;
+- `route_items`: pontos cadastrados ou waypoints livres ordenados;
+- `languages`: idiomas ativos e identificação da língua-fonte;
+- `voices` e `voice_languages`: catálogo e pools de voz;
+- `audio_files`: um áudio por texto e idioma, gerado ou enviado manualmente;
+- `audio_generation_jobs`: estado persistido de lotes de áudio;
+- `admin_users`: acesso ao painel.
 
-## Dominios de Dados
+Campos históricos como `content_pt`, `bio_pt`, `title_pt`, `description_pt` e `r2_key` permanecem
+por compatibilidade. `r2_key` guarda hoje uma chave relativa no filesystem; seu nome não indica
+uso de Cloudflare R2.
 
-O modelo de dados do produto gira em torno destas entidades principais:
+## Experiência pública
 
-- `authors`: autores e respectivas biografias e configuracao de voz
-- `points`: lugares literarios georreferenciados, sem autoria direta
-- `texts`: textos originais em portugues associados a um ponto e a um autor
-- `translations`: traducoes por lingua com status editorial
-- `audio_files`: audios gerados ou enviados manualmente por texto e lingua
-- `voices`: vozes disponiveis na conta ElevenLabs
-- `routes`: percursos publicados ou em rascunho
-- `route_items`: sequencia de pontos e waypoints livres dentro de um percurso
-- `admin_users`: utilizadores autenticados do painel
-- `audio_generation_jobs`: jobs assincronos de geracao em lote
+Endpoints públicos são read-only, não exigem autenticação e usam o envelope `{data, meta}`.
 
-Para a referencia tecnica detalhada do backend, ver `docs/backend_referencia.md`.
-
-## API Publica
-
-Todos os endpoints publicos sao read-only, nao exigem autenticacao e respondem em envelope JSON `{data, meta}`.
-
-| Metodo | Endpoint | Descricao |
-| :--- | :--- | :--- |
-| GET | `/health` | estado basico do servico |
-| GET | `/api/v1/points` | lista de pontos proximos com filtros, incluindo filtro por autor dos textos |
-| GET | `/api/v1/points/{id}` | detalhe completo do ponto com textos, autores e audios |
-| GET | `/api/v1/authors` | lista de autores |
-| GET | `/api/v1/authors/{id}` | detalhe do autor |
-| GET | `/api/v1/routes` | lista de percursos publicados |
-| GET | `/api/v1/routes/{id}` | detalhe do percurso |
+| Método | Endpoint | Função |
+| --- | --- | --- |
+| GET | `/health` | saúde do serviço |
+| GET | `/api/v1/languages` | idiomas ativos e língua-fonte |
+| GET | `/api/v1/points` | pontos, filtros geográficos e por autor |
+| GET | `/api/v1/points/{id}` | ponto, textos, autores e áudios |
+| GET | `/api/v1/authors[/{id}]` | autores com localização por idioma |
+| GET | `/api/v1/routes[/{id}]` | percursos publicados e localizados |
 | GET | `/api/v1/routes/{id}/gpx` | export GPX |
-| GET | `/api/v1/routes/{id}/podcast.rss` | feed RSS do percurso |
-| GET | `/api/v1/voices/default` | voz padrao atual |
+| GET | `/api/v1/routes/{id}/podcast.rss` | feed de podcast |
+| GET | `/api/v1/voices/default` | voz sorteada do pool default |
 
-## Painel Administrativo
+A PWA implementa mapa, descoberta, detalhes, percursos, reprodução de áudio e cache offline. A
+experiência offline real em dispositivos e redes representativas ainda precisa de validação;
+portanto, offline é requisito do MVP, não garantia operacional já homologada.
 
-O painel administrativo e uma aplicacao interna com autenticacao por email e password simples. Nao ha registo publico.
+## Operação editorial
 
-### Modulos principais
+O admin usa autenticação Bearer JWT e não oferece registro público. O backend já suporta CRUD
+de autores, pontos, textos e percursos, além de idiomas, traduções, vozes, importação e áudio.
 
-| Modulo | Rota | Funcao |
-| :--- | :--- | :--- |
-| Dashboard | `/admin` | indicadores operacionais |
-| Autores | `/admin/authors` | CRUD de autores e atribuicao de voz |
-| Pontos Literarios | `/admin/points` | CRUD de pontos georreferenciados e importacao CSV |
-| Textos e Citacoes | `/admin/texts` | gestao de textos, autores, traducoes e audios |
-| Percursos | `/admin/routes` | CRUD e ordenacao de percursos |
-| Traducoes | `/admin/translations` | fila editorial de revisao |
-| Vozes | `/admin/voices` | sincronizacao e configuracao de voz padrao |
-| Audio | `/admin/audio` | acompanhamento da producao de audio |
+A interface atual ainda não materializa todos os contratos recentes. Estão planejados:
 
-### Capacidades editoriais esperadas
+- importação e exportação do template em um único fluxo;
+- edição de pontos com mapa e geocoding assistido;
+- edição de textos por idioma, sem recarregar a página e com proveniência visível;
+- áudio do idioma integrado à edição do texto, com play/delete/replace;
+- edição multilíngue de autores e percursos;
+- montagem de percursos com mapa, pontos e waypoints livres;
+- gestão de idiomas, vozes e progresso de lotes.
 
-- criar e editar autores
-- criar e editar pontos manualmente
-- associar autores aos textos, nao aos pontos
-- importar pontos e textos via CSV com preview
-- gerir textos por ponto
-- disparar traducao automatica por lingua
-- rever e aprovar ou rejeitar traducoes
-- gerar audio sob demanda ou em lote
-- substituir audio por upload manual
-- gerir percursos publicados e rascunhos
+### Importação
 
-## Fluxos Criticos
+Cada linha representa um texto-fonte associado a um autor e a um ponto. O fluxo:
 
-### Importacao CSV
+1. exporta o template vigente pela API;
+2. executa preview sem gravar;
+3. resolve ou cria autores e textos;
+4. reutiliza pontos por correspondência segura e só cria um novo ponto quando necessário;
+5. geocodifica quando faltam coordenadas;
+6. confirma apenas linhas válidas.
 
-- o sistema aceita criacao manual ou importacao em lote
-- cada linha valida ponto, coordenadas e conteudo minimo
-- o fluxo mostra preview antes da confirmacao
-- a importacao e idempotente por titulo do ponto + autor do texto
-- a importacao nao dispara automaticamente traducao nem audio
+Traduções fornecidas usam `content_<idioma>` e `author_bio_<idioma>`, entram como `pending`,
+`origin=import` e `auto_translated=false`. Importar não chama o LLM e não gera áudio. O contrato
+de deduplicação e todas as colunas estão em `importacao_csv_conteudo.md`.
 
-### Traducao editorial
+### Tradução
 
-- o texto original e sempre mantido em portugues
-- o backend pode gerar traducao automatica via Gemini
-- toda traducao criada automaticamente entra com status `pending`
-- nenhuma traducao e aprovada automaticamente
-- aprovacao e rejeicao acontecem no painel admin
+- o texto-fonte e a língua-fonte são preservados;
+- o provider automático é configurável por ambiente;
+- conteúdo gerado automaticamente recebe proveniência e status `pending`;
+- upload/importação e revisão manual permanecem distinguíveis;
+- a equipe pode criar, substituir, aprovar, rejeitar ou remover tradução por idioma;
+- trocar de idioma na futura UI não deve exigir reload nem perder alterações não salvas.
 
-### Geracao de audio
+### Áudio
 
-- o audio pode usar voz especifica do autor associado ao texto
-- se nao houver voz do autor, usa a voz padrao configurada
-- audio em PT pode ser gerado diretamente
-- audio em outras linguas depende de traducao aprovada
-- jobs em lote reportam progresso por SSE
+- existe no máximo um registro por texto e idioma;
+- idioma-fonte usa o texto original; outros idiomas exigem tradução aprovada;
+- a escolha automática de voz segue override, autor, pool do idioma, pool default e fallback de
+  ambiente;
+- arquivos gerados usam `audio/{text_id}/{lang}.mp3`;
+- uploads manuais usam `audio/manual/{text_id}/{lang}.mp3`;
+- upload manual atualiza arquivo e referência no banco como uma única operação lógica;
+- `manually_uploaded=true` impede sobrescrita por lotes automáticos, mas não impede nova
+  substituição manual nem remoção explícita.
 
-### Substituicao manual de audio
-
-- a equipa pode fazer upload manual de MP3
-- arquivos marcados como `manually_uploaded=true` nao podem ser sobrescritos por lote automatico
-- nova substituicao manual continua permitida
+O endpoint de lote cria o job e responde imediatamente com estado `pending`. Um worker interno
+do serviço reivindica jobs de forma atômica, persiste cada resultado e alimenta o SSE com
+progresso real. Após restart, itens que estavam `running` voltam à fila, enquanto resultados já
+concluídos são preservados.
 
 ### Percursos
 
-- percursos podem conter pontos cadastrados
-- percursos tambem podem conter waypoints livres com `lat/lng`
-- a ordem dos itens deve ser editavel
-- percursos nao publicados nao aparecem na API publica
+- podem combinar pontos cadastrados e waypoints livres com latitude/longitude;
+- itens possuem ordem editável;
+- título e descrição podem ter traduções por idioma;
+- apenas percursos publicados aparecem na API pública;
+- GPX e RSS respeitam a localização solicitada e o fallback definido.
 
-## Integracoes Externas
+## Integrações e infraestrutura
 
-| Integracao | Uso principal |
-| :--- | :--- |
-| ElevenLabs | listar vozes, gerar audio e preview |
-| Google Gemini | gerar traducao automatica com contexto literario |
-| Cloudflare R2 | guardar e servir MP3 |
-| Railway | hospedar API e PostgreSQL |
+| Integração | Uso |
+| --- | --- |
+| Railway | API, PostgreSQL, variáveis e deploy |
+| Netlify | PWA e admin publicados |
+| Cloudflare | DNS; não é usado para armazenar áudio |
+| Nominatim ou provider configurado | geocoding editorial |
+| ElevenLabs | catálogo de vozes e síntese de MP3 |
+| provider LLM configurável | tradução assistida |
+| filesystem persistente | armazenamento e entrega dos MP3 |
 
-## Regras de Negocio Criticas
+Configuração e URLs ficam em `infrastructure.md`. Backup e restore de áudio ficam em
+`runbook_audio_storage.md`.
 
-- endpoints publicos sao somente leitura
-- endpoints admin exigem autenticacao Bearer JWT
-- respostas da API seguem envelope `{data, meta}`
-- traducao automatica nunca e marcada como `approved` sem revisao humana
-- audio manual nunca e sobrescrito por geracao automatica em lote
-- alteracoes de schema exigem migration
-- variaveis sensiveis nunca devem ficar no repositorio
+## Regras de qualidade
 
-## Qualidade e Restricoes
+- mudanças de schema exigem migration Alembic;
+- o backend mantém cobertura mínima automatizada de 70%;
+- chaves e senhas não entram no repositório;
+- uploads são validados por tamanho, extensão, MIME type e assinatura;
+- as superfícies públicas devem usar HTTPS nos ambientes publicados;
+- WCAG 2.1 AA e bom desempenho são metas de validação, não resultados presumidos;
+- direitos autorais, fontes e coordenadas do corpus precisam de auditoria editorial.
 
-| Tema | Regra |
-| :--- | :--- |
-| Performance API | P95 menor que 200 ms para geolocalizacao |
-| Testes backend | cobertura minima de 70% |
-| Seguranca | nenhuma chave real no repositorio e HTTPS em toda a superficie publica |
-| Acessibilidade | alvo WCAG 2.1 AA nas superficies de frontend |
-| Offline | ultimo bairro visitado e seus audios devem ser acessiveis sem dados |
+## Escopo documental
 
-## Riscos Principais
+Esta é a referência consolidada de produto, decisões e estado funcional. Em caso de conflito:
 
-| Risco | Impacto | Mitigacao |
-| :--- | :--- | :--- |
-| direitos autorais de obras modernas | alto | priorizar dominio publico e validar casos sensiveis |
-| quota insuficiente na ElevenLabs | medio | gerar em fila e acompanhar erros no admin |
-| qualidade inconsistente das vozes | medio | revisao editorial antes de publicar |
-| atraso nas revisoes de traducao | baixo | lancar primeiro com PT e EN |
-| custo de infraestrutura em escala | medio | manter arquitetura portavel |
-
-## Escopo desta Spec
-
-Este documento e a referencia principal de produto e arquitetura. Detalhes mais operacionais de backend, modelo de dados e integracoes tecnicas ficam documentados separadamente em `docs/backend_referencia.md` e `backend/README.md`.
+1. decisões registradas no GitHub Project orientam escopo e sequência;
+2. código, migrations e OpenAPI definem o comportamento implementado;
+3. `backend_referencia.md` detalha os contratos;
+4. runbooks definem a operação;
+5. READMEs dos workspaces definem comandos locais.

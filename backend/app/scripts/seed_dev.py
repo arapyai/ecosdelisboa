@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy import select
 
 from app.core.config import get_settings
@@ -9,6 +11,7 @@ from app.models.entities import (
     AdminUser,
     AudioFile,
     Author,
+    Language,
     Point,
     Route,
     RouteItem,
@@ -16,21 +19,32 @@ from app.models.entities import (
     Translation,
     Voice,
 )
-from app.models.enums import ContentType, SupportedLanguage, TranslationStatus
+from app.models.enums import ContentType, TranslationStatus
+from app.services.languages import seed_language_catalog
+
+DEFAULT_CATALOG_PATH = Path(__file__).resolve().parents[3] / "docs" / "voice_language_seed.csv"
 
 
 def get_or_create_voice(session) -> Voice:
-    voice = session.scalar(select(Voice).where(Voice.elevenlabs_id == "voice-default-dev"))
+    settings = get_settings()
+    voice = None
+    if settings.elevenlabs_default_voice_id:
+        voice = session.scalar(
+            select(Voice).where(Voice.elevenlabs_id == settings.elevenlabs_default_voice_id)
+        )
+    if voice is None:
+        voice = session.scalar(select(Voice).where(Voice.is_default.is_(True)).order_by(Voice.name))
     if voice is None:
         voice = Voice(
-            elevenlabs_id="voice-default-dev",
+            elevenlabs_id=settings.elevenlabs_default_voice_id or "voice-default-dev",
             name="Voz Padrao Dev",
             preview_url=None,
             is_default=True,
         )
+        language = session.get(Language, "pt")
+        if language is not None:
+            voice.languages.append(language)
         session.add(voice)
-    else:
-        voice.is_default = True
     return voice
 
 
@@ -122,7 +136,7 @@ def get_or_create_text(
         session.add(
             Translation(
                 text=text,
-                lang=SupportedLanguage.EN,
+                lang="en",
                 content="Sample English translation for development.",
                 status=TranslationStatus.APPROVED,
                 auto_translated=True,
@@ -131,10 +145,10 @@ def get_or_create_text(
         session.add(
             AudioFile(
                 text=text,
-                lang=SupportedLanguage.PT,
+                lang="pt",
                 public_url=None,
                 duration_s=42.0,
-                voice_id="voice-default-dev",
+                voice_id=author.elevenlabs_voice_id,
                 manually_uploaded=False,
             )
         )
@@ -166,6 +180,7 @@ def get_or_create_route(session, points: list[Point]) -> Route:
 
 def seed() -> None:
     with SessionLocal() as session:
+        seed_language_catalog(session, DEFAULT_CATALOG_PATH)
         voice = get_or_create_voice(session)
         get_or_create_admin(session)
         session.flush()

@@ -25,6 +25,7 @@ export interface TextEntry {
   source_work?: string | null;
   source_year?: number | null;
   content_type: ContentType;
+  audios?: AudioTrack[];
 }
 
 export interface AudioTrack {
@@ -32,6 +33,7 @@ export interface AudioTrack {
   lang: Lang;
   url: string;
   duration_sec?: number;
+  voice_id?: string | null;
   transcript?: TranscriptCue[];
 }
 
@@ -55,6 +57,7 @@ export interface Point {
   author?: Author;
   texts?: TextEntry[];
   audios?: AudioTrack[];
+  texts_count?: number;
 }
 
 export interface RoutePoint {

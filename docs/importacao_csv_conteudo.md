@@ -1,88 +1,191 @@
-# Importacao CSV de Conteudo
+# Importação CSV de conteúdo
 
-Este documento define o modelo padrao de CSV para a equipe de conteudo importar textos de autores e associa-los a pontos de Lisboa.
+O importador administrativo recebe textos e resolve, no mesmo fluxo, os autores, os pontos e
+as traduções fornecidas pela equipe editorial. Tradução automática e geração de áudio não são
+disparadas pela importação.
 
-A unidade principal do arquivo e o texto. Cada linha representa um texto associado a um ponto e a um autor.
+Cada linha representa um texto original em português associado a um ponto e a um autor.
 
-Template: `docs/templates/content_import_template.csv`
+## Template oficial
 
-## Colunas
+O template versionado está em `docs/templates/content_import_template.csv` e também pode ser
+baixado, com autenticação administrativa, por:
+
+```http
+GET /api/v1/admin/points/import/template
+```
+
+O endpoint é a fonte recomendada para a interface administrativa, pois acompanha o contrato
+implantado no backend.
+
+## Fluxo da API
+
+1. `POST /api/v1/admin/points/import/preview`: valida o arquivo, resolve entidades e executa o
+   geocoding necessário, sem gravar alterações.
+2. A interface mostra as ações previstas para autor, ponto, texto e traduções.
+3. `POST /api/v1/admin/points/import/confirm`: revalida o mesmo arquivo e grava somente as
+   linhas sem erro.
+
+Os dois `POST`s recebem multipart com o arquivo no campo `file`.
+
+## Colunas principais
 
 ```csv
-point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,content_pt,content_type,source_work,source_year
+point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,author_bio_pt,author_bio_en,birth_date,death_date,content_pt,content_en,content_type,source_work,source_year
 ```
 
-## Campos obrigatorios
+### Cabeçalhos obrigatórios
 
-| Campo | Descricao |
+| Campo | Descrição |
 | --- | --- |
-| `point_name` | Nome editorial do ponto. Ex.: `Chiado`, `Terreiro do Paco`. |
-| `address` | Endereco usado para geocoding. Ex.: `Largo do Chiado`. |
-| `author_name` | Nome do autor do texto. |
-| `content_pt` | Texto original em portugues. |
-| `content_type` | Tipo do conteudo. Valores aceitos: `prose`, `poetry`, `lyrics`. |
+| `point_name` | Nome editorial do ponto. |
+| `author_name` | Nome do autor. |
+| `content_pt` | Texto original em português. |
 
-## Campos opcionais
+O valor de cada um também deve estar preenchido em todas as linhas.
 
-| Campo | Descricao |
+### Localização
+
+| Campo | Descrição |
 | --- | --- |
-| `neighborhood` | Bairro ou zona. Ajuda na revisao editorial e no geocoding. |
-| `city` | Cidade. Se vazio, o importador assume `Lisboa`. |
-| `country` | Pais. Se vazio, o importador assume `Portugal`. |
-| `lat_override` | Latitude manual, quando a equipe ja sabe a coordenada exata ou quer corrigir o geocoder. |
-| `lng_override` | Longitude manual, usada junto com `lat_override`. |
-| `source_work` | Obra, livro, poema, cronica ou fonte do trecho. |
-| `source_year` | Ano da obra ou fonte, quando conhecido. |
+| `address` | Endereço usado para encontrar um ponto existente ou fazer geocoding. |
+| `neighborhood` | Bairro ou zona. |
+| `city` | Cidade; o padrão é `Lisboa`. |
+| `country` | País; o padrão é `Portugal`. |
+| `lat_override` | Latitude conhecida, entre -90 e 90. |
+| `lng_override` | Longitude conhecida, entre -180 e 180. |
 
-## Regras de geocoding
+As coordenadas manuais devem ser fornecidas juntas. Quando elas estão vazias, `address` passa a
+ser obrigatório e o backend executa geocoding.
 
-O arquivo nao exige latitude e longitude. Por padrao, o sistema deriva coordenadas a partir de:
+### Autor e fonte
 
-```txt
-address, neighborhood, city, country
-```
+| Campo | Descrição |
+| --- | --- |
+| `author_bio_pt` | Biografia curta em português. |
+| `birth_date` | Data ou ano de nascimento; o importador extrai o primeiro ano com quatro dígitos. |
+| `death_date` | Data ou ano de morte; o importador extrai o primeiro ano com quatro dígitos. |
+| `source_work` | Obra ou fonte do trecho. |
+| `source_year` | Ano da obra ou fonte. |
+| `content_type` | `prose`, `poetry` ou `lyrics`. |
 
-Exemplo:
+Se `content_type` estiver vazio, textos com várias linhas curtas são classificados como
+`poetry`; os demais são classificados como `prose`. Um valor preenchido e desconhecido gera
+erro.
 
-```txt
-Largo do Chiado, Chiado, Lisboa, Portugal
-```
+Também continuam aceitos os aliases curatoriais:
 
-Se `lat_override` e `lng_override` estiverem preenchidos, eles prevalecem sobre o resultado automatico do geocoding.
+- `Microbio curta (camada 2 do app)` para `author_bio_pt`;
+- `Data de nascimento` para `birth_date`;
+- `Data de morte` para `death_date`.
 
-## Regras de associacao
+Colunas adicionais da planilha editorial são preservadas no arquivo, mas ignoradas pelo
+importador quando não possuem um mapeamento documentado.
 
-- `point_name` + `address` identificam o ponto editorialmente.
-- `author_name` identifica ou cria o autor.
-- O autor pertence ao texto, nao ao ponto.
-- Um mesmo ponto pode aparecer em varias linhas com autores diferentes.
-- Um mesmo ponto pode aparecer em varias linhas com textos diferentes do mesmo autor.
+## Traduções no mesmo arquivo
 
-## Regras de idempotencia
-
-Para evitar duplicatas, o importador considera como o mesmo texto:
-
-```txt
-point_name + address + author_name + source_work + source_year + content_pt
-```
-
-Quando `source_work` e `source_year` estiverem vazios, o importador usa:
-
-```txt
-point_name + address + author_name + content_pt
-```
-
-## Exemplo
+Traduções usam os formatos `content_<código-do-idioma>` e
+`author_bio_<código-do-idioma>`:
 
 ```csv
-point_name,address,neighborhood,city,country,lat_override,lng_override,author_name,content_pt,content_type,source_work,source_year
-Chiado,Largo do Chiado,Chiado,Lisboa,Portugal,,,Fernando Pessoa,"Aqui a cidade tem passos de escritorio, cafe e fantasma.",prose,Fragmento demonstrativo,2026
-Terreiro do Paco,Praca do Comercio,Baixa,Lisboa,Portugal,38.7076,-9.1365,Fernando Pessoa,"O rio abre a cidade como uma pagina larga.",poetry,Fragmento demonstrativo,2026
+content_pt,content_en,content_es,content_fr
+author_bio_pt,author_bio_en,author_bio_es,author_bio_fr
 ```
 
-## Observacoes para a equipe de conteudo
+- `content_pt` é o original obrigatório e é salvo em `texts`;
+- cada outra coluna não vazia é salva em `translations`;
+- `author_bio_pt` permanece em `authors` e cada `author_bio_<idioma>` não vazio é salvo em
+  `author_translations`;
+- o código deve existir e estar ativo na gestão de idiomas;
+- traduções importadas ficam com `status=pending`, `auto_translated=false` e `origin=import`;
+- uma coluna vazia não cria nem remove tradução;
+- reimportar o mesmo conteúdo reutiliza o registro; conteúdo diferente atualiza a tradução e
+  volta seu estado para `pending`;
+- importar nunca chama o LLM e nunca gera áudio.
 
-- Textos com virgula devem ficar entre aspas.
-- Quebras de linha dentro de `content_pt` devem ser evitadas no primeiro fluxo de importacao.
-- `lat_override` e `lng_override` devem ser preenchidos juntos ou deixados ambos vazios.
-- O arquivo deve ser salvo em UTF-8.
+O arquivo versionado inclui `content_en` e `author_bio_en` como exemplos. O endpoint de template
+acrescenta as duas colunas para cada idioma ativo, e o parser aceita qualquer idioma ativo nos
+formatos acima. Percursos não pertencem a este CSV de conteúdo; suas traduções usam os endpoints
+administrativos próprios.
+
+## Correspondência e deduplicação
+
+### Autores
+
+O nome é comparado sem diferença de maiúsculas, acentos, pontuação ou espaços repetidos. Um
+autor existente é reutilizado; biografia e datas só preenchem campos que ainda estejam vazios.
+
+### Pontos
+
+O importador tenta, nesta ordem:
+
+1. nome e endereço normalizados;
+2. endereço normalizado único;
+3. nome normalizado único quando um dos endereços está vazio;
+4. coordenada única em um raio de 20 metros, após override ou geocoding.
+
+Somente quando não existe uma correspondência segura um ponto novo é criado. Isso permite
+variações como `Praça`/`Praca` sem fundir silenciosamente locais ambíguos.
+
+### Textos
+
+Quando `source_work` ou `source_year` está preenchido, a identidade é:
+
+```txt
+ponto + autor + source_work + source_year
+```
+
+Sem esses campos, a identidade usa:
+
+```txt
+ponto + autor + content_pt
+```
+
+Assim, um mesmo autor pode ter vários textos no mesmo ponto. A reimportação do mesmo arquivo é
+idempotente e o texto original recebe `origin=import`.
+
+## Resposta do preview
+
+Cada linha informa:
+
+- `action`: compatibilidade resumida (`create`, `update` ou `error`);
+- `author_action`, `point_action`, `text_action`;
+- `author_translation_actions` e `translation_actions`, indexados pelo código do idioma;
+- `geocoded`, `lat` e `lng` resolvidos;
+- `errors`, com os bloqueios da linha.
+
+As ações detalhadas usam `create`, `update`, `reuse` ou `error`.
+
+## Resposta da confirmação
+
+A confirmação mantém `created`, `updated` e `errors` para compatibilidade com o admin atual e
+acrescenta contadores detalhados:
+
+```json
+{
+  "rows": {"total": 2, "imported": 2, "errors": 0},
+  "authors": {"created": 1, "updated": 0, "reused": 1},
+  "author_translations": {
+    "created": 1,
+    "updated": 0,
+    "reused": 0,
+    "by_language": {"en": {"created": 1, "updated": 0, "reused": 0}}
+  },
+  "points": {"created": 1, "updated": 0, "reused": 1, "geocoded": 1},
+  "texts": {"created": 2, "updated": 0, "reused": 0},
+  "translations": {
+    "created": 2,
+    "updated": 0,
+    "reused": 0,
+    "by_language": {"en": {"created": 2, "updated": 0, "reused": 0}}
+  }
+}
+```
+
+## Cuidados com o CSV
+
+- salvar em UTF-8; arquivos com BOM também são aceitos;
+- colocar entre aspas textos com vírgulas ou quebras de linha;
+- não alterar os prefixos `content_` e `author_bio_` das traduções;
+- sempre executar o preview antes da confirmação;
+- corrigir linhas com erro no arquivo e gerar um novo preview.

@@ -9,6 +9,16 @@ export const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 12
   },
+  brandRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12
+  },
+  brandIcon: {
+    borderRadius: 8,
+    height: 56,
+    width: 56
+  },
   kicker: {
     color: '#c45732',
     fontSize: 12,
@@ -18,11 +28,16 @@ export const styles = StyleSheet.create({
   },
   title: {
     color: '#16211f',
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: '800'
   },
   notice: {
     color: '#315f7d',
+    marginTop: 8
+  },
+  errorText: {
+    color: '#9e3a20',
+    fontWeight: '700',
     marginTop: 8
   },
   tabs: {
@@ -65,6 +80,17 @@ export const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     padding: 14
+  },
+  retryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#163832',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10
+  },
+  retryButtonText: {
+    color: '#fffaf1',
+    fontWeight: '800'
   },
   cardTitle: {
     color: '#16211f',

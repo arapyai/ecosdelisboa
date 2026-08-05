@@ -37,6 +37,14 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -55,14 +63,26 @@ a {
   gap: 18px;
   padding: 14px 22px;
   border-bottom: 1px solid var(--line);
-  background: rgba(244, 239, 231, 0.92);
+  background: var(--paper);
   backdrop-filter: blur(14px);
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 1000;
 }
 
 .wordmark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wordmark img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.wordmark div {
   display: grid;
   gap: 2px;
 }
@@ -128,22 +148,37 @@ a {
   color: #fff;
 }
 
+.onboarding-title {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 2vw, 24px);
+  max-width: min(100%, 1120px);
+}
+
 .brand-mark {
-  width: 64px;
-  height: 64px;
+  width: clamp(72px, 8vw, 104px);
+  height: clamp(72px, 8vw, 104px);
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
-  background: rgba(255, 250, 241, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-radius: 8px;
+  background: transparent;
+  border: 0;
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.28));
 }
 
 .onboarding h1 {
-  max-width: 760px;
+  max-width: none;
   font-size: clamp(44px, 8vw, 92px);
   line-height: 0.95;
-  margin: 28px 0 18px;
+  margin: 0;
   letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .onboarding p {
@@ -171,13 +206,18 @@ a {
 }
 
 .map-page {
-  min-height: 0;
+  height: calc(100dvh - 73px);
+  min-height: 560px;
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
 }
 
 .map-sidebar {
-  overflow: auto;
+  min-height: 0;
+  overflow: hidden;
   padding: 18px;
   border-right: 1px solid var(--line);
   display: flex;
@@ -212,6 +252,34 @@ a {
   margin: 0;
   color: var(--blue);
   font-size: 13px;
+}
+
+.state-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.state-panel p {
+  margin: 0;
+}
+
+.state-panel button {
+  width: fit-content;
+  min-height: 34px;
+  border: 1px solid var(--green);
+  background: var(--green);
+  color: #fff;
+}
+
+.error-state {
+  border-color: rgba(196, 87, 50, 0.42);
+  color: var(--ink);
 }
 
 .filter-panel {
@@ -266,22 +334,32 @@ a {
 }
 
 .point-list {
-  display: grid;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  padding-right: 4px;
 }
 
 .point-row {
+  appearance: none;
+  box-sizing: border-box;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: transparent;
+  width: 100%;
+  height: auto;
   min-height: 64px;
-  display: grid;
-  grid-template-columns: 24px 1fr;
-  align-items: center;
-  gap: 9px;
-  padding: 10px;
+  flex: 0 0 auto;
+  display: block;
+  position: relative;
+  padding: 12px 10px 14px 42px;
   text-align: left;
   cursor: pointer;
+  line-height: 1.3;
+  overflow: hidden;
 }
 
 .point-row.active {
@@ -290,8 +368,33 @@ a {
 }
 
 .point-row span {
-  display: grid;
-  gap: 2px;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.point-row strong,
+.point-row small {
+  display: block;
+  overflow-wrap: break-word;
+  word-break: normal;
+  white-space: normal;
+  max-width: 100%;
+}
+
+.point-row strong {
+  line-height: 1.28;
+}
+
+.point-row small {
+  margin-top: 5px;
+  line-height: 1.25;
+}
+
+.point-row svg {
+  position: absolute;
+  top: 14px;
+  left: 13px;
 }
 
 .point-row small,
@@ -302,12 +405,17 @@ a {
 }
 
 .map-stage {
-  min-height: calc(100vh - 73px);
+  min-height: 0;
+  height: 100%;
   position: relative;
+  z-index: 0;
+  isolation: isolate;
+  overflow: hidden;
 }
 
 .map-canvas {
   position: absolute;
+  z-index: 0;
   inset: 0;
 }
 
@@ -328,8 +436,78 @@ a {
   transform: scale(1.12);
 }
 
+.map-marker.cluster-marker {
+  width: 42px;
+  height: 42px;
+  background: var(--green);
+  border-color: #fff;
+  font-size: 14px;
+}
+
+.map-marker.cluster-marker.selected {
+  background: var(--blue);
+}
+
+.map-marker-multiple {
+  position: relative;
+}
+
+.map-marker-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: var(--clay);
+  color: #fff;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+
+.map-marker.exploded-center {
+  background: var(--green);
+  border-color: #fff;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+}
+
+.map-marker.sub-marker {
+  width: 30px;
+  height: 30px;
+  background: var(--clay);
+  font-size: 12px;
+  border: 2px solid #fff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
+  animation: scale-up 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+.map-marker.sub-marker.selected {
+  background: var(--green);
+  transform: scale(1.12);
+}
+
+@keyframes scale-up {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 .point-sheet {
   position: absolute;
+  z-index: 100;
   right: 22px;
   bottom: 22px;
   width: min(430px, calc(100% - 44px));
@@ -350,6 +528,7 @@ a {
 
 .point-sheet .close {
   position: absolute;
+  z-index: 1;
   top: 12px;
   right: 12px;
 }
@@ -387,6 +566,10 @@ a {
   background: #fff;
 }
 
+.audio-panel.disabled {
+  color: var(--muted);
+}
+
 .player-button {
   width: 42px;
   height: 42px;
@@ -397,6 +580,12 @@ a {
   display: grid;
   place-items: center;
   cursor: pointer;
+}
+
+.player-button:disabled {
+  background: var(--line);
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
 .player-copy {
@@ -589,7 +778,9 @@ a {
   .map-page {
     display: flex;
     flex-direction: column;
+    height: auto;
     min-height: 0;
+    overflow: visible;
   }
 
   .routes-page {
@@ -625,6 +816,15 @@ a {
     font-size: 46px;
   }
 
+  .onboarding-title {
+    gap: 14px;
+  }
+
+  .brand-mark {
+    width: 64px;
+    height: 64px;
+  }
+
   .language-switcher {
     flex-wrap: wrap;
   }
@@ -642,6 +842,7 @@ a {
     right: 12px;
     bottom: 12px;
     width: auto;
+    max-height: 68%;
   }
 
   .author-card {
