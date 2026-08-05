@@ -403,9 +403,7 @@ def create_translated_audio(
     if _pending_reviews(db, batch):
         raise HTTPException(status_code=409, detail="Review all generated translations first")
     policy = batch.translation_jobs[-1].policy if batch.translation_jobs else "missing_only"
-    queue_approved_translated_audio(
-        db, batch, current_admin.email, policy=policy
-    )
+    queue_approved_translated_audio(db, batch, current_admin.email, policy=policy)
     return envelope(
         _serialize_batch(db, _load_batch(db, batch_id), include_items=True), EnvelopeMeta()
     )
