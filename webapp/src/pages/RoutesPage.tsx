@@ -3,6 +3,7 @@ import { Download, Footprints, Headphones, MapIcon, Navigation, Timer } from 'lu
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { EmptyState, ErrorState } from '../components/AsyncState';
+import { GuidedRouteSession } from '../components/GuidedRouteSession';
 import { RouteDiscoveryMap } from '../components/RouteDiscoveryMap';
 import { preserveSelectedRoute, routeAudioDuration } from '../routeDiscoveryModel';
 import type { Lang } from '../types';
@@ -20,7 +21,7 @@ export function RoutesPage({ lang }: Props) {
   const [error, setError] = useState('');
   const [detailError, setDetailError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
-  const [startMessage, setStartMessage] = useState('');
+  const [activeRoute, setActiveRoute] = useState<PublicRoute | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +56,6 @@ export function RoutesPage({ lang }: Props) {
     let cancelled = false;
     setDetailLoading(true);
     setDetailError('');
-    setStartMessage('');
     api
       .getRoute(selectedId, lang)
       .then((result) => {
@@ -78,6 +78,8 @@ export function RoutesPage({ lang }: Props) {
   const selectedSummary = routes.find((route) => route.id === selectedId) ?? null;
   const segments = detail ? routeSegments(detail) : [];
   const audioDuration = useMemo(() => (detail ? routeAudioDuration(detail, lang) : 0), [detail, lang]);
+
+  if (activeRoute) return <GuidedRouteSession route={activeRoute} lang={lang} onClose={() => setActiveRoute(null)} />;
 
   return (
     <main className="routes-discovery-page">
@@ -145,7 +147,7 @@ export function RoutesPage({ lang }: Props) {
                   </div>
                   <p className="route-description">{detail.description}</p>
                   <div className="route-primary-actions">
-                    <button type="button" onClick={() => setStartMessage(lang === 'en' ? 'Ready to start.' : 'Percurso pronto para começar.') }>
+                    <button type="button" onClick={() => setActiveRoute(detail)}>
                       <Navigation size={17} />
                       {lang === 'en' ? 'Start route' : 'Começar percurso'}
                     </button>
@@ -154,7 +156,6 @@ export function RoutesPage({ lang }: Props) {
                       {lang === 'en' ? 'Download route' : 'Baixar percurso'}
                     </button>
                   </div>
-                  {startMessage ? <p className="route-start-message">{startMessage}</p> : null}
                   <div className="route-export-links">
                     <a href={api.getRouteGpxUrl(detail.id, lang)}><MapIcon size={15} /> GPX</a>
                     <a href={api.getRoutePodcastUrl(detail.id, lang)}><Headphones size={15} /> RSS</a>
