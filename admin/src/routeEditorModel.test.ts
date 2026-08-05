@@ -3,9 +3,12 @@ import test from 'node:test';
 import type { AdminRouteSegment, AdminText } from '@ecosdelisboa/shared';
 import {
   addTextSegment,
+  addLegWaypoint,
   filterAvailableTexts,
   reorderSegments,
-  serializeRouteDraft
+  removeLegWaypoint,
+  serializeRouteDraft,
+  waypointDraftFromLegs
 } from './routes/routeEditorModel.ts';
 
 const texts: AdminText[] = [
@@ -47,6 +50,30 @@ test('searches by author, work, excerpt and place', () => {
     'pessoa-1'
   ]);
   assert.equal(filterAvailableTexts(texts, 'douradores', []).length, 2);
+});
+
+test('keeps waypoints attached to walking legs rather than narrative segments', () => {
+  const draft = waypointDraftFromLegs([
+    {
+      id: 'leg',
+      position: 0,
+      from_segment_id: 'one',
+      to_segment_id: 'two',
+      geometry: { type: 'LineString', coordinates: [] },
+      waypoints: [{ lat: 38.71, lng: -9.14 }],
+      distance_m: 10,
+      duration_s: 8,
+      provider: 'stub'
+    }
+  ]);
+  const added = addLegWaypoint(draft, 0, { lat: 38.72, lng: -9.13 });
+  assert.deepEqual(added[0].waypoints, [
+    { lat: 38.71, lng: -9.14 },
+    { lat: 38.72, lng: -9.13 }
+  ]);
+  assert.deepEqual(removeLegWaypoint(added, 0, 0)[0].waypoints, [
+    { lat: 38.72, lng: -9.13 }
+  ]);
 });
 
 test('keeps multiple texts at one point as independent narrative segments', () => {

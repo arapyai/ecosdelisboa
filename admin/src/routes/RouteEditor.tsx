@@ -1,20 +1,31 @@
-import { ApiError, type AdminRoute, type AdminRouteSegment, type AdminText } from '@ecosdelisboa/shared';
+import {
+  ApiError,
+  type AdminRoute,
+  type AdminRouteSegment,
+  type AdminText,
+  type RouteReadiness
+} from '@ecosdelisboa/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { client } from '../adminConfig';
-import { redirectIfAuthError } from '../adminApi';
+import { putMp3, redirectIfAuthError } from '../adminApi';
 import {
   addBridgeSegment,
+  addLegWaypoint,
   addTextSegment,
   draftFingerprint,
   emptyRouteDraft,
   filterAvailableTexts,
   normalizePositions,
+  removeLegWaypoint,
   reorderSegments,
   routeDraftFromRoute,
   serializeRouteDraft,
+  waypointDraftFromLegs,
+  type RouteLegWaypointDraft,
   type RouteDraft
 } from './routeEditorModel';
+import { RouteMap } from './RouteMap';
 
 const NEW_ROUTE_ID = 'new';
 
@@ -32,6 +43,12 @@ export function RouteEditor({
   const [search, setSearch] = useState('');
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [message, setMessage] = useState('');
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string>();
+  const [selectedLegPosition, setSelectedLegPosition] = useState(0);
+  const [legWaypoints, setLegWaypoints] = useState<RouteLegWaypointDraft[]>([]);
+  const [addingWaypoint, setAddingWaypoint] = useState(false);
+  const [previewLang, setPreviewLang] = useState<'pt' | 'en'>('pt');
+  const [bridgeEnglish, setBridgeEnglish] = useState('');
 
   const routesQuery = useQuery({
     queryKey: ['narrative-routes', token],
@@ -48,6 +65,22 @@ export function RouteEditor({
     () => filterAvailableTexts(textsQuery.data ?? [], search, draft.segments),
     [draft.segments, search, textsQuery.data]
   );
+  const textSegments = draft.segments.filter((segment) => segment.kind === 'text');
+  const selectedSegment =
+    draft.segments.find((segment) => segment.id === selectedSegmentId) ?? draft.segments[0];
+  const selectedLegWaypoints =
+    legWaypoints.find((leg) => leg.position === selectedLegPosition)?.waypoints ?? [];
+  const canUseServerTools = Boolean(selectedId && selectedId !== NEW_ROUTE_ID && !dirty);
+  const ptReadiness = useQuery({
+    queryKey: ['route-readiness', selectedId, 'pt', token],
+    queryFn: () => client.getRouteReadiness(selectedId!, 'pt', token),
+    enabled: canUseServerTools
+  });
+  const enReadiness = useQuery({
+    queryKey: ['route-readiness', selectedId, 'en', token],
+    queryFn: () => client.getRouteReadiness(selectedId!, 'en', token),
+    enabled: canUseServerTools
+  });
 
   useEffect(() => {
     if (selectedId || !routes.length) return;
@@ -65,7 +98,20 @@ export function RouteEditor({
     setDraft(next);
     setSavedFingerprint(draftFingerprint(baseline));
     setMessage(local ? 'Rascunho local restaurado.' : '');
+    setSelectedSegmentId(next.segments[0]?.id);
   }, [selectedId, selectedRoute]);
+
+  useEffect(() => {
+    setLegWaypoints(waypointDraftFromLegs(selectedRoute?.legs));
+  }, [selectedRoute?.legs]);
+
+  useEffect(() => {
+    setBridgeEnglish(
+      selectedSegment?.kind === 'bridge'
+        ? selectedSegment.translations?.find((translation) => translation.lang === 'en')?.content ?? ''
+        : ''
+    );
+  }, [selectedSegment]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -112,6 +158,65 @@ export function RouteEditor({
     }
   });
 
+  const recalculateMutation = useMutation({
+    mutationFn: () => client.recalculateRoute(selectedId!, legWaypoints, token),
+    onSuccess: (result) => {
+      queryClient.setQueryData<AdminRoute[]>(['narrative-routes', token], (current = []) =>
+        current.map((route) =>
+          route.id === result.route_id
+            ? {
+                ...route,
+                routing_status: result.routing_status,
+                estimated_distance_m: result.estimated_distance_m,
+                estimated_duration_s: result.estimated_duration_s,
+                legs: result.legs
+              }
+            : route
+        )
+      );
+      setLegWaypoints(waypointDraftFromLegs(result.legs));
+      queryClient.invalidateQueries({ queryKey: ['route-readiness', selectedId] });
+      setMessage('Rota pedonal recalculada e guardada.');
+    },
+    onError: (cause) => {
+      if (redirectIfAuthError(cause, onAuthExpired)) return;
+      setMessage('O provedor de rotas falhou. A última geometria válida foi preservada.');
+    }
+  });
+
+  const bridgeTranslationMutation = useMutation({
+    mutationFn: () =>
+      client.put<{ id: string; lang: string; content: string; status: 'approved' }>(
+        `/api/v1/admin/routes/${selectedId}/segments/${selectedSegment?.id}/translations/en`,
+        { content: bridgeEnglish, status: 'approved' },
+        token
+      ),
+    onSuccess: (translation) => {
+      updateSelectedSegment({
+        translations: [
+          ...(selectedSegment?.translations ?? []).filter((item) => item.lang !== 'en'),
+          translation
+        ]
+      });
+      queryClient.invalidateQueries({ queryKey: ['route-readiness', selectedId] });
+      setMessage('Ponte EN revista e guardada.');
+    }
+  });
+
+  const bridgeAudioMutation = useMutation({
+    mutationFn: (lang: 'pt' | 'en') =>
+      client.post<{ audio?: NonNullable<AdminRouteSegment['audio_files']>[number] | null }>(
+        `/api/v1/admin/routes/${selectedId}/segments/${selectedSegment?.id}/audio/${lang}/generate`,
+        {},
+        token
+      ),
+    onSuccess: (result) => {
+      if (result.audio) replaceSelectedBridgeAudio(result.audio);
+      queryClient.invalidateQueries({ queryKey: ['route-readiness', selectedId] });
+      setMessage(result.audio ? 'Áudio da ponte atualizado.' : 'A geração de áudio não foi concluída.');
+    }
+  });
+
   function selectRoute(routeId: string) {
     if (dirty && !window.confirm('Há alterações não guardadas. Trocar de percurso mesmo assim?')) return;
     setSelectedId(routeId);
@@ -121,6 +226,47 @@ export function RouteEditor({
 
   function setSegments(segments: AdminRouteSegment[]) {
     setDraft((current) => ({ ...current, segments: normalizePositions(segments) }));
+  }
+
+  function updateSelectedSegment(patch: Partial<AdminRouteSegment>) {
+    if (!selectedSegment?.id) return;
+    const update = (segments: AdminRouteSegment[] = []) =>
+      segments.map((segment) =>
+        segment.id === selectedSegment.id ? ({ ...segment, ...patch } as AdminRouteSegment) : segment
+      );
+    setDraft((current) => ({ ...current, segments: update(current.segments) }));
+    queryClient.setQueryData<AdminRoute[]>(['narrative-routes', token], (current = []) =>
+      current.map((route) =>
+        route.id === selectedId ? { ...route, segments: update(route.segments) } : route
+      )
+    );
+  }
+
+  function replaceSelectedBridgeAudio(
+    audio: NonNullable<AdminRouteSegment['audio_files']>[number]
+  ) {
+    updateSelectedSegment({
+      audio_files: [
+        ...(selectedSegment?.audio_files ?? []).filter((item) => item.lang !== audio.lang),
+        audio
+      ]
+    });
+  }
+
+  async function uploadBridgeAudio(lang: 'pt' | 'en', file?: File) {
+    if (!file || !selectedId || !selectedSegment?.id) return;
+    try {
+      const audio = await putMp3<NonNullable<AdminRouteSegment['audio_files']>[number]>(
+        `/api/v1/admin/routes/${selectedId}/segments/${selectedSegment.id}/audio/${lang}/upload`,
+        file,
+        token
+      );
+      replaceSelectedBridgeAudio(audio);
+      queryClient.invalidateQueries({ queryKey: ['route-readiness', selectedId] });
+      setMessage(`Áudio manual ${lang.toUpperCase()} guardado e protegido.`);
+    } catch (cause) {
+      if (!redirectIfAuthError(cause, onAuthExpired)) setMessage('Falha no upload do áudio da ponte.');
+    }
   }
 
   if (routesQuery.isLoading || textsQuery.isLoading) {
@@ -265,6 +411,8 @@ export function RouteEditor({
             </label>
           </section>
 
+          <div className="route-builder-columns">
+          <div className="route-story-column">
           <div className="narrative-heading">
             <div>
               <span className="eyebrow">Sequência narrativa</span>
@@ -283,8 +431,9 @@ export function RouteEditor({
             {draft.segments.map((segment, index) => (
               <article
                 key={segment.id ?? `${segment.kind}-${index}`}
-                className={`narrative-card ${segment.kind}`}
+                className={`narrative-card ${segment.kind}${segment.id === selectedSegmentId ? ' selected' : ''}`}
                 draggable
+                onClick={() => setSelectedSegmentId(segment.id)}
                 onDragStart={() => setDragIndex(index)}
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => {
@@ -354,6 +503,168 @@ export function RouteEditor({
               </div>
             ) : null}
           </div>
+          </div>
+
+          <aside className="route-spatial-column">
+            <section className="route-map-card">
+              <div className="spatial-heading">
+                <div>
+                  <span className="eyebrow">Caminhada</span>
+                  <h3>Mapa e pernas</h3>
+                </div>
+                <span className={`routing-state ${dirty ? 'stale' : selectedRoute?.routing_status ?? 'pending'}`}>
+                  {dirty ? 'rota desatualizada' : routingLabel(selectedRoute?.routing_status)}
+                </span>
+              </div>
+              <RouteMap
+                segments={draft.segments}
+                legs={selectedRoute?.legs ?? []}
+                waypointDrafts={legWaypoints}
+                selectedSegmentId={selectedSegmentId}
+                addingWaypoint={addingWaypoint}
+                onSelectSegment={setSelectedSegmentId}
+                onAddWaypoint={(waypoint) => {
+                  setLegWaypoints(addLegWaypoint(legWaypoints, selectedLegPosition, waypoint));
+                  setAddingWaypoint(false);
+                  setMessage('Waypoint adicionado à perna. Recalcule para o guardar.');
+                }}
+              />
+              <div className="route-metrics">
+                <div><strong>{formatDistance(selectedRoute?.estimated_distance_m)}</strong><span>distância</span></div>
+                <div><strong>{formatDuration(selectedRoute?.estimated_duration_s)}</strong><span>caminhada</span></div>
+                <div><strong>{textSegments.length}</strong><span>textos</span></div>
+              </div>
+              <div className="waypoint-editor">
+                <label>
+                  Perna pedonal
+                  <select
+                    value={selectedLegPosition}
+                    onChange={(event) => setSelectedLegPosition(Number(event.target.value))}
+                  >
+                    {Array.from({ length: Math.max(0, textSegments.length - 1) }, (_, position) => (
+                      <option key={position} value={position}>Perna {position + 1}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="secondary-action"
+                  disabled={!canUseServerTools || textSegments.length < 2}
+                  onClick={() => setAddingWaypoint((current) => !current)}
+                >
+                  {addingWaypoint ? 'Cancelar waypoint' : '+ Waypoint no mapa'}
+                </button>
+                {selectedLegWaypoints.map((waypoint, index) => (
+                  <div className="waypoint-row" key={`${waypoint.lat}-${waypoint.lng}-${index}`}>
+                    <span>{waypoint.lat.toFixed(5)}, {waypoint.lng.toFixed(5)}</span>
+                    <button
+                      type="button"
+                      className="text-action delete-text-action"
+                      onClick={() =>
+                        setLegWaypoints(
+                          removeLegWaypoint(legWaypoints, selectedLegPosition, index)
+                        )
+                      }
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="recalculate-route"
+                disabled={!canUseServerTools || textSegments.length < 2 || recalculateMutation.isPending}
+                onClick={() => recalculateMutation.mutate()}
+              >
+                {recalculateMutation.isPending ? 'A calcular rota…' : 'Recalcular caminhada'}
+              </button>
+            </section>
+
+            <section className="route-readiness-card">
+              <div className="spatial-heading">
+                <div>
+                  <span className="eyebrow">Publicação</span>
+                  <h3>Prontidão PT/EN</h3>
+                </div>
+              </div>
+              {!canUseServerTools ? <p>Guarde a narrativa antes de verificar as pendências.</p> : null}
+              {canUseServerTools ? (
+                <>
+                  <ReadinessSummary label="PT" readiness={ptReadiness.data} loading={ptReadiness.isLoading} onIssue={setSelectedSegmentId} />
+                  <ReadinessSummary label="EN" readiness={enReadiness.data} loading={enReadiness.isLoading} onIssue={setSelectedSegmentId} />
+                </>
+              ) : null}
+            </section>
+
+            <section className="route-preview-card">
+              <div className="spatial-heading">
+                <div>
+                  <span className="eyebrow">Preview do visitante</span>
+                  <h3>{selectedSegment ? `Etapa ${selectedSegment.position}` : 'Escolha uma etapa'}</h3>
+                </div>
+                <select value={previewLang} onChange={(event) => setPreviewLang(event.target.value as 'pt' | 'en')}>
+                  <option value="pt">PT</option>
+                  <option value="en">EN</option>
+                </select>
+              </div>
+              <RouteSegmentPreview segment={selectedSegment} lang={previewLang} />
+            </section>
+            {selectedSegment?.kind === 'bridge' ? (
+              <section className="route-bridge-editorial-card">
+                <div className="spatial-heading">
+                  <div>
+                    <span className="eyebrow">Ponte selecionada</span>
+                    <h3>EN e áudio curatorial</h3>
+                  </div>
+                </div>
+                <label>
+                  Texto em inglês
+                  <textarea
+                    value={bridgeEnglish}
+                    onChange={(event) => setBridgeEnglish(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="secondary-action"
+                  disabled={!canUseServerTools || !selectedSegment.id || !bridgeEnglish.trim() || bridgeTranslationMutation.isPending}
+                  onClick={() => bridgeTranslationMutation.mutate()}
+                >
+                  Rever e guardar EN
+                </button>
+                {(['pt', 'en'] as const).map((lang) => {
+                  const audio = selectedSegment.audio_files?.find((item) => item.lang === lang);
+                  return (
+                    <div className="bridge-audio-row" key={lang}>
+                      <div>
+                        <strong>{lang.toUpperCase()}</strong>
+                        <span>{audio?.public_url ? (audio.manually_uploaded ? 'manual protegido' : 'gerado') : 'em falta'}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="secondary-action"
+                        disabled={!canUseServerTools || bridgeAudioMutation.isPending}
+                        onClick={() => bridgeAudioMutation.mutate(lang)}
+                      >
+                        Gerar
+                      </button>
+                      <label className="bridge-upload-action">
+                        MP3
+                        <input
+                          type="file"
+                          accept="audio/mpeg,.mp3"
+                          disabled={!canUseServerTools}
+                          onChange={(event) => uploadBridgeAudio(lang, event.target.files?.[0])}
+                        />
+                      </label>
+                    </div>
+                  );
+                })}
+              </section>
+            ) : null}
+          </aside>
+          </div>
         </main>
       </div>
     </section>
@@ -376,4 +687,106 @@ function readLocalDraft(routeId: string): RouteDraft | null {
 function excerpt(value: string, length: number) {
   const compact = value.replace(/\s+/g, ' ').trim();
   return compact.length > length ? `${compact.slice(0, length)}…` : compact;
+}
+
+function ReadinessSummary({
+  label,
+  readiness,
+  loading,
+  onIssue
+}: {
+  label: string;
+  readiness?: RouteReadiness;
+  loading: boolean;
+  onIssue: (segmentId: string) => void;
+}) {
+  return (
+    <div className={`readiness-language${readiness?.ready ? ' ready' : ''}`}>
+      <div>
+        <strong>{label}</strong>
+        <span>{loading ? 'a verificar…' : readiness?.ready ? 'pronto' : `${readiness?.issues.length ?? 0} pendências`}</span>
+      </div>
+      {readiness?.issues.slice(0, 5).map((issue) =>
+        issue.segment_id ? (
+          <button type="button" key={`${issue.code}-${issue.path}`} onClick={() => onIssue(issue.segment_id!)}>
+            {readinessIssueLabel(issue.code)}
+          </button>
+        ) : (
+          <p key={`${issue.code}-${issue.path}`}>{readinessIssueLabel(issue.code)}</p>
+        )
+      )}
+    </div>
+  );
+}
+
+function RouteSegmentPreview({
+  segment,
+  lang
+}: {
+  segment?: AdminRouteSegment;
+  lang: 'pt' | 'en';
+}) {
+  if (!segment) return <p>Selecione um texto ou uma ponte na sequência.</p>;
+  if (segment.kind === 'text') {
+    const translation = segment.text?.translations?.find(
+      (item) => item.lang === lang && item.status === 'approved'
+    );
+    const content = lang === 'pt' ? segment.text?.content_pt : translation?.content;
+    const audio = segment.text?.audio_files?.find((item) => item.lang === lang && item.public_url);
+    return (
+      <div className="visitor-preview-copy">
+        <span>{segment.text?.author?.name ?? 'Autor'}</span>
+        <h4>{segment.text?.source_work ?? segment.text?.point?.title_pt ?? 'Texto'}</h4>
+        <small>⌖ {segment.text?.point?.title_pt ?? 'Lugar por definir'}</small>
+        <p>{content || `Tradução ${lang.toUpperCase()} em falta.`}</p>
+        {audio?.public_url ? <audio controls preload="none" src={audio.public_url} /> : <em>Áudio {lang.toUpperCase()} em falta</em>}
+      </div>
+    );
+  }
+  const translation = segment.translations?.find(
+    (item) => item.lang === lang && item.status === 'approved'
+  );
+  const content = lang === 'pt' ? segment.bridge_content_pt : translation?.content;
+  const audio = segment.audio_files?.find((item) => item.lang === lang && item.public_url);
+  return (
+    <div className="visitor-preview-copy bridge-preview-copy">
+      <span>Ponte curatorial</span>
+      <p>{content || `Tradução ${lang.toUpperCase()} em falta.`}</p>
+      {audio?.public_url ? <audio controls preload="none" src={audio.public_url} /> : <em>Áudio {lang.toUpperCase()} em falta</em>}
+    </div>
+  );
+}
+
+function readinessIssueLabel(code: string) {
+  const labels: Record<string, string> = {
+    missing_title: 'Completar título',
+    missing_description: 'Completar descrição',
+    missing_difficulty: 'Definir dificuldade',
+    missing_route_translation: 'Traduzir metadados',
+    too_few_texts: 'Adicionar pelo menos dois textos',
+    missing_text_translation: 'Rever tradução do texto',
+    missing_text_audio: 'Gerar áudio do texto',
+    missing_bridge_translation: 'Traduzir ponte',
+    missing_bridge_audio: 'Gerar áudio da ponte',
+    routing_stale: 'Recalcular caminhada',
+    legacy_segment: 'Rever etapa legada'
+  };
+  return labels[code] ?? code;
+}
+
+function routingLabel(status?: string) {
+  if (status === 'ready') return 'rota atual';
+  if (status === 'failed') return 'falhou';
+  if (status === 'stale') return 'desatualizada';
+  return 'por calcular';
+}
+
+function formatDistance(distance?: number | null) {
+  if (!distance) return '—';
+  return distance >= 1000 ? `${(distance / 1000).toFixed(1)} km` : `${Math.round(distance)} m`;
+}
+
+function formatDuration(duration?: number | null) {
+  if (!duration) return '—';
+  return `${Math.max(1, Math.round(duration / 60))} min`;
 }

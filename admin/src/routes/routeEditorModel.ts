@@ -1,4 +1,10 @@
-import type { AdminRoute, AdminRouteSegment, AdminText } from '@ecosdelisboa/shared';
+import type {
+  AdminRoute,
+  AdminRouteSegment,
+  AdminText,
+  RouteLeg,
+  RouteWaypoint
+} from '@ecosdelisboa/shared';
 
 export interface RouteDraft {
   title_pt: string;
@@ -9,6 +15,8 @@ export interface RouteDraft {
   is_published: boolean;
   segments: AdminRouteSegment[];
 }
+
+export type RouteLegWaypointDraft = { position: number; waypoints: RouteWaypoint[] };
 
 export function emptyRouteDraft(): RouteDraft {
   return {
@@ -67,14 +75,14 @@ export function addTextSegment(
 ): AdminRouteSegment[] {
   return normalizePositions([
     ...segments,
-    { position: segments.length, kind: 'text', text_id: text.id, text }
+    { id: localSegmentId('text'), position: segments.length, kind: 'text', text_id: text.id, text }
   ]);
 }
 
 export function addBridgeSegment(segments: AdminRouteSegment[]): AdminRouteSegment[] {
   return normalizePositions([
     ...segments,
-    { position: segments.length, kind: 'bridge', bridge_content_pt: '' }
+    { id: localSegmentId('bridge'), position: segments.length, kind: 'bridge', bridge_content_pt: '' }
   ]);
 }
 
@@ -119,9 +127,47 @@ export function draftFingerprint(draft: RouteDraft): string {
   return JSON.stringify(serializeRouteDraft(draft));
 }
 
+export function waypointDraftFromLegs(legs: RouteLeg[] = []): RouteLegWaypointDraft[] {
+  return legs
+    .map((leg) => ({ position: leg.position, waypoints: [...leg.waypoints] }))
+    .sort((left, right) => left.position - right.position);
+}
+
+export function addLegWaypoint(
+  legs: RouteLegWaypointDraft[],
+  position: number,
+  waypoint: RouteWaypoint
+): RouteLegWaypointDraft[] {
+  const existing = legs.find((leg) => leg.position === position);
+  if (existing) {
+    return legs.map((leg) =>
+      leg.position === position ? { ...leg, waypoints: [...leg.waypoints, waypoint] } : leg
+    );
+  }
+  return [...legs, { position, waypoints: [waypoint] }].sort(
+    (left, right) => left.position - right.position
+  );
+}
+
+export function removeLegWaypoint(
+  legs: RouteLegWaypointDraft[],
+  position: number,
+  waypointIndex: number
+): RouteLegWaypointDraft[] {
+  return legs.map((leg) =>
+    leg.position === position
+      ? { ...leg, waypoints: leg.waypoints.filter((_, index) => index !== waypointIndex) }
+      : leg
+  );
+}
+
 function normalize(value: string): string {
   return value
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('pt');
+}
+
+function localSegmentId(kind: string) {
+  return `local-${kind}-${globalThis.crypto.randomUUID()}`;
 }
