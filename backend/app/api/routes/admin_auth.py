@@ -30,7 +30,7 @@ def login(
     if admin is None or not verify_password(payload.password, admin.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    token = create_access_token(admin.id)
+    token = create_access_token(admin.id, auth_version=admin.auth_version)
     return envelope({"access_token": token, "token_type": "bearer"}, EnvelopeMeta())
 
 
