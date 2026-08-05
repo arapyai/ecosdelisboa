@@ -1059,7 +1059,9 @@ a {
 
 .guided-route-panel.collapsed {
   display: grid;
-  max-height: 148px;
+  box-sizing: border-box;
+  height: 140px;
+  max-height: 140px;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
     "handle handle"
@@ -1430,7 +1432,8 @@ a {
   }
 
   .guided-route-panel.collapsed {
-    max-height: 142px;
+    height: 136px;
+    max-height: 136px;
     gap: 2px 9px;
     padding: 6px 10px 10px;
   }

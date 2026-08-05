@@ -129,3 +129,30 @@ test('manual arrival remains available when location permission is denied', asyn
   await expect(page.getByText(/Permissão de localização negada/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cheguei' })).toBeEnabled();
 });
+
+test('mobile walking keeps a full-screen map and a compact bottom sheet', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await prepareVisitor(page);
+  await page.getByRole('button', { name: 'Começar percurso' }).click();
+
+  const layout = await page.evaluate(() => {
+    const session = document.querySelector<HTMLElement>('.guided-route-session');
+    const map = document.querySelector<HTMLElement>('.guided-route-map');
+    const panel = document.querySelector<HTMLElement>('.guided-route-panel');
+    return {
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      session: session?.getBoundingClientRect().toJSON(),
+      map: map?.getBoundingClientRect().toJSON(),
+      panel: panel?.getBoundingClientRect().toJSON(),
+      panelCollapsed: panel?.classList.contains('collapsed')
+    };
+  });
+
+  expect(layout.session?.width).toBe(layout.viewport.width);
+  expect(layout.session?.height).toBe(layout.viewport.height);
+  expect(layout.map?.width).toBe(layout.viewport.width);
+  expect(layout.map?.height).toBe(layout.viewport.height);
+  expect(layout.panelCollapsed).toBe(true);
+  expect(layout.panel?.height).toBeLessThanOrEqual(140);
+  await expect(page.getByRole('button', { name: 'Cheguei' })).toBeVisible();
+});
