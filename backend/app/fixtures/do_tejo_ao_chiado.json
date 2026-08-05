@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "slug": "do-tejo-ao-chiado",
+  "title_pt": "Do Tejo ao Chiado",
+  "title_en": "From the Tagus to Chiado",
+  "description_pt": "Quatro vozes literárias conduzem uma subida do Terreiro do Paço ao Chiado, fazendo da cidade a estrutura de uma narrativa.",
+  "description_en": "Four literary voices lead an ascent from Terreiro do Paço to Chiado, turning the city into the structure of a narrative.",
+  "difficulty": "moderate",
+  "sources": [
+    "https://pt.wikisource.org/wiki/Viagens_na_Minha_Terra_(grafia_de_1943)/VII",
+    "https://arquivopessoa.net/",
+    "https://pt.wikisource.org/wiki/O_Primo_Bas%C3%ADlio/IV",
+    "https://www.gutenberg.org/ebooks/22509"
+  ],
+  "texts": [
+    {
+      "key": "garrett-terreiro",
+      "author": { "name": "Almeida Garrett", "bio_pt": "Escritor, dramaturgo e figura central do romantismo português.", "birth_year": 1799, "death_year": 1854 },
+      "point": { "title_pt": "Terreiro do Paço", "address": "Praça do Comércio", "neighborhood": "Baixa", "lat": 38.70775, "lng": -9.13645 },
+      "source_work": "Viagens na Minha Terra",
+      "source_year": 1846,
+      "content_pt": "Pois ficareis alfacinhas para sempre, cuidando que todas as praças deste mundo são como a do Terreiro do Paço, todas as ruas como a rua Augusta, todos os cafés como o do Marrare.",
+      "content_en": "And so you will remain Lisboners forever, imagining every square in the world to be like Terreiro do Paço, every street like Rua Augusta, every café like Marrare."
+    },
+    {
+      "key": "soares-douradores",
+      "author": { "name": "Fernando Pessoa / Bernardo Soares", "bio_pt": "Fernando Pessoa escreve a cidade pela voz semi-heterónima de Bernardo Soares.", "birth_year": 1888, "death_year": 1935 },
+      "point": { "title_pt": "Rua dos Douradores", "address": "Rua dos Douradores, 190", "neighborhood": "Baixa", "lat": 38.71135, "lng": -9.13718 },
+      "source_work": "Livro do Desassossego",
+      "source_year": 1982,
+      "content_pt": "A Rua dos Douradores compreende para mim todo o sentido de Lisboa, sem que o resto de Lisboa tenha sentido algum.",
+      "content_en": "Rua dos Douradores contains for me the whole meaning of Lisbon, while the rest of Lisbon has no meaning at all."
+    },
+    {
+      "key": "eca-carmo",
+      "author": { "name": "Eça de Queirós", "bio_pt": "Romancista português cuja observação da vida lisboeta marcou o realismo.", "birth_year": 1845, "death_year": 1900 },
+      "point": { "title_pt": "Rua Nova do Carmo", "address": "Rua do Carmo", "neighborhood": "Chiado", "lat": 38.71174, "lng": -9.13983 },
+      "source_work": "O Primo Basílio",
+      "source_year": 1878,
+      "content_pt": "Subiam pela Rua Nova do Carmo. Os candeeiros davam uma luz mortiça; as altas casas dos dois lados, apagadas, entalavam, carregavam a sombra.",
+      "content_en": "They climbed Rua Nova do Carmo. The street lamps gave a dim light; the tall, dark houses on either side hemmed in and deepened the shadow."
+    },
+    {
+      "key": "pimentel-chiado",
+      "author": { "name": "Alberto Pimentel", "bio_pt": "Escritor e memorialista atento às figuras e tradições da cidade.", "birth_year": 1849, "death_year": 1925 },
+      "point": { "title_pt": "Chiado", "address": "Largo do Chiado", "neighborhood": "Chiado", "lat": 38.71062, "lng": -9.14272 },
+      "source_work": "O Poeta Chiado",
+      "source_year": 1901,
+      "content_pt": "Tomei gosto ao Chiado, que não foi um vulto preeminente nas letras, mas que tem relevo como boémio e dizedor, trovista alegre e zombeteiro, farsante popularíssimo.",
+      "content_en": "I grew fond of Chiado, who was not a towering literary figure, but stood out as a bohemian and storyteller, a cheerful, mocking troubadour and immensely popular performer."
+    }
+  ],
+  "bridges": {
+    "intro": { "content_pt": "Começamos diante do Tejo. Antes de subir a cidade, ouça Garrett medir Lisboa pela escala de uma praça.", "content_en": "We begin before the Tagus. Before climbing the city, hear Garrett measure Lisbon by the scale of a square." },
+    "transitions": [
+      { "content_pt": "Deixe o arco para trás e entre na malha da Baixa. A praça abre caminho para a rua íntima de Bernardo Soares.", "content_en": "Leave the arch behind and enter the grid of the Baixa. The square gives way to Bernardo Soares's intimate street." },
+      { "content_pt": "A cidade interior encontra agora a cidade observada. Siga para o Carmo, onde a luz e a sombra ganham o olhar de Eça.", "content_en": "The inward city now meets the observed city. Continue to Carmo, where light and shadow take on Eça's gaze." },
+      { "content_pt": "Suba os últimos metros. No Chiado, o lugar deixa de ser apenas cenário e torna-se personagem e nome.", "content_en": "Climb the final metres. In Chiado, place ceases to be mere scenery and becomes both character and name." }
+    ],
+    "ending": { "content_pt": "O percurso termina, mas as quatro vozes permanecem sobrepostas à cidade. Volte a olhar o caminho como uma sequência de textos, não apenas de lugares.", "content_en": "The route ends, but its four voices remain layered over the city. Look back at the path as a sequence of texts, not merely of places." }
+  }
+}
