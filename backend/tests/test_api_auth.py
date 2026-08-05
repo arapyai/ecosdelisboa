@@ -22,6 +22,23 @@ def test_admin_login_returns_bearer_token(client, db_session) -> None:
     assert payload["access_token"]
 
 
+def test_admin_login_matches_email_case_insensitively(client, db_session) -> None:
+    admin = AdminUser(
+        email="Owner@Example.com",
+        password_hash=hash_password("secret"),
+        is_active=True,
+    )
+    db_session.add(admin)
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/admin/auth/login",
+        json={"email": "owner@example.COM", "password": "secret"},
+    )
+
+    assert response.status_code == 200
+
+
 def test_admin_me_requires_valid_bearer_token(client, db_session) -> None:
     admin = AdminUser(
         email="admin@example.com",

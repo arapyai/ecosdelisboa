@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin
@@ -25,7 +25,10 @@ def login(
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
     admin = db.scalar(
-        select(AdminUser).where(AdminUser.email == payload.email, AdminUser.is_active.is_(True))
+        select(AdminUser).where(
+            func.lower(AdminUser.email) == str(payload.email).strip().lower(),
+            AdminUser.is_active.is_(True),
+        )
     )
     if admin is None or not verify_password(payload.password, admin.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
