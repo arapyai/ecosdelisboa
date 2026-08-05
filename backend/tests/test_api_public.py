@@ -122,6 +122,28 @@ def test_get_route_returns_point_and_waypoint_items(client, db_session) -> None:
     assert items[1]["waypoint"] == {"lat": 38.714, "lng": -9.14}
 
 
+def test_get_route_returns_text_led_segments_in_selected_language(client, db_session) -> None:
+    ids = seed_public_data(db_session)
+    text = ids["point"].texts[0]
+    route = Route(title_pt="Percurso narrativo", is_published=True)
+    route.items.append(RouteItem(position=1, kind="text", text=text))
+    db_session.add(route)
+    db_session.commit()
+
+    response = client.get(f"/api/v1/routes/{route.id}", params={"lang": "en"})
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["text_count"] == 1
+    assert payload["authors"] == ["Fernando Pessoa"]
+    assert payload["segments"][0]["kind"] == "text"
+    assert payload["segments"][0]["text"]["content"] == "I am nothing."
+    assert payload["segments"][0]["text"]["point"]["title_pt"] == "Tabacaria do Rossio"
+    assert payload["segments"][0]["text"]["audio_files"][0]["lang"] == "en"
+    assert payload["items"] == payload["segments"]
+    assert payload["items_deprecated"] is True
+
+
 def test_get_default_voice_returns_current_voice(client, db_session) -> None:
     seed_public_data(db_session)
 

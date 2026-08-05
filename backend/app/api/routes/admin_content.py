@@ -2,14 +2,14 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy import delete, select
+from pydantic import BaseModel, Field, model_validator
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_admin
 from app.core.db import get_db
 from app.models.entities import AdminUser, Author, Point, Route, RouteItem, Text
-from app.models.enums import ContentType, TextOrigin
+from app.models.enums import ContentType, RouteRoutingStatus, RouteSegmentKind, TextOrigin
 from app.schemas.common import EnvelopeMeta, envelope
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-content"])
@@ -42,23 +42,44 @@ class TextWrite(BaseModel):
     content_type: ContentType
 
 
-class RouteItemWrite(BaseModel):
+class RouteSegmentWrite(BaseModel):
     position: int
-    point_id: UUID | None = None
-    waypoint_lat: float | None = None
-    waypoint_lng: float | None = None
-    transition_text_pt: str | None = None
+    kind: RouteSegmentKind
+    text_id: UUID | None = None
+    bridge_content_pt: str | None = None
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> "RouteSegmentWrite":
+        if self.kind == RouteSegmentKind.TEXT and self.text_id is None:
+            raise ValueError("text segments require text_id")
+        if self.kind == RouteSegmentKind.TEXT and self.bridge_content_pt is not None:
+            raise ValueError("text segments cannot contain bridge content")
+        if self.kind == RouteSegmentKind.BRIDGE and not self.bridge_content_pt:
+            raise ValueError("bridge segments require bridge_content_pt")
+        if self.kind == RouteSegmentKind.BRIDGE and self.text_id is not None:
+            raise ValueError("bridge segments cannot reference text_id")
+        if self.kind == RouteSegmentKind.LEGACY:
+            raise ValueError("legacy segments are read-only")
+        return self
 
 
 class RouteWrite(BaseModel):
     title_pt: str
+    slug: str | None = None
     description_pt: str | None = None
     cover_image_url: str | None = None
     difficulty: str | None = None
     is_published: bool = False
     estimated_distance_m: float | None = None
     estimated_duration_s: int | None = None
-    items: list[RouteItemWrite] = []
+    segments: list[RouteSegmentWrite] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_positions(self) -> "RouteWrite":
+        positions = [segment.position for segment in self.segments]
+        if len(positions) != len(set(positions)):
+            raise ValueError("segment positions must be unique")
+        return self
 
 
 def serialize_author(author: Author) -> dict[str, object]:
@@ -95,46 +116,93 @@ def serialize_text(text: Text) -> dict[str, object]:
         "source_year": text.source_year,
         "content_type": text.content_type.value,
         "origin": text.origin,
+        "author": serialize_author(text.author),
+        "point": serialize_point(text.point),
+        "translations": [
+            {
+                "lang": translation.lang,
+                "content": translation.content,
+                "status": translation.status.value,
+            }
+            for translation in text.translations
+        ],
+        "audio_files": [
+            {
+                "lang": audio.lang,
+                "public_url": audio.public_url,
+                "duration_s": audio.duration_s,
+                "manually_uploaded": audio.manually_uploaded,
+            }
+            for audio in text.audio_files
+        ],
     }
 
 
+def serialize_route_segment(item: RouteItem) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "id": str(item.id),
+        "position": item.position,
+        "kind": item.kind,
+        "text_id": str(item.text_id) if item.text_id else None,
+        "bridge_content_pt": item.bridge_content_pt,
+    }
+    if item.text is not None:
+        payload["text"] = serialize_text(item.text)
+    if item.kind == RouteSegmentKind.LEGACY.value:
+        payload.update(
+            {
+                "point_id": str(item.point_id) if item.point_id else None,
+                "waypoint_lat": item.waypoint_lat,
+                "waypoint_lng": item.waypoint_lng,
+                "transition_text_pt": item.transition_text_pt,
+            }
+        )
+    return payload
+
+
 def serialize_route(route: Route) -> dict[str, object]:
+    segments = [serialize_route_segment(item) for item in route.items]
     return {
         "id": str(route.id),
         "title_pt": route.title_pt,
+        "slug": route.slug,
         "description_pt": route.description_pt,
         "cover_image_url": route.cover_image_url,
         "difficulty": route.difficulty,
         "is_published": route.is_published,
         "estimated_distance_m": route.estimated_distance_m,
         "estimated_duration_s": route.estimated_duration_s,
-        "items": [
-            {
-                "id": str(item.id),
-                "position": item.position,
-                "point_id": str(item.point_id) if item.point_id else None,
-                "waypoint_lat": item.waypoint_lat,
-                "waypoint_lng": item.waypoint_lng,
-                "transition_text_pt": item.transition_text_pt,
-            }
-            for item in route.items
-        ],
+        "routing_status": route.routing_status,
+        "migration_status": route.migration_status,
+        "segments": segments,
+        "items": segments,
+        "items_deprecated": True,
     }
 
 
-def replace_route_items(route: Route, items: list[RouteItemWrite]) -> None:
+def replace_route_segments(route: Route, segments: list[RouteSegmentWrite], db: Session) -> None:
     for existing_item in list(route.items):
         route.items.remove(existing_item)
-    for item in sorted(items, key=lambda current: current.position):
+    text_ids = {segment.text_id for segment in segments if segment.text_id is not None}
+    existing_text_ids = set(db.scalars(select(Text.id).where(Text.id.in_(text_ids))).all())
+    missing_text_ids = text_ids - existing_text_ids
+    if missing_text_ids:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "unknown_route_texts", "text_ids": sorted(map(str, missing_text_ids))},
+        )
+    for item in sorted(segments, key=lambda current: current.position):
         route.items.append(
             RouteItem(
                 position=item.position,
-                point_id=item.point_id,
-                waypoint_lat=item.waypoint_lat,
-                waypoint_lng=item.waypoint_lng,
-                transition_text_pt=item.transition_text_pt,
+                kind=item.kind.value,
+                text_id=item.text_id,
+                bridge_content_pt=item.bridge_content_pt,
             )
         )
+    route.routing_status = RouteRoutingStatus.STALE.value
+    route.routing_hash = None
+    route.routing_error = None
 
 
 @router.get("/authors")
@@ -241,6 +309,17 @@ def delete_point(
     point = db.get(Point, point_id)
     if point is None:
         raise HTTPException(status_code=404, detail="Point not found")
+    route_id = db.scalar(
+        select(RouteItem.route_id)
+        .join(Text, RouteItem.text_id == Text.id)
+        .where(Text.point_id == point_id)
+        .limit(1)
+    )
+    if route_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "point_used_by_route", "route_id": str(route_id)},
+        )
     db.delete(point)
     db.commit()
     return envelope({"deleted": True}, EnvelopeMeta())
@@ -252,7 +331,16 @@ def list_admin_texts(
     db: Annotated[Session, Depends(get_db)],
     point_id: UUID | None = None,
 ) -> dict[str, object]:
-    query = select(Text).order_by(Text.created_at)
+    query = (
+        select(Text)
+        .options(
+            selectinload(Text.author),
+            selectinload(Text.point),
+            selectinload(Text.translations),
+            selectinload(Text.audio_files),
+        )
+        .order_by(Text.created_at)
+    )
     if point_id is not None:
         query = query.where(Text.point_id == point_id)
     texts = db.scalars(query).all()
@@ -300,6 +388,14 @@ def delete_text(
     text = db.get(Text, text_id)
     if text is None:
         raise HTTPException(status_code=404, detail="Text not found")
+    route_id = db.scalar(
+        select(RouteItem.route_id).where(RouteItem.text_id == text_id).limit(1)
+    )
+    if route_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "text_used_by_route", "route_id": str(route_id)},
+        )
     db.delete(text)
     db.commit()
     return envelope({"deleted": True}, EnvelopeMeta())
@@ -311,7 +407,16 @@ def list_admin_routes(
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
     routes = db.scalars(
-        select(Route).options(selectinload(Route.items)).order_by(Route.title_pt)
+        select(Route)
+        .options(
+            selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.author),
+            selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.point),
+            selectinload(Route.items)
+            .selectinload(RouteItem.text)
+            .selectinload(Text.translations),
+            selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.audio_files),
+        )
+        .order_by(Route.title_pt)
     ).all()
     return envelope(
         [serialize_route(route) for route in routes],
@@ -325,8 +430,8 @@ def create_route(
     _: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
-    route = Route(**payload.model_dump(exclude={"items"}))
-    replace_route_items(route, payload.items)
+    route = Route(**payload.model_dump(exclude={"segments"}))
+    replace_route_segments(route, payload.segments, db)
     db.add(route)
     db.commit()
     db.refresh(route)
@@ -343,12 +448,13 @@ def update_route(
     route = db.scalar(select(Route).options(selectinload(Route.items)).where(Route.id == route_id))
     if route is None:
         raise HTTPException(status_code=404, detail="Route not found")
-    for field, value in payload.model_dump(exclude={"items"}).items():
+    for field, value in payload.model_dump(exclude={"segments"}).items():
         setattr(route, field, value)
-    db.execute(delete(RouteItem).where(RouteItem.route_id == route.id))
+    for item in list(route.items):
+        db.delete(item)
+    route.items.clear()
     db.flush()
-    route.items = []
-    replace_route_items(route, payload.items)
+    replace_route_segments(route, payload.segments, db)
     db.commit()
     db.refresh(route)
     return envelope(serialize_route(route), EnvelopeMeta())

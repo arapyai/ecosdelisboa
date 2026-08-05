@@ -60,10 +60,7 @@ def test_admin_can_crud_author_point_text_and_route(client, db_session) -> None:
         json={
             "title_pt": "Santos Literario",
             "is_published": False,
-            "items": [
-                {"position": 1, "point_id": point_id},
-                {"position": 2, "waypoint_lat": 38.704, "waypoint_lng": -9.16},
-            ],
+            "segments": [{"position": 1, "kind": "text", "text_id": text_id}],
         },
         headers=headers,
     )
@@ -79,7 +76,7 @@ def test_admin_can_crud_author_point_text_and_route(client, db_session) -> None:
         json={
             "title_pt": "Santos Literario",
             "is_published": True,
-            "items": [{"position": 1, "point_id": point_id, "transition_text_pt": "Segue"}],
+            "segments": [{"position": 1, "kind": "text", "text_id": text_id}],
         },
         headers=headers,
     )
@@ -87,7 +84,38 @@ def test_admin_can_crud_author_point_text_and_route(client, db_session) -> None:
     assert update_route.json()["data"]["is_published"] is True
 
     delete_text = client.delete(f"/api/v1/admin/texts/{text_id}", headers=headers)
-    assert delete_text.json()["data"]["deleted"] is True
+    assert delete_text.status_code == 409
+    assert delete_text.json()["detail"]["code"] == "text_used_by_route"
+
+    delete_point = client.delete(f"/api/v1/admin/points/{point_id}", headers=headers)
+    assert delete_point.status_code == 409
+    assert delete_point.json()["detail"]["code"] == "point_used_by_route"
+
+    route_payload = route_response.json()["data"]
+    assert route_payload["segments"][0]["text"]["author"]["name"] == "Eca de Queiros"
+    assert route_payload["segments"][0]["text"]["point"]["title_pt"] == "O Ramalhete"
+    assert route_payload["items_deprecated"] is True
+
+
+def test_route_rejects_unknown_text(client, db_session) -> None:
+    headers = auth_header(client, db_session)
+    response = client.post(
+        "/api/v1/admin/routes",
+        json={
+            "title_pt": "Percurso inválido",
+            "segments": [
+                {
+                    "position": 1,
+                    "kind": "text",
+                    "text_id": "00000000-0000-0000-0000-000000000099",
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "unknown_route_texts"
 
 
 def test_admin_endpoints_require_authentication(client) -> None:
