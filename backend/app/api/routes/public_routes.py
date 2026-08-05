@@ -281,9 +281,7 @@ def build_podcast_rss(
         enclosure = ""
         if audio_url:
             enclosure_url = escape(audio_url, {'"': "&quot;"})
-            enclosure = (
-                f'<enclosure url="{enclosure_url}" length="0" type="audio/mpeg"/>'
-            )
+            enclosure = f'<enclosure url="{enclosure_url}" length="0" type="audio/mpeg"/>'
         items.append(
             "<item>"
             f"<title>{escape(item_title)}</title>"
@@ -311,9 +309,7 @@ def get_published_route(route_id: UUID, db: Session) -> Route:
             selectinload(Route.items).selectinload(RouteItem.point),
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.author),
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.point),
-            selectinload(Route.items)
-            .selectinload(RouteItem.text)
-            .selectinload(Text.translations),
+            selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.translations),
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.audio_files),
             selectinload(Route.items).selectinload(RouteItem.translations),
             selectinload(Route.items).selectinload(RouteItem.audio_files),

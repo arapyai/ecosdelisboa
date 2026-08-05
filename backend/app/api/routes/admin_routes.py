@@ -127,9 +127,7 @@ def _load_route(db: Session, route_id: UUID) -> Route | None:
         select(Route)
         .options(
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.point),
-            selectinload(Route.items)
-            .selectinload(RouteItem.text)
-            .selectinload(Text.translations),
+            selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.translations),
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.audio_files),
             selectinload(Route.items).selectinload(RouteItem.translations),
             selectinload(Route.items).selectinload(RouteItem.audio_files),

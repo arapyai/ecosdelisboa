@@ -443,9 +443,7 @@ def delete_text(
     text = db.get(Text, text_id)
     if text is None:
         raise HTTPException(status_code=404, detail="Text not found")
-    route_id = db.scalar(
-        select(RouteItem.route_id).where(RouteItem.text_id == text_id).limit(1)
-    )
+    route_id = db.scalar(select(RouteItem.route_id).where(RouteItem.text_id == text_id).limit(1))
     if route_id is not None:
         raise HTTPException(
             status_code=409,
@@ -466,9 +464,7 @@ def list_admin_routes(
         .options(
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.author),
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.point),
-            selectinload(Route.items)
-            .selectinload(RouteItem.text)
-            .selectinload(Text.translations),
+            selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.translations),
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.audio_files),
             selectinload(Route.items).selectinload(RouteItem.translations),
             selectinload(Route.items).selectinload(RouteItem.audio_files),
@@ -515,9 +511,7 @@ def update_route(
         select(Route)
         .options(
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.point),
-            selectinload(Route.items)
-            .selectinload(RouteItem.text)
-            .selectinload(Text.translations),
+            selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.translations),
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.audio_files),
             selectinload(Route.items).selectinload(RouteItem.translations),
             selectinload(Route.items).selectinload(RouteItem.audio_files),

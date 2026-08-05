@@ -364,8 +364,7 @@ def _process_bridge_audio_job_item(
             (
                 candidate
                 for candidate in segment.translations
-                if candidate.lang == item.lang
-                and candidate.status == TranslationStatus.APPROVED
+                if candidate.lang == item.lang and candidate.status == TranslationStatus.APPROVED
             ),
             None,
         )

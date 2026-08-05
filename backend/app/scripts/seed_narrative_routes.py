@@ -75,8 +75,7 @@ def queue_missing_route_audio(db: Session, route: Route) -> None:
         if segment.kind == RouteSegmentKind.TEXT.value and segment.text is not None:
             for lang in text_items:
                 has_audio = any(
-                    audio.lang == lang and audio.public_url
-                    for audio in segment.text.audio_files
+                    audio.lang == lang and audio.public_url for audio in segment.text.audio_files
                 )
                 if not has_audio and not _is_queued(db, text_id=segment.text.id, lang=lang):
                     text_items[lang].append((segment.text.id, lang))
@@ -224,9 +223,7 @@ def _is_queued(
 ) -> bool:
     statement = select(AudioGenerationJobItem.id).where(
         AudioGenerationJobItem.lang == lang,
-        AudioGenerationJobItem.status.in_(
-            [AudioJobItemStatus.PENDING, AudioJobItemStatus.RUNNING]
-        ),
+        AudioGenerationJobItem.status.in_([AudioJobItemStatus.PENDING, AudioJobItemStatus.RUNNING]),
     )
     statement = statement.where(
         AudioGenerationJobItem.text_id == text_id

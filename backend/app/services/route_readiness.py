@@ -92,9 +92,7 @@ def evaluate_route_readiness(
     ]
     if len(text_segments) < 2:
         issues.append(
-            ReadinessIssue(
-                "too_few_texts", "segments", "At least two text segments are required"
-            )
+            ReadinessIssue("too_few_texts", "segments", "At least two text segments are required")
         )
 
     for segment in route.items:

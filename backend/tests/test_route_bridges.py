@@ -61,9 +61,7 @@ def test_bridge_translation_is_reviewed_and_served_by_language(client, db_sessio
     assert segment["content_pt"] == "Começamos junto ao Tejo."
 
 
-def test_bridge_audio_generation_uses_job_and_preserves_manual_upload(
-    client, db_session
-) -> None:
+def test_bridge_audio_generation_uses_job_and_preserves_manual_upload(client, db_session) -> None:
     headers = auth_header(client, db_session)
     voice = Voice(elevenlabs_id="curator-pt", name="Curadora", is_default=True)
     voice.languages.append(db_session.get(Language, "pt"))
@@ -97,9 +95,5 @@ def test_bridge_audio_generation_uses_job_and_preserves_manual_upload(
     assert regenerated.status_code == 200
     assert regenerated.json()["data"]["audio"]["manually_uploaded"] is True
     assert regenerated.json()["data"]["audio"]["public_url"] == manual_url
-    audio = (
-        db_session.query(RouteSegmentAudioFile)
-        .filter_by(segment_id=UUID(segment_id))
-        .one()
-    )
+    audio = db_session.query(RouteSegmentAudioFile).filter_by(segment_id=UUID(segment_id)).one()
     assert audio.manually_uploaded is True

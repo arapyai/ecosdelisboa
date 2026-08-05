@@ -167,9 +167,7 @@ def test_ready_route_can_publish_and_exports_real_geometry_and_audio(
 
     assert publication.status_code == 200
     assert publication.json()["data"]["is_published"] is True
-    readiness = client.get(
-        f"/api/v1/admin/routes/{route.id}/readiness?lang=en", headers=headers
-    )
+    readiness = client.get(f"/api/v1/admin/routes/{route.id}/readiness?lang=en", headers=headers)
     assert readiness.json()["data"] == {"lang": "en", "ready": True, "issues": []}
 
     gpx = client.get(f"/api/v1/routes/{route.id}/gpx")

@@ -43,9 +43,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        "DELETE FROM audio_generation_job_items WHERE route_segment_id IS NOT NULL"
-    )
+    op.execute("DELETE FROM audio_generation_job_items WHERE route_segment_id IS NOT NULL")
     with op.batch_alter_table("audio_generation_job_items") as batch:
         batch.drop_constraint("ck_audio_generation_job_items_content_target", type_="check")
         batch.drop_constraint("uq_audio_job_item_job_route_segment_lang", type_="unique")

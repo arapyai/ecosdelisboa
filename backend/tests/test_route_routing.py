@@ -79,9 +79,7 @@ class FailingProvider:
         raise RoutingError("provider unavailable")
 
 
-def test_recalculate_persists_route_leg_waypoints_and_hash(
-    client, db_session, monkeypatch
-) -> None:
+def test_recalculate_persists_route_leg_waypoints_and_hash(client, db_session, monkeypatch) -> None:
     headers = auth_header(client, db_session)
     route = seed_route(db_session)
     provider = StubProvider()

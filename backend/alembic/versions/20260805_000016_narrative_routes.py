@@ -139,8 +139,7 @@ def downgrade() -> None:
         batch.drop_column("kind")
         batch.create_check_constraint(
             "ck_route_items_point_or_waypoint",
-            "(point_id IS NOT NULL) OR "
-            "(waypoint_lat IS NOT NULL AND waypoint_lng IS NOT NULL)",
+            "(point_id IS NOT NULL) OR (waypoint_lat IS NOT NULL AND waypoint_lng IS NOT NULL)",
         )
     with op.batch_alter_table("routes") as batch:
         batch.drop_constraint("uq_routes_slug", type_="unique")
