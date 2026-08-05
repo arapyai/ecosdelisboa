@@ -3,8 +3,10 @@ import test from 'node:test';
 import type { PublicRoute } from '@ecosdelisboa/shared';
 import {
   preserveSelectedRoute,
+  narrativeTextNumber,
   routeAudioDuration,
-  routeNarrativeLabels
+  routeNarrativeLabels,
+  segmentHasAudio
 } from './routeDiscoveryModel.ts';
 
 const route: PublicRoute = {
@@ -56,4 +58,17 @@ test('preserves selection across language reloads when route still exists', () =
   const other = { ...route, id: 'other' };
   assert.equal(preserveSelectedRoute([route, other], 'other'), 'other');
   assert.equal(preserveSelectedRoute([route], 'missing'), 'route');
+});
+
+test('numbers only text steps and shows audio only for a real localized file', () => {
+  const segments = route.segments ?? [];
+  assert.equal(narrativeTextNumber(segments, 'text-segment'), 1);
+  assert.equal(segmentHasAudio(segments[0]!, 'pt'), false);
+  const textSegment = segments[0]!;
+  if (textSegment.kind !== 'text') throw new Error('expected text fixture');
+  const ready = {
+    ...textSegment,
+    text: { ...textSegment.text, audio_files: [{ id: 'ready', lang: 'pt', public_url: '/ready.mp3' }] }
+  };
+  assert.equal(segmentHasAudio(ready, 'pt'), true);
 });

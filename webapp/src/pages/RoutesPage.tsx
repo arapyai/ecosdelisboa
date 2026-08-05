@@ -6,7 +6,7 @@ import { EmptyState, ErrorState } from '../components/AsyncState';
 import { GuidedRouteSession } from '../components/GuidedRouteSession';
 import { OfflineRouteButton } from '../components/OfflineRouteButton';
 import { RouteDiscoveryMap } from '../components/RouteDiscoveryMap';
-import { preserveSelectedRoute, routeAudioDuration } from '../routeDiscoveryModel';
+import { narrativeTextNumber, preserveSelectedRoute, routeAudioDuration, segmentHasAudio } from '../routeDiscoveryModel';
 import type { Lang } from '../types';
 
 interface Props {
@@ -162,13 +162,13 @@ export function RoutesPage({ lang }: Props) {
                     {segments.map((segment) =>
                       segment.kind === 'text' ? (
                         <li key={segment.id} className="text-preview-step">
-                          <strong>{segment.position}</strong>
+                          <strong>{narrativeTextNumber(segments, segment.id)}</strong>
                           <div>
                             <span>{segment.text.author.name}</span>
                             <h3>{segment.text.source_work || excerpt(segment.text.content, 72)}</h3>
                             <small>⌖ {segment.text.point.title_pt}{segment.text.point.neighborhood ? ` · ${segment.text.point.neighborhood}` : ''}</small>
                           </div>
-                          <Headphones size={18} aria-label={lang === 'en' ? 'Audio available' : 'Áudio disponível'} />
+                          {segmentHasAudio(segment, lang) ? <Headphones size={18} aria-label={lang === 'en' ? 'Audio available' : 'Áudio disponível'} /> : null}
                         </li>
                       ) : segment.kind === 'bridge' ? (
                         <li key={segment.id} className="bridge-preview-step">
