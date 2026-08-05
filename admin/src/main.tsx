@@ -32,6 +32,7 @@ import { TextVersionsEditor } from './texts/TextVersionsEditor';
 import { TextsPanel } from './texts/TextsPanel';
 import { UsersPanel } from './users/UsersPanel';
 import { ResourceFields } from './resources/ResourceFields';
+import { RouteEditor } from './routes/RouteEditor';
 import { columnsFor, draftFromItem, emptyDraft, formatCell, serializeDraft } from './resources/resourceModel';
 import type {
   Draft,
@@ -193,7 +194,10 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           onImportedTextIdsConsumed={() => setImportedTextIds([])}
         />
       ) : null}
-      {section !== 'csv' && section !== 'pronunciation' && section !== 'users' && section !== 'texts' ? (
+      {section === 'routes' ? (
+        <RouteEditor token={token} onAuthExpired={onLogout} />
+      ) : null}
+      {section !== 'csv' && section !== 'pronunciation' && section !== 'users' && section !== 'texts' && section !== 'routes' ? (
         <ResourcePanel token={token} resource={section} onAuthExpired={onLogout} />
       ) : null}
       <BatchJobTray
