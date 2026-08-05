@@ -411,9 +411,11 @@ class RouteSegmentAudioFile(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     lang: Mapped[str] = mapped_column(
         String(16), ForeignKey("languages.code", ondelete="RESTRICT"), nullable=False
     )
+    r2_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     public_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
     voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     manually_uploaded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     segment: Mapped[RouteItem] = relationship(back_populates="audio_files")
@@ -489,9 +491,13 @@ class AudioGenerationJobItem(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     job_id: Mapped[UUID] = mapped_column(
         ForeignKey("audio_generation_jobs.id", ondelete="CASCADE"), nullable=False
     )
-    text_id: Mapped[UUID] = mapped_column(
+    text_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("texts.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+    )
+    route_segment_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("route_items.id", ondelete="CASCADE"),
+        nullable=True,
     )
     lang: Mapped[str] = mapped_column(
         String(16), ForeignKey("languages.code", ondelete="RESTRICT"), nullable=False
@@ -505,10 +511,22 @@ class AudioGenerationJobItem(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     was_skipped: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     job: Mapped[AudioGenerationJob] = relationship(back_populates="items")
-    text: Mapped[Text] = relationship()
+    text: Mapped[Text | None] = relationship()
+    route_segment: Mapped[RouteItem | None] = relationship()
 
     __table_args__ = (
+        CheckConstraint(
+            "(text_id IS NOT NULL AND route_segment_id IS NULL) OR "
+            "(text_id IS NULL AND route_segment_id IS NOT NULL)",
+            name="content_target",
+        ),
         UniqueConstraint("job_id", "text_id", "lang", name="uq_audio_job_item_job_text_lang"),
+        UniqueConstraint(
+            "job_id",
+            "route_segment_id",
+            "lang",
+            name="uq_audio_job_item_job_route_segment_lang",
+        ),
     )
 
 

@@ -92,9 +92,31 @@ def serialize_route_segment(
             "audio_files": [serialize_audio(audio) for audio in text.audio_files],
         }
     elif item.kind == RouteSegmentKind.BRIDGE.value:
-        payload["content"] = item.bridge_content_pt
+        translation = next(
+            (
+                candidate
+                for candidate in item.translations
+                if candidate.lang == lang and candidate.status == TranslationStatus.APPROVED
+            ),
+            None,
+        )
+        payload["content"] = (
+            translation.content
+            if lang != source_language and translation is not None
+            else item.bridge_content_pt
+        )
         payload["content_pt"] = item.bridge_content_pt
-        payload["audio_files"] = []
+        payload["audio_files"] = [
+            {
+                "id": str(audio.id),
+                "lang": audio.lang,
+                "public_url": audio.public_url,
+                "duration_s": audio.duration_s,
+                "voice_id": audio.voice_id,
+                "manually_uploaded": audio.manually_uploaded,
+            }
+            for audio in item.audio_files
+        ]
     elif item.point is not None:
         payload["kind"] = RouteSegmentKind.LEGACY.value
         payload["transition_text_pt"] = item.transition_text_pt
@@ -226,6 +248,8 @@ def get_published_route(route_id: UUID, db: Session) -> Route:
             .selectinload(RouteItem.text)
             .selectinload(Text.translations),
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.audio_files),
+            selectinload(Route.items).selectinload(RouteItem.translations),
+            selectinload(Route.items).selectinload(RouteItem.audio_files),
             selectinload(Route.translations),
             selectinload(Route.legs),
         )

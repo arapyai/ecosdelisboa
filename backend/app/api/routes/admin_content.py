@@ -149,6 +149,27 @@ def serialize_route_segment(item: RouteItem) -> dict[str, object]:
     }
     if item.text is not None:
         payload["text"] = serialize_text(item.text)
+    if item.kind == RouteSegmentKind.BRIDGE.value:
+        payload["translations"] = [
+            {
+                "id": str(translation.id),
+                "lang": translation.lang,
+                "content": translation.content,
+                "status": translation.status.value,
+            }
+            for translation in item.translations
+        ]
+        payload["audio_files"] = [
+            {
+                "id": str(audio.id),
+                "lang": audio.lang,
+                "public_url": audio.public_url,
+                "duration_s": audio.duration_s,
+                "voice_id": audio.voice_id,
+                "manually_uploaded": audio.manually_uploaded,
+            }
+            for audio in item.audio_files
+        ]
     if item.kind == RouteSegmentKind.LEGACY.value:
         payload.update(
             {
@@ -417,6 +438,8 @@ def list_admin_routes(
             .selectinload(RouteItem.text)
             .selectinload(Text.translations),
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.audio_files),
+            selectinload(Route.items).selectinload(RouteItem.translations),
+            selectinload(Route.items).selectinload(RouteItem.audio_files),
             selectinload(Route.legs),
         )
         .order_by(Route.title_pt)
