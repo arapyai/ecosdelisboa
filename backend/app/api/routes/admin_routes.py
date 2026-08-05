@@ -28,6 +28,7 @@ from app.services.audio_storage import AudioStorage, manual_route_bridge_audio_k
 from app.services.audio_uploads import validate_mp3_upload
 from app.services.elevenlabs import ElevenLabsService
 from app.services.languages import get_active_language, get_source_language
+from app.services.route_readiness import serialize_route_readiness
 from app.services.routing import (
     DirectionsProvider,
     RoutingError,
@@ -126,7 +127,14 @@ def _load_route(db: Session, route_id: UUID) -> Route | None:
         select(Route)
         .options(
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.point),
+            selectinload(Route.items)
+            .selectinload(RouteItem.text)
+            .selectinload(Text.translations),
+            selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.audio_files),
+            selectinload(Route.items).selectinload(RouteItem.translations),
+            selectinload(Route.items).selectinload(RouteItem.audio_files),
             selectinload(Route.legs),
+            selectinload(Route.translations),
         )
         .where(Route.id == route_id)
     )
@@ -235,6 +243,24 @@ def recalculate_route(
         },
         EnvelopeMeta(),
     )
+
+
+@router.get("/{route_id}/readiness")
+def get_route_readiness(
+    route_id: UUID,
+    _: Annotated[AdminUser, Depends(get_current_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    lang: str = "pt",
+) -> dict[str, object]:
+    try:
+        language = get_active_language(db, lang)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    route = _load_route(db, route_id)
+    if route is None:
+        raise HTTPException(status_code=404, detail="Route not found")
+    readiness = serialize_route_readiness(route, language.code, get_source_language(db).code)
+    return envelope(readiness, EnvelopeMeta())
 
 
 @router.put("/{route_id}/segments/{segment_id}/translations/{lang}")

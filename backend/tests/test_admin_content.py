@@ -75,13 +75,13 @@ def test_admin_can_crud_author_point_text_and_route(client, db_session) -> None:
         f"/api/v1/admin/routes/{route_id}",
         json={
             "title_pt": "Santos Literario",
-            "is_published": True,
+            "is_published": False,
             "segments": [{"position": 1, "kind": "text", "text_id": text_id}],
         },
         headers=headers,
     )
     assert update_route.status_code == 200
-    assert update_route.json()["data"]["is_published"] is True
+    assert update_route.json()["data"]["is_published"] is False
 
     delete_text = client.delete(f"/api/v1/admin/texts/{text_id}", headers=headers)
     assert delete_text.status_code == 409

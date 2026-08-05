@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     routing_retry_count: int = Field(default=2, ge=0)
     routing_retry_backoff_s: float = Field(default=0.25, ge=0)
     route_curatorial_voice_ids: dict[str, str] = Field(default_factory=dict)
+    route_required_languages: list[str] = Field(default_factory=lambda: ["pt", "en"])
     translation_llm_provider: str = "claude"
     translation_llm_model: str = "claude-sonnet-4-6"
     translation_llm_api_key: str | None = None

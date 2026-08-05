@@ -176,9 +176,27 @@ def serialize_route(route: Route, lang: str, source_language: str) -> dict[str, 
 
 
 def build_route_coordinates(route: Route) -> list[tuple[float, float]]:
+    if route.legs:
+        coordinates: list[tuple[float, float]] = []
+        for leg in sorted(route.legs, key=lambda candidate: candidate.position):
+            raw_coordinates = leg.geometry.get("coordinates", [])
+            if not isinstance(raw_coordinates, list):
+                continue
+            leg_coordinates = [
+                (float(coordinate[1]), float(coordinate[0]))
+                for coordinate in raw_coordinates
+                if isinstance(coordinate, list) and len(coordinate) >= 2
+            ]
+            if coordinates and leg_coordinates and coordinates[-1] == leg_coordinates[0]:
+                leg_coordinates = leg_coordinates[1:]
+            coordinates.extend(leg_coordinates)
+        if coordinates:
+            return coordinates
     coordinates: list[tuple[float, float]] = []
     for item in route.items:
-        if item.point is not None:
+        if item.kind == RouteSegmentKind.TEXT.value and item.text is not None:
+            coordinates.append((item.text.point.lat, item.text.point.lng))
+        elif item.point is not None:
             coordinates.append((item.point.lat, item.point.lng))
         elif item.waypoint_lat is not None and item.waypoint_lng is not None:
             coordinates.append((item.waypoint_lat, item.waypoint_lng))
@@ -204,6 +222,8 @@ def build_podcast_rss(
     route: Route,
     title: str | None = None,
     description: str | None = None,
+    lang: str = "pt",
+    source_language: str = "pt",
 ) -> str:
     selected_title = title if title is not None else route.title_pt
     if title is None:
@@ -214,15 +234,62 @@ def build_podcast_rss(
     description_xml = escape(selected_description)
     items = []
     for item in route.items:
-        if item.point is None:
+        item_title: str | None = None
+        item_description: str | None = None
+        audio_url: str | None = None
+        if item.kind == RouteSegmentKind.TEXT.value and item.text is not None:
+            item_title = item.text.source_work or item.text.point.title_pt
+            item_description = resolve_text_content(item.text, lang, source_language)
+            audio = next(
+                (
+                    candidate
+                    for candidate in item.text.audio_files
+                    if candidate.lang == lang and candidate.public_url
+                ),
+                None,
+            )
+            audio_url = audio.public_url if audio is not None else None
+        elif item.kind == RouteSegmentKind.BRIDGE.value:
+            item_title = f"Interlúdio {item.position + 1}"
+            translation = next(
+                (
+                    candidate
+                    for candidate in item.translations
+                    if candidate.lang == lang and candidate.status == TranslationStatus.APPROVED
+                ),
+                None,
+            )
+            item_description = (
+                translation.content
+                if lang != source_language and translation is not None
+                else item.bridge_content_pt
+            )
+            audio = next(
+                (
+                    candidate
+                    for candidate in item.audio_files
+                    if candidate.lang == lang and candidate.public_url
+                ),
+                None,
+            )
+            audio_url = audio.public_url if audio is not None else None
+        elif item.point is not None:
+            item_title = item.point.title_pt
+            item_description = item.point.title_pt
+        if item_title is None:
             continue
-        point_title = escape(item.point.title_pt)
-        point_id = str(item.point.id)
+        enclosure = ""
+        if audio_url:
+            enclosure_url = escape(audio_url, {'"': "&quot;"})
+            enclosure = (
+                f'<enclosure url="{enclosure_url}" length="0" type="audio/mpeg"/>'
+            )
         items.append(
             "<item>"
-            f"<title>{point_title}</title>"
-            f"<guid>{point_id}</guid>"
-            f"<description>{point_title}</description>"
+            f"<title>{escape(item_title)}</title>"
+            f"<guid>{item.id}</guid>"
+            f"<description>{escape(item_description or item_title)}</description>"
+            f"{enclosure}"
             "</item>"
         )
 
@@ -335,6 +402,12 @@ def get_route_podcast_rss(
     route = get_published_route(route_id, db)
     title, description = resolve_route_content(route, selected_language, source_language)
     return Response(
-        content=build_podcast_rss(route, title, description),
+        content=build_podcast_rss(
+            route,
+            title,
+            description,
+            selected_language,
+            source_language,
+        ),
         media_type="application/rss+xml",
     )

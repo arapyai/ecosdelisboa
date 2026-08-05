@@ -8,10 +8,13 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_admin
 from app.api.routes.admin_routes import serialize_leg
+from app.core.config import get_settings
 from app.core.db import get_db
 from app.models.entities import AdminUser, Author, Point, Route, RouteItem, Text
 from app.models.enums import ContentType, RouteRoutingStatus, RouteSegmentKind, TextOrigin
 from app.schemas.common import EnvelopeMeta, envelope
+from app.services.languages import get_source_language
+from app.services.route_readiness import serialize_route_readiness
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-content"])
 
@@ -228,6 +231,35 @@ def replace_route_segments(route: Route, segments: list[RouteSegmentWrite], db: 
     route.routing_error = None
 
 
+def route_segments_changed(route: Route, segments: list[RouteSegmentWrite]) -> bool:
+    current = [
+        (item.position, item.kind, item.text_id, item.bridge_content_pt)
+        for item in sorted(route.items, key=lambda candidate: candidate.position)
+    ]
+    requested = [
+        (item.position, item.kind.value, item.text_id, item.bridge_content_pt)
+        for item in sorted(segments, key=lambda candidate: candidate.position)
+    ]
+    return current != requested
+
+
+def publication_readiness(db: Session, route: Route) -> list[dict[str, object]]:
+    source_language = get_source_language(db).code
+    return [
+        serialize_route_readiness(route, lang, source_language)
+        for lang in get_settings().route_required_languages
+    ]
+
+
+def ensure_route_can_publish(db: Session, route: Route) -> None:
+    readiness = publication_readiness(db, route)
+    if any(not item["ready"] for item in readiness):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "route_not_ready", "readiness": readiness},
+        )
+
+
 @router.get("/authors")
 def list_admin_authors(
     _: Annotated[AdminUser, Depends(get_current_admin)],
@@ -441,6 +473,7 @@ def list_admin_routes(
             selectinload(Route.items).selectinload(RouteItem.translations),
             selectinload(Route.items).selectinload(RouteItem.audio_files),
             selectinload(Route.legs),
+            selectinload(Route.translations),
         )
         .order_by(Route.title_pt)
     ).all()
@@ -459,6 +492,13 @@ def create_route(
     route = Route(**payload.model_dump(exclude={"segments"}))
     replace_route_segments(route, payload.segments, db)
     db.add(route)
+    if route.is_published:
+        db.flush()
+        try:
+            ensure_route_can_publish(db, route)
+        except HTTPException:
+            db.rollback()
+            raise
     db.commit()
     db.refresh(route)
     return envelope(serialize_route(route), EnvelopeMeta())
@@ -473,21 +513,39 @@ def update_route(
 ) -> dict[str, object]:
     route = db.scalar(
         select(Route)
-        .options(selectinload(Route.items), selectinload(Route.legs))
+        .options(
+            selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.point),
+            selectinload(Route.items)
+            .selectinload(RouteItem.text)
+            .selectinload(Text.translations),
+            selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.audio_files),
+            selectinload(Route.items).selectinload(RouteItem.translations),
+            selectinload(Route.items).selectinload(RouteItem.audio_files),
+            selectinload(Route.legs),
+            selectinload(Route.translations),
+        )
         .where(Route.id == route_id)
     )
     if route is None:
         raise HTTPException(status_code=404, detail="Route not found")
     for field, value in payload.model_dump(exclude={"segments"}).items():
         setattr(route, field, value)
-    for leg in list(route.legs):
-        db.delete(leg)
-    route.legs.clear()
-    for item in list(route.items):
-        db.delete(item)
-    route.items.clear()
-    db.flush()
-    replace_route_segments(route, payload.segments, db)
+    if route_segments_changed(route, payload.segments):
+        for leg in list(route.legs):
+            db.delete(leg)
+        route.legs.clear()
+        for item in list(route.items):
+            db.delete(item)
+        route.items.clear()
+        db.flush()
+        replace_route_segments(route, payload.segments, db)
+    if route.is_published:
+        db.flush()
+        try:
+            ensure_route_can_publish(db, route)
+        except HTTPException:
+            db.rollback()
+            raise
     db.commit()
     db.refresh(route)
     return envelope(serialize_route(route), EnvelopeMeta())
