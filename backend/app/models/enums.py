@@ -31,3 +31,16 @@ class AudioJobItemStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class RouteSegmentKind(StrEnum):
+    TEXT = "text"
+    BRIDGE = "bridge"
+    LEGACY = "legacy"
+
+
+class RouteRoutingStatus(StrEnum):
+    PENDING = "pending"
+    READY = "ready"
+    STALE = "stale"
+    FAILED = "failed"

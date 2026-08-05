@@ -19,6 +19,9 @@ def test_expected_tables_exist() -> None:
         "points",
         "pronunciation_dictionaries",
         "route_items",
+        "route_legs",
+        "route_segment_audio_files",
+        "route_segment_translations",
         "routes",
         "route_translations",
         "texts",
@@ -73,6 +76,35 @@ def test_route_items_allow_point_or_free_waypoint() -> None:
     assert any(
         "point_id IS NOT NULL" in str(constraint.sqltext) for constraint in check_constraints
     )
+
+
+def test_narrative_route_tables_have_expected_uniqueness() -> None:
+    expected = {
+        "route_segment_translations": {"segment_id", "lang"},
+        "route_segment_audio_files": {"segment_id", "lang"},
+        "route_legs": {"route_id", "position"},
+    }
+    for table_name, columns in expected.items():
+        constraints = [
+            item
+            for item in Base.metadata.tables[table_name].constraints
+            if isinstance(item, UniqueConstraint)
+        ]
+        assert any({column.name for column in item.columns} == columns for item in constraints)
+
+
+def test_route_items_require_payload_matching_the_segment_kind() -> None:
+    constraints = [
+        item
+        for item in Base.metadata.tables["route_items"].constraints
+        if isinstance(item, CheckConstraint)
+    ]
+    segment_constraint = next(
+        item for item in constraints if item.name == "ck_route_items_segment_payload"
+    )
+    sql = str(segment_constraint.sqltext)
+    assert "kind = 'text' AND text_id IS NOT NULL" in sql
+    assert "kind = 'bridge' AND text_id IS NULL" in sql
 
 
 def test_geometry_type_emits_postgis_column_spec() -> None:
