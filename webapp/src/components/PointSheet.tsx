@@ -48,7 +48,7 @@ export function PointSheet({ point, lang, onClose, selectedTextId }: Props) {
         </div>
       ) : null}
       <div className="sheet-actions">
-        <a href={api.getRoutePodcastUrl(point.id)} aria-label="Podcast RSS">
+        <a href={api.getRoutePodcastUrl(point.id, lang)} aria-label="Podcast RSS">
           RSS
         </a>
       </div>
