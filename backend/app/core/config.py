@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     geocoding_api_key: str | None = None
     geocoding_api_key_header: str | None = None
     geocoding_api_key_query_param: str | None = None
+    routing_provider: str = "openrouteservice"
+    openrouteservice_api_key: str | None = None
+    openrouteservice_base_url: str = "https://api.openrouteservice.org"
+    routing_timeout_s: float = Field(default=15.0, gt=0)
+    routing_retry_count: int = Field(default=2, ge=0)
+    routing_retry_backoff_s: float = Field(default=0.25, ge=0)
     translation_llm_provider: str = "claude"
     translation_llm_model: str = "claude-sonnet-4-6"
     translation_llm_api_key: str | None = None

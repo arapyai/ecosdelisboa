@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_admin
+from app.api.routes.admin_routes import serialize_leg
 from app.core.db import get_db
 from app.models.entities import AdminUser, Author, Point, Route, RouteItem, Text
 from app.models.enums import ContentType, RouteRoutingStatus, RouteSegmentKind, TextOrigin
@@ -177,6 +178,7 @@ def serialize_route(route: Route) -> dict[str, object]:
         "segments": segments,
         "items": segments,
         "items_deprecated": True,
+        "legs": [serialize_leg(leg) for leg in route.legs],
     }
 
 
@@ -415,6 +417,7 @@ def list_admin_routes(
             .selectinload(RouteItem.text)
             .selectinload(Text.translations),
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.audio_files),
+            selectinload(Route.legs),
         )
         .order_by(Route.title_pt)
     ).all()
@@ -445,11 +448,18 @@ def update_route(
     _: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
-    route = db.scalar(select(Route).options(selectinload(Route.items)).where(Route.id == route_id))
+    route = db.scalar(
+        select(Route)
+        .options(selectinload(Route.items), selectinload(Route.legs))
+        .where(Route.id == route_id)
+    )
     if route is None:
         raise HTTPException(status_code=404, detail="Route not found")
     for field, value in payload.model_dump(exclude={"segments"}).items():
         setattr(route, field, value)
+    for leg in list(route.legs):
+        db.delete(leg)
+    route.legs.clear()
     for item in list(route.items):
         db.delete(item)
     route.items.clear()

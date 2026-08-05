@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.db import get_db
-from app.models.entities import AudioFile, Route, RouteItem, Text
+from app.models.entities import AudioFile, Route, RouteItem, RouteLeg, Text
 from app.models.enums import RouteSegmentKind, TranslationStatus
 from app.schemas.common import EnvelopeMeta, envelope
 from app.services.editorial_translations import (
@@ -40,6 +40,20 @@ def serialize_audio(audio: AudioFile) -> dict[str, object]:
         "duration_s": audio.duration_s,
         "voice_id": audio.voice_id,
         "manually_uploaded": audio.manually_uploaded,
+    }
+
+
+def serialize_route_leg(leg: RouteLeg) -> dict[str, object]:
+    return {
+        "id": str(leg.id),
+        "position": leg.position,
+        "from_segment_id": str(leg.from_segment_id),
+        "to_segment_id": str(leg.to_segment_id),
+        "geometry": leg.geometry,
+        "waypoints": leg.waypoints,
+        "distance_m": leg.distance_m,
+        "duration_s": leg.duration_s,
+        "provider": leg.provider,
     }
 
 
@@ -213,6 +227,7 @@ def get_published_route(route_id: UUID, db: Session) -> Route:
             .selectinload(Text.translations),
             selectinload(Route.items).selectinload(RouteItem.text).selectinload(Text.audio_files),
             selectinload(Route.translations),
+            selectinload(Route.legs),
         )
         .where(Route.id == route_id, Route.is_published.is_(True))
     )
@@ -264,6 +279,7 @@ def get_route(
     payload["segments"] = segments
     payload["items"] = segments
     payload["items_deprecated"] = True
+    payload["legs"] = [serialize_route_leg(leg) for leg in route.legs]
     return envelope(payload, EnvelopeMeta(extra={"lang": selected_language}))
 
 
