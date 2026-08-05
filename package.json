@@ -13,6 +13,10 @@
     "admin:dev": "npm --workspace @ecosdelisboa/admin run dev",
     "admin:build": "npm --workspace @ecosdelisboa/admin run build",
     "shared:test": "npm --workspace @ecosdelisboa/shared run test",
-    "mobile:start": "npm --workspace @ecosdelisboa/mobile run start"
+    "mobile:start": "npm --workspace @ecosdelisboa/mobile run start",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
   }
 }

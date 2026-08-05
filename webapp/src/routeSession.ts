@@ -56,8 +56,15 @@ export function startRouteSession(session: RouteSession, now = new Date()): Rout
   });
 }
 
-export function confirmArrival(session: RouteSession, now = new Date()): RouteSession {
-  return updateSession(session, 'arrived', now, { consecutive_arrival_readings: 0 });
+export function confirmArrival(route: PublicRoute, session: RouteSession, now = new Date()): RouteSession {
+  const targetIndex = session.phase === 'walking'
+    ? Math.min(session.active_text_index + 1, Math.max(0, textSegments(route).length - 1))
+    : session.active_text_index;
+  return updateSession(session, 'arrived', now, {
+    active_text_index: targetIndex,
+    active_leg_position: null,
+    consecutive_arrival_readings: 0
+  });
 }
 
 export function markListening(session: RouteSession, now = new Date()): RouteSession {

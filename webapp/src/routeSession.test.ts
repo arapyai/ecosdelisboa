@@ -35,7 +35,7 @@ const route: PublicRoute = {
 test('moves through the explicit visitor phases without implicit audio playback', () => {
   let session = startRouteSession(initialRouteSession(route));
   assert.equal(session.phase, 'going_to_first_text');
-  session = confirmArrival(session);
+  session = confirmArrival(route, session);
   assert.equal(session.phase, 'arrived');
   session = markListening(session);
   assert.equal(session.phase, 'listening');
@@ -43,6 +43,8 @@ test('moves through the explicit visitor phases without implicit audio playback'
   assert.equal(session.phase, 'walking');
   assert.equal(session.active_leg_position, 0);
   assert.deepEqual(bridgesAfterActiveText(route, 0).map((bridge) => bridge.id), ['bridge']);
+  session = confirmArrival(route, session);
+  assert.equal(session.active_text_index, 1);
 });
 
 test('requires two accurate readings and rejects poor accuracy for automatic arrival', () => {

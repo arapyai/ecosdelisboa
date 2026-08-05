@@ -97,7 +97,7 @@ export function RouteEditor({
     const next = local ?? baseline;
     setDraft(next);
     setSavedFingerprint(draftFingerprint(baseline));
-    setMessage(local ? 'Rascunho local restaurado.' : '');
+    if (local) setMessage('Rascunho local restaurado.');
     setSelectedSegmentId(next.segments[0]?.id);
   }, [selectedId, selectedRoute]);
 
@@ -115,8 +115,9 @@ export function RouteEditor({
 
   useEffect(() => {
     if (!selectedId) return;
-    localStorage.setItem(storageKey(selectedId), JSON.stringify(draft));
-  }, [draft, selectedId]);
+    if (dirty) localStorage.setItem(storageKey(selectedId), JSON.stringify(draft));
+    else localStorage.removeItem(storageKey(selectedId));
+  }, [dirty, draft, selectedId]);
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
