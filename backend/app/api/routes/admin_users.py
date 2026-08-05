@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import StaleDataError
 
 from app.api.deps import get_current_admin
 from app.core.db import get_db
@@ -147,7 +148,14 @@ def update_admin_password(
     admin = get_admin_or_404(db, admin_id)
     admin.password_hash = hash_password(payload.password)
     admin.auth_version += 1
-    db.commit()
+    try:
+        db.commit()
+    except StaleDataError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Admin user changed during password reset",
+        ) from exc
     db.refresh(admin)
     return envelope(serialize_admin_user(admin), EnvelopeMeta())
 
