@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.db import SessionLocal
 from app.models.entities import (
     AudioGenerationJobItem,
     Author,
@@ -233,3 +234,18 @@ def _is_queued(
         else AudioGenerationJobItem.route_segment_id == segment_id
     )
     return db.scalar(statement) is not None
+
+
+def seed() -> None:
+    settings = get_settings()
+    with SessionLocal() as db:
+        route = seed_do_tejo_ao_chiado(db, environment=settings.environment)
+        if route is None:
+            raise RuntimeError("narrative route seed is restricted to development and staging")
+        db.commit()
+        queue_missing_route_audio(db, route)
+        print(f"Seed concluído: {route.slug}")
+
+
+if __name__ == "__main__":
+    seed()

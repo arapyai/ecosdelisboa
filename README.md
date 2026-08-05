@@ -54,6 +54,7 @@ Os comandos e variáveis completos estão nos READMEs de cada workspace e em
 - `docs/arquitetura.md`: componentes, limites e fluxo de dados;
 - `docs/backend_referencia.md`: contratos e regras do backend;
 - `docs/importacao_csv_conteudo.md`: contrato do importador editorial;
+- `docs/percursos_narrativos.md`: modelo narrativo, UX, offline, ORS, seed e runbook de staging;
 - `docs/infrastructure.md`: ambientes, deploy e configuração;
 - `docs/runbook_audio_storage.md`: volume, backup e restore de áudio;
 - `docs/runbook_elevenlabs_vozes.md`: vozes e geração de áudio.

@@ -40,6 +40,8 @@ Variaveis principais:
 - `TRANSLATION_LLM_PROVIDER`, `TRANSLATION_LLM_MODEL` e credencial do provider
 - `ELEVENLABS_API_KEY` e configuracao de voz
 - `AUDIO_STORAGE_DIR`, `AUDIO_PUBLIC_BASE_URL` e `AUDIO_UPLOAD_MAX_BYTES`
+- `ROUTING_PROVIDER`, `OPENROUTESERVICE_API_KEY`, timeout e retries de roteamento
+- `ROUTE_REQUIRED_LANGUAGES` e `ROUTE_CURATORIAL_VOICE_IDS`
 
 ## Desenvolvimento
 
@@ -86,7 +88,7 @@ O seed e idempotente e cria dados minimos para desenvolvimento:
 - pontos
 - textos
 - traducoes EN aprovadas
-- percurso publicado
+- percurso narrativo “Do Tejo ao Chiado” em rascunho, com jobs de áudio enfileirados após o seed
 
 Login admin local:
 
@@ -146,6 +148,7 @@ tests/
 - `POST /api/v1/admin/auth/login`
 - `GET /api/v1/admin/auth/me`
 - CRUD de autores, pontos, textos e rotas em `/api/v1/admin/*`
+- editor, readiness e recálculo pedonal de percursos em `/api/v1/admin/routes/*`
 - Importacao CSV de textos, autores, pontos e traducoes em `/api/v1/admin/points/import/*`, com
   template baixavel em `/api/v1/admin/points/import/template`
 - Traducoes em `/api/v1/admin/translations/*`
@@ -229,4 +232,5 @@ fica em `../docs/runbook_elevenlabs_vozes.md`.
 
 ## Notas
 - A especificacao geral do projeto fica em `../docs/lisboa_spec_geral.md`.
+- A operação completa de percursos fica em `../docs/percursos_narrativos.md`.
 - Os detalhes técnicos e operacionais ficam em `../docs/backend_referencia.md` e nos runbooks.
