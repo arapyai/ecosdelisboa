@@ -173,6 +173,33 @@ export interface AdminAudioFile {
   voice_id?: string | null;
   generated_at?: string | null;
   manually_uploaded?: boolean;
+  recipe_hash?: string | null;
+  content_hash?: string | null;
+  generation_spec?: Record<string, unknown> | null;
+}
+
+export type AudioBundleImportAction =
+  | 'create'
+  | 'replace_automatic'
+  | 'already_current'
+  | 'preserve_manual'
+  | 'unmatched'
+  | 'invalid';
+
+export interface AudioBundlePreviewRow {
+  recipe_hash?: string;
+  text_id?: string | null;
+  text?: string | null;
+  lang?: string | null;
+  action?: AudioBundleImportAction;
+  status?: 'exportable' | 'missing' | 'manual' | 'legacy' | 'invalid';
+  reason: string;
+}
+
+export interface AudioBundlePreview {
+  artifact_count: number;
+  counts: Record<string, number>;
+  rows: AudioBundlePreviewRow[];
 }
 
 export type GenerationPolicy = 'missing_only' | 'replace_automatic';

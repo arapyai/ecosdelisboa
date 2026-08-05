@@ -235,6 +235,9 @@ class AudioFile(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     manually_uploaded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    recipe_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    generation_spec: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
 
     text: Mapped[Text] = relationship(back_populates="audio_files")
 

@@ -10,6 +10,7 @@ volume formam uma unidade operacional: `audio_files` aponta para uma chave relat
 AUDIO_STORAGE_DIR=/data/audio-storage
 AUDIO_PUBLIC_BASE_URL=/media
 AUDIO_UPLOAD_MAX_BYTES=26214400
+AUDIO_BUNDLE_MAX_BYTES=262144000
 ```
 
 Em staging e produção, `AUDIO_STORAGE_DIR` deve estar em volume persistente. Não use um caminho
@@ -19,19 +20,28 @@ efêmero da imagem ou do deploy.
 
 ```text
 audio/
-  {text_id}/
-    {lang}.mp3
+  generated/
+    {text_id}/
+      {lang}/
+        {recipe_hash}.mp3
   manual/
     {text_id}/
       {lang}.mp3
 ```
 
-- áudio gerado mantém `audio/{text_id}/{lang}.mp3`;
+- áudio gerado usa `audio/generated/{text_id}/{lang}/{recipe_hash}.mp3`;
 - upload manual usa `audio/manual/{text_id}/{lang}.mp3`;
 - o nome original do upload nunca compõe a chave;
-- novo upload para o mesmo par sobrescreve atomicamente o mesmo arquivo;
+- uma nova receita cria uma chave nova antes de substituir o registro atual;
 - a base mantém no máximo um `audio_files` por `text_id + lang`;
 - geração automática não chama a ElevenLabs nem grava arquivo quando o registro atual é manual.
+
+## Promoção entre ambientes
+
+Na administração, selecione textos e use **Exportar áudios**. O ZIP contém um manifesto e um MP3
+por receita, sem duplicar blobs. No ambiente de destino, use **Importar pacote**. A associação é
+feita pela receita completa (texto falado, idioma, voz, modelo, formato e dicionário), nunca pelos
+UUIDs locais. Uploads manuais não são exportados nem sobrescritos.
 
 ## Upload, replace e delete
 

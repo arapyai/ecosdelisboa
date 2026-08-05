@@ -177,6 +177,41 @@ def test_audio_generation_applies_dictionary_for_item_language(db_session, tmp_p
     ]
 
 
+def test_audio_generation_reuses_signed_local_recipe_without_provider(db_session, tmp_path) -> None:
+    ids = seed_public_data(db_session)
+    first = db_session.query(Text).filter(Text.point_id == ids["point"].id).one()
+    second = Text(
+        point_id=ids["point"].id,
+        author_id=ids["author"].id,
+        content_pt=first.content_pt,
+        content_type=ContentType.PROSE,
+    )
+    db_session.add(second)
+    db_session.commit()
+    storage = AudioStorage(storage_dir=str(tmp_path / "media"))
+
+    class CountingService:
+        generation_model_id = "eleven_v3"
+        output_format = "mp3_44100_128"
+        calls = 0
+
+        def generate_audio(self, _source_text, voice_id, **_kwargs):
+            self.calls += 1
+            return GeneratedAudio(b"ID3portable", 1.0, voice_id)
+
+    service = CountingService()
+    for text in (first, second):
+        job = create_audio_job(db_session, "admin@example.com", [(text.id, "pt")])
+        assert claim_next_audio_job(db_session) == job.id
+        process_audio_job(db_session, job.id, service, storage)
+
+    assert service.calls == 1
+    first_audio = db_session.query(AudioFile).filter_by(text_id=first.id, lang="pt").one()
+    second_audio = db_session.query(AudioFile).filter_by(text_id=second.id, lang="pt").one()
+    assert first_audio.recipe_hash == second_audio.recipe_hash
+    assert Path(storage.storage_dir, str(second_audio.r2_key)).read_bytes() == b"ID3portable"
+
+
 def test_worker_stop_leaves_job_recoverable(db_session, tmp_path) -> None:
     ids = seed_public_data(db_session)
     text = db_session.query(Text).filter(Text.point_id == ids["point"].id).one()

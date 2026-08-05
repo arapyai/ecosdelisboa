@@ -86,8 +86,8 @@ configure ao menos os grupos aplicáveis:
 | admin | `ADMIN_SECRET_KEY`, `ADMIN_INITIAL_EMAIL`, `ADMIN_INITIAL_PASSWORD` |
 | geocoding | `GEOCODING_BASE_URL`, `GEOCODING_USER_AGENT` e credencial opcional |
 | tradução | `TRANSLATION_LLM_PROVIDER`, `TRANSLATION_LLM_MODEL`, `TRANSLATION_LLM_API_KEY` ou `ANTHROPIC_API_KEY` |
-| voz | `ELEVENLABS_API_KEY`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_DEFAULT_VOICE_ID` |
-| áudio | `AUDIO_STORAGE_DIR`, `AUDIO_PUBLIC_BASE_URL`, `AUDIO_UPLOAD_MAX_BYTES`, `AUDIO_WORKER_ENABLED` |
+| voz | `ELEVENLABS_API_KEY`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_OUTPUT_FORMAT`, `ELEVENLABS_DEFAULT_VOICE_ID` |
+| áudio | `AUDIO_STORAGE_DIR`, `AUDIO_PUBLIC_BASE_URL`, `AUDIO_UPLOAD_MAX_BYTES`, `AUDIO_BUNDLE_MAX_BYTES`, `AUDIO_WORKER_ENABLED` |
 
 Não mantenha uma tabela de quotas de provider neste repositório: limites e preços mudam. Use o
 painel e a documentação oficial do provider configurado quando precisar dimensionar uma carga.

@@ -33,11 +33,14 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str | None = None
     elevenlabs_base_url: str = "https://api.elevenlabs.io/v1"
     elevenlabs_model_id: str = "eleven_v3"
+    elevenlabs_output_format: str = "mp3_44100_128"
     elevenlabs_timeout_s: float = 60.0
     elevenlabs_default_voice_id: str | None = None
     audio_storage_dir: str = "media"
     audio_public_base_url: str = "/media"
     audio_upload_max_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+    audio_bundle_max_bytes: int = Field(default=250 * 1024 * 1024, gt=0)
+    audio_bundle_max_entries: int = Field(default=5000, gt=0)
     audio_worker_enabled: bool = True
     audio_worker_poll_interval_s: float = Field(default=1.0, gt=0)
 

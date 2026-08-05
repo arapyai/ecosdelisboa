@@ -5,8 +5,8 @@ from tempfile import NamedTemporaryFile
 from uuid import UUID
 
 
-def generated_audio_key(text_id: UUID, lang: str) -> str:
-    return f"audio/{text_id}/{lang}.mp3"
+def generated_audio_key(text_id: UUID, lang: str, recipe_hash: str) -> str:
+    return f"audio/generated/{text_id}/{lang}/{recipe_hash}.mp3"
 
 
 def manual_audio_key(text_id: UUID, lang: str) -> str:
@@ -41,6 +41,14 @@ class AudioStorage:
             if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()
         return f"{self.public_base_url.rstrip('/')}/{relative_key}"
+
+    def read_audio(self, key: str) -> bytes:
+        _, path = self._path_for_key(key)
+        return path.read_bytes()
+
+    def has_audio(self, key: str) -> bool:
+        _, path = self._path_for_key(key)
+        return path.is_file()
 
     def delete_audio(self, key: str) -> None:
         _, path = self._path_for_key(key)

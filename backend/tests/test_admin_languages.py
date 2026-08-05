@@ -199,7 +199,8 @@ def test_configured_source_language_controls_audio_source_text(client, db_sessio
     response = client.post(f"/api/v1/admin/audio/{text.id}/en/generate", headers=headers)
 
     assert response.status_code == 200
-    audio_path = Path(get_settings().audio_storage_dir) / f"audio/{text.id}/en.mp3"
+    audio = db_session.query(AudioFile).filter_by(text_id=text.id, lang="en").one()
+    audio_path = Path(get_settings().audio_storage_dir) / str(audio.r2_key)
     assert audio_path.read_bytes() == b"Nao sou nada."
 
 

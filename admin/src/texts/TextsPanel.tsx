@@ -15,6 +15,7 @@ import { redirectIfAuthError } from '../adminApi';
 import { autoSyncQueryOptions, client } from '../adminConfig';
 import type { Draft } from '../adminTypes';
 import { ResourceFields } from '../resources/ResourceFields';
+import { AudioBundleDrawer } from '../audio/AudioBundleDrawer';
 import { draftFromItem, emptyDraft, serializeDraft } from '../resources/resourceModel';
 import { TextVersionsEditor } from './TextVersionsEditor';
 import {
@@ -24,7 +25,7 @@ import {
   type TextListFilters
 } from './textListModel';
 
-type DrawerMode = 'create' | 'edit' | 'bulk' | null;
+type DrawerMode = 'create' | 'edit' | 'bulk' | 'export-audio' | 'import-audio' | null;
 
 const emptyFilters: TextListFilters = { language: '', status: '', origin: '', audio: '', gap: '' };
 
@@ -256,7 +257,7 @@ export function TextsPanel({
       <div className="text-list-pane">
         <header className="texts-heading">
           <div><h2>Textos</h2><p>{filteredTexts.length} de {texts.length} textos</p></div>
-          <button type="button" onClick={openCreate}>＋ Novo texto</button>
+          <div className="texts-heading-actions"><button type="button" className="secondary-action" onClick={() => setMode('import-audio')}>Importar pacote</button><button type="button" onClick={openCreate}>＋ Novo texto</button></div>
         </header>
 
         <div className="text-search-toolbar">
@@ -290,6 +291,7 @@ export function TextsPanel({
           <div className="bulk-selection-bar">
             <span>{selected.size} texto{selected.size === 1 ? '' : 's'} selecionado{selected.size === 1 ? '' : 's'}</span>
             <button type="button" onClick={openBulk}>Gerar conteúdo</button>
+            <button type="button" className="secondary-action" onClick={() => setMode('export-audio')}>Exportar áudios</button>
             <button type="button" className="text-action" onClick={() => setSelected(new Set())}>Limpar seleção</button>
           </div>
         ) : null}
@@ -338,6 +340,16 @@ export function TextsPanel({
           batchSource={bulkSource}
           onClose={() => setMode(null)}
           onCreated={() => { setMode(null); setSelected(new Set()); }}
+          onAuthExpired={onAuthExpired}
+        />
+      ) : null}
+
+      {mode === 'export-audio' || mode === 'import-audio' ? (
+        <AudioBundleDrawer
+          mode={mode === 'export-audio' ? 'export' : 'import'}
+          token={token}
+          textIds={[...selected]}
+          onClose={() => setMode(null)}
           onAuthExpired={onAuthExpired}
         />
       ) : null}
