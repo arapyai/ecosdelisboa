@@ -89,6 +89,7 @@ def seed_ready_route(db_session) -> Route:
             RouteSegmentAudioFile(lang="en", public_url="https://audio.test/bridge/en.mp3"),
         ]
     )
+    first.audio_files[1].public_url = "/media/first/en.mp3"
     route = Route(
         title_pt="Do Tejo ao Chiado",
         description_pt="Uma subida literária por Lisboa.",
@@ -174,6 +175,7 @@ def test_ready_route_can_publish_and_exports_real_geometry_and_audio(
     assert '<trkpt lat="38.715" lon="-9.135"/>' in gpx.text
     rss = client.get(f"/api/v1/routes/{route.id}/podcast.rss?lang=en")
     assert rss.text.count("<enclosure ") == 3
+    assert 'enclosure url="http://testserver/media/first/en.mp3"' in rss.text
     assert "Text by the Tagus." in rss.text
 
     route.items[0].text.point.lat = 38.711

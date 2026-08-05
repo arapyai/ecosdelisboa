@@ -1,8 +1,9 @@
 from typing import Annotated
+from urllib.parse import urljoin
 from uuid import UUID
 from xml.sax.saxutils import escape
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -224,6 +225,7 @@ def build_podcast_rss(
     description: str | None = None,
     lang: str = "pt",
     source_language: str = "pt",
+    base_url: str | None = None,
 ) -> str:
     selected_title = title if title is not None else route.title_pt
     if title is None:
@@ -280,6 +282,8 @@ def build_podcast_rss(
             continue
         enclosure = ""
         if audio_url:
+            if base_url:
+                audio_url = urljoin(base_url, audio_url)
             enclosure_url = escape(audio_url, {'"': "&quot;"})
             enclosure = f'<enclosure url="{enclosure_url}" length="0" type="audio/mpeg"/>'
         items.append(
@@ -291,12 +295,15 @@ def build_podcast_rss(
             "</item>"
         )
 
+    channel_url = (
+        urljoin(base_url, f"api/v1/routes/{route.id}") if base_url else f"/api/v1/routes/{route.id}"
+    )
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<rss version="2.0"><channel>'
         f"<title>{title_xml}</title>"
         f"<description>{description_xml}</description>"
-        f"<link>https://api.lisboaporoutros.com/api/v1/routes/{route.id}</link>"
+        f"<link>{escape(channel_url)}</link>"
         f"{''.join(items)}"
         "</channel></rss>"
     )
@@ -388,6 +395,7 @@ def get_route_gpx(
 @router.get("/{route_id}/podcast.rss")
 def get_route_podcast_rss(
     route_id: UUID,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     lang: str | None = None,
 ) -> Response:
@@ -404,6 +412,7 @@ def get_route_podcast_rss(
             description,
             selected_language,
             source_language,
+            str(request.base_url),
         ),
         media_type="application/rss+xml",
     )

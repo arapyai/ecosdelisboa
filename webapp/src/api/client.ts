@@ -10,6 +10,7 @@ import {
 } from '@ecosdelisboa/shared';
 import type { Author, DefaultVoice, Lang, Point, Route } from '../types';
 import { listOfflineRoutes, readOfflineRoute } from '../routeOffline';
+import { normalizeRouteAssets } from '../routeAssets';
 import { mockAuthors, mockPoints, mockRoutes, mockVoice } from './mock';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -196,7 +197,7 @@ export const api = {
   },
   async getRoutes(lang: Lang) {
     try {
-      return { data: await client.listRoutes(lang), isMock: false };
+      return { data: (await client.listRoutes(lang)).map((route) => normalizeRouteAssets(route, API_BASE)), isMock: false };
     } catch (cause) {
       const offline = await listOfflineRoutes(lang);
       if (offline.length) return { data: offline, isMock: false };
@@ -206,7 +207,7 @@ export const api = {
   },
   async getRoute(id: string, lang: Lang) {
     try {
-      return { data: await client.getRoute(id, lang), isMock: false };
+      return { data: normalizeRouteAssets(await client.getRoute(id, lang), API_BASE), isMock: false };
     } catch (cause) {
       const offline = await readOfflineRoute(id, lang);
       if (offline) return { data: offline, isMock: false };

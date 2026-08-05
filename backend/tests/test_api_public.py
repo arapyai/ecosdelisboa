@@ -204,3 +204,4 @@ def test_get_route_podcast_rss_returns_xml_payload(client, db_session) -> None:
     assert response.headers["content-type"].startswith("application/rss+xml")
     assert "<rss" in response.text
     assert "Tabacaria do Rossio" in response.text
+    assert f"<link>http://testserver/api/v1/routes/{ids['route'].id}</link>" in response.text
