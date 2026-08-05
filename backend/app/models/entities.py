@@ -5,6 +5,7 @@ from enum import Enum as PythonEnum
 from uuid import UUID
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Column,
@@ -351,11 +352,17 @@ class AudioGenerationJob(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         nullable=False,
     )
     requested_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    batch_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("content_generation_batches.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    batch_stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    policy: Mapped[str] = mapped_column(String(32), default="replace_automatic", nullable=False)
     preferred_voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     processed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     succeeded: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    skipped: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_error: Mapped[str | None] = mapped_column(SAText, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -363,6 +370,7 @@ class AudioGenerationJob(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     items: Mapped[list[AudioGenerationJobItem]] = relationship(
         back_populates="job", cascade="all, delete-orphan"
     )
+    batch: Mapped[ContentGenerationBatch | None] = relationship(back_populates="audio_jobs")
 
     __table_args__ = (Index("ix_audio_generation_jobs_status_created_at", "status", "created_at"),)
 
@@ -386,10 +394,84 @@ class AudioGenerationJobItem(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         nullable=False,
     )
     error_message: Mapped[str | None] = mapped_column(SAText, nullable=True)
+    was_skipped: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     job: Mapped[AudioGenerationJob] = relationship(back_populates="items")
     text: Mapped[Text] = relationship()
 
     __table_args__ = (
         UniqueConstraint("job_id", "text_id", "lang", name="uq_audio_job_item_job_text_lang"),
+    )
+
+
+class ContentGenerationBatch(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "content_generation_batches"
+
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    current_stage: Mapped[str] = mapped_column(
+        String(32), default="generating_translations", nullable=False
+    )
+    requested_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    source: Mapped[str] = mapped_column(String(32), default="texts", nullable=False)
+    voice_overrides: Mapped[dict[str, str]] = mapped_column(JSON, default=dict, nullable=False)
+    auto_approve_translations: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    generate_translated_audio: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    translation_jobs: Mapped[list[TranslationGenerationJob]] = relationship(
+        back_populates="batch", cascade="all, delete-orphan"
+    )
+    audio_jobs: Mapped[list[AudioGenerationJob]] = relationship(
+        back_populates="batch", cascade="all, delete-orphan"
+    )
+
+
+class TranslationGenerationJob(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "translation_generation_jobs"
+
+    batch_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("content_generation_batches.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    requested_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    policy: Mapped[str] = mapped_column(String(32), default="missing_only", nullable=False)
+    total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    processed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    succeeded: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    skipped: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(SAText, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    batch: Mapped[ContentGenerationBatch | None] = relationship(back_populates="translation_jobs")
+    items: Mapped[list[TranslationGenerationJobItem]] = relationship(
+        back_populates="job", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_translation_generation_jobs_status_created_at", "status", "created_at"),
+    )
+
+
+class TranslationGenerationJobItem(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "translation_generation_job_items"
+
+    job_id: Mapped[UUID] = mapped_column(
+        ForeignKey("translation_generation_jobs.id", ondelete="CASCADE"), nullable=False
+    )
+    text_id: Mapped[UUID] = mapped_column(
+        ForeignKey("texts.id", ondelete="CASCADE"), nullable=False
+    )
+    lang: Mapped[str] = mapped_column(
+        String(16), ForeignKey("languages.code", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    error_message: Mapped[str | None] = mapped_column(SAText, nullable=True)
+    was_skipped: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    job: Mapped[TranslationGenerationJob] = relationship(back_populates="items")
+    text: Mapped[Text] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("job_id", "text_id", "lang", name="uq_translation_job_item_job_text_lang"),
     )

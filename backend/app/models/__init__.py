@@ -6,6 +6,7 @@ from app.models.entities import (
     AudioGenerationJobItem,
     Author,
     AuthorTranslation,
+    ContentGenerationBatch,
     Language,
     Point,
     PronunciationDictionary,
@@ -14,6 +15,8 @@ from app.models.entities import (
     RouteTranslation,
     Text,
     Translation,
+    TranslationGenerationJob,
+    TranslationGenerationJobItem,
     Voice,
 )
 
@@ -24,6 +27,7 @@ __all__ = [
     "AudioGenerationJobItem",
     "Author",
     "AuthorTranslation",
+    "ContentGenerationBatch",
     "Base",
     "Language",
     "Point",
@@ -33,5 +37,7 @@ __all__ = [
     "RouteTranslation",
     "Text",
     "Translation",
+    "TranslationGenerationJob",
+    "TranslationGenerationJobItem",
     "Voice",
 ]

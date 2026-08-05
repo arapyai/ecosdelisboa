@@ -12,6 +12,7 @@ def test_expected_tables_exist() -> None:
         "audio_files",
         "audio_generation_job_items",
         "audio_generation_jobs",
+        "content_generation_batches",
         "author_translations",
         "authors",
         "languages",
@@ -22,6 +23,8 @@ def test_expected_tables_exist() -> None:
         "route_translations",
         "texts",
         "translations",
+        "translation_generation_job_items",
+        "translation_generation_jobs",
         "voices",
         "voice_languages",
     }

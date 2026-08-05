@@ -34,9 +34,13 @@ def create_audio_job(
     items: list[tuple[UUID, str]],
     preferred_voice_id: str | None = None,
     start_immediately: bool = False,
+    batch_id: UUID | None = None,
+    batch_stage: str | None = None,
+    policy: str = "replace_automatic",
 ) -> AudioGenerationJob:
     initial_status = AudioJobStatus.RUNNING if start_immediately else AudioJobStatus.PENDING
     job = AudioGenerationJob(
+        created_at=datetime.now(UTC),
         requested_by=requested_by,
         preferred_voice_id=preferred_voice_id,
         status=initial_status,
@@ -45,6 +49,9 @@ def create_audio_job(
         succeeded=0,
         failed=0,
         started_at=datetime.now(UTC) if start_immediately else None,
+        batch_id=batch_id,
+        batch_stage=batch_stage,
+        policy=policy,
     )
     db.add(job)
     db.flush()
@@ -142,8 +149,9 @@ def process_audio_job(
         db.commit()
 
         try:
-            _process_audio_job_item(db, job, queued_item, elevenlabs, storage)
+            generated = _process_audio_job_item(db, job, queued_item, elevenlabs, storage)
             queued_item.status = AudioJobItemStatus.COMPLETED
+            queued_item.was_skipped = not generated
             queued_item.error_message = None
             _refresh_job_counts(db, job)
             db.commit()
@@ -177,7 +185,7 @@ def _process_audio_job_item(
     item: AudioGenerationJobItem,
     elevenlabs: ElevenLabsService,
     storage: AudioStorage,
-) -> None:
+) -> bool:
     text = db.scalar(
         select(Text)
         .options(
@@ -200,7 +208,11 @@ def _process_audio_job_item(
         None,
     )
     if manual_audio is not None:
-        return
+        return False
+
+    existing_audio = next((audio for audio in text.audio_files if audio.lang == item.lang), None)
+    if existing_audio is not None and job.policy == "missing_only":
+        return False
 
     voice_id = resolve_voice_id(db, text, item.lang, job.preferred_voice_id)
     source_text = get_audio_source_text(db, text, item.lang)
@@ -233,6 +245,8 @@ def _process_audio_job_item(
     )
     if audio_file.manually_uploaded:
         storage.delete_audio(key)
+        return False
+    return True
 
 
 def _refresh_job_counts(db: Session, job: AudioGenerationJob) -> None:
@@ -243,9 +257,20 @@ def _refresh_job_counts(db: Session, job: AudioGenerationJob) -> None:
             .group_by(AudioGenerationJobItem.status)
         ).all()
     )
-    job.succeeded = counts.get(AudioJobItemStatus.COMPLETED, 0)
+    completed = counts.get(AudioJobItemStatus.COMPLETED, 0)
+    job.skipped = (
+        db.scalar(
+            select(func.count(AudioGenerationJobItem.id)).where(
+                AudioGenerationJobItem.job_id == job.id,
+                AudioGenerationJobItem.status == AudioJobItemStatus.COMPLETED,
+                AudioGenerationJobItem.was_skipped.is_(True),
+            )
+        )
+        or 0
+    )
+    job.succeeded = completed - job.skipped
     job.failed = counts.get(AudioJobItemStatus.FAILED, 0)
-    job.processed = job.succeeded + job.failed
+    job.processed = completed + job.failed
 
 
 def stream_job_events(

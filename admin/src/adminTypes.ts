@@ -23,6 +23,7 @@ export type ImportResult = {
   created: number;
   updated: number;
   errors: ImportPreviewRow[];
+  imported_text_ids: string[];
 };
 export type FieldConfig = {
   name: string;
