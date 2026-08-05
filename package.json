@@ -12,6 +12,7 @@
     "webapp:build": "npm --workspace @ecosdelisboa/webapp run build",
     "admin:dev": "npm --workspace @ecosdelisboa/admin run dev",
     "admin:build": "npm --workspace @ecosdelisboa/admin run build",
+    "build": "npm run admin:build",
     "shared:test": "npm --workspace @ecosdelisboa/shared run test",
     "mobile:start": "npm --workspace @ecosdelisboa/mobile run start"
   }
