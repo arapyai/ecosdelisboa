@@ -19,6 +19,7 @@ import {
   type VisitorLocation
 } from '../routeSession';
 import { GuidedRouteMap } from './GuidedRouteMap';
+import { offlinePlayableUrl } from '../routeOffline';
 
 interface Props { route: PublicRoute; lang: Lang; onClose: () => void; }
 
@@ -63,7 +64,7 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
   const currentAudio = currentText ? audioForLang(currentText.text.audio_files, lang) : undefined;
   const phaseLabel = useMemo(() => phaseTitle(session.phase, lang), [lang, session.phase]);
 
-  const playAudio = (audio: PublicAudioFile | undefined) => {
+  const playAudio = async (audio: PublicAudioFile | undefined) => {
     if (!audio?.public_url) return;
     if (activeAudioId === audio.id && audioRef.current) {
       audioRef.current.pause();
@@ -71,7 +72,7 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
       return;
     }
     if (audioRef.current) audioRef.current.pause();
-    const player = new Audio(audio.public_url);
+    const player = new Audio(await offlinePlayableUrl(audio.public_url));
     audioRef.current = player;
     setActiveAudioId(audio.id);
     player.addEventListener('play', () => setSession((current) => markListening(current)), { once: true });
@@ -116,7 +117,7 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
                 </div>
                 {bridges.length ? <div className="walking-bridges">{bridges.map((bridge) => {
                   const audio = audioForLang(bridge.audio_files, lang);
-                  return <button type="button" key={bridge.id} disabled={!audio?.public_url} onClick={() => playAudio(audio)}><Headphones size={16} /> {bridge.content}</button>;
+                  return <button type="button" key={bridge.id} disabled={!audio?.public_url} onClick={() => void playAudio(audio)}><Headphones size={16} /> {bridge.content}</button>;
                 })}</div> : null}
                 {geoMessage ? <p className="guided-notice">{geoMessage}</p> : null}
                 <div className="guided-actions">
@@ -129,7 +130,7 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
                 <blockquote>{currentText?.text.content}</blockquote>
                 {currentText?.text.source_work ? <cite>{currentText.text.source_work}</cite> : null}
                 {currentAudio?.public_url ? (
-                  <button type="button" className="guided-audio-button" onClick={() => playAudio(currentAudio)}>
+                  <button type="button" className="guided-audio-button" onClick={() => void playAudio(currentAudio)}>
                     {activeAudioId === currentAudio.id ? <Pause size={19} /> : <Headphones size={19} />}
                     {activeAudioId === currentAudio.id ? (lang === 'en' ? 'Listening…' : 'Ouvindo…') : (lang === 'en' ? 'Listen to this text' : 'Ouvir este texto')}
                   </button>

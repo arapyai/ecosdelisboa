@@ -9,6 +9,7 @@ import {
   type PublicRouteSegment
 } from '@ecosdelisboa/shared';
 import type { Author, DefaultVoice, Lang, Point, Route } from '../types';
+import { listOfflineRoutes, readOfflineRoute } from '../routeOffline';
 import { mockAuthors, mockPoints, mockRoutes, mockVoice } from './mock';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -193,17 +194,25 @@ export const api = {
       mockAuthors.find((author) => author.id === id) ?? mockAuthors[0]
     );
   },
-  getRoutes(lang: Lang) {
-    return withMockFallback(
-      () => client.listRoutes(lang),
-      mockRoutes.map((route) => legacyMockRoute(route, lang))
-    );
+  async getRoutes(lang: Lang) {
+    try {
+      return { data: await client.listRoutes(lang), isMock: false };
+    } catch (cause) {
+      const offline = await listOfflineRoutes(lang);
+      if (offline.length) return { data: offline, isMock: false };
+      if (!ENABLE_MOCKS) throw cause;
+      return { data: mockRoutes.map((route) => legacyMockRoute(route, lang)), isMock: true };
+    }
   },
-  getRoute(id: string, lang: Lang) {
-    return withMockFallback(
-      () => client.getRoute(id, lang),
-      legacyMockRoute(mockRoutes.find((route) => route.id === id) ?? mockRoutes[0], lang)
-    );
+  async getRoute(id: string, lang: Lang) {
+    try {
+      return { data: await client.getRoute(id, lang), isMock: false };
+    } catch (cause) {
+      const offline = await readOfflineRoute(id, lang);
+      if (offline) return { data: offline, isMock: false };
+      if (!ENABLE_MOCKS) throw cause;
+      return { data: legacyMockRoute(mockRoutes.find((route) => route.id === id) ?? mockRoutes[0], lang), isMock: true };
+    }
   },
   getRouteGpxUrl(id: string, lang: Lang) {
     return `${API_BASE}/api/v1/routes/${id}/gpx?lang=${encodeURIComponent(lang)}`;

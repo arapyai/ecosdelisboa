@@ -976,6 +976,14 @@ a {
   color: var(--green);
 }
 
+.offline-route-download { display: grid; min-width: 0; gap: 4px; }
+.offline-route-download > button { width: 100%; }
+.offline-route-download button small { font-size: 9px; opacity: .75; }
+.offline-route-download progress { width: 100%; height: 4px; accent-color: var(--clay); }
+.offline-download-error { color: #9b342e; font-size: 10px; line-height: 1.25; }
+.offline-route-control { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: 6px; border: 1px solid var(--green); border-radius: 8px; padding: 0 8px 0 11px; color: var(--green); font-size: 11px; font-weight: 850; }
+.offline-route-control button { display: grid; width: 29px; height: 29px; place-items: center; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+
 .route-start-message {
   margin: 8px 0 0;
   color: var(--green);

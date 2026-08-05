@@ -1,9 +1,10 @@
 import { routeSegments, type PublicRoute } from '@ecosdelisboa/shared';
-import { Download, Footprints, Headphones, MapIcon, Navigation, Timer } from 'lucide-react';
+import { Footprints, Headphones, MapIcon, Navigation, Timer } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { EmptyState, ErrorState } from '../components/AsyncState';
 import { GuidedRouteSession } from '../components/GuidedRouteSession';
+import { OfflineRouteButton } from '../components/OfflineRouteButton';
 import { RouteDiscoveryMap } from '../components/RouteDiscoveryMap';
 import { preserveSelectedRoute, routeAudioDuration } from '../routeDiscoveryModel';
 import type { Lang } from '../types';
@@ -151,10 +152,7 @@ export function RoutesPage({ lang }: Props) {
                       <Navigation size={17} />
                       {lang === 'en' ? 'Start route' : 'Começar percurso'}
                     </button>
-                    <button type="button" className="secondary-route-action">
-                      <Download size={17} />
-                      {lang === 'en' ? 'Download route' : 'Baixar percurso'}
-                    </button>
+                    <OfflineRouteButton route={detail} lang={lang} />
                   </div>
                   <div className="route-export-links">
                     <a href={api.getRouteGpxUrl(detail.id, lang)}><MapIcon size={15} /> GPX</a>
