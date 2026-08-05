@@ -71,12 +71,17 @@ def client(
     def override_get_db() -> Iterator[Session]:
         yield db_session
 
-    from app.api.routes import admin_automation
+    from app.api.routes import admin_audio_bundles, admin_automation
 
     admin_automation.translation_service = LLMTranslationService(api_key="")
     admin_automation.elevenlabs_service = ElevenLabsService(api_key="")
     admin_automation.settings = get_settings()
     admin_automation.audio_storage = AudioStorage(
+        storage_dir=str(audio_storage_dir),
+        public_base_url=admin_automation.settings.audio_public_base_url,
+    )
+    admin_audio_bundles.settings = get_settings()
+    admin_audio_bundles.audio_storage = AudioStorage(
         storage_dir=str(audio_storage_dir),
         public_base_url=admin_automation.settings.audio_public_base_url,
     )

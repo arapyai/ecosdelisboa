@@ -8,7 +8,10 @@ from app.services.audio_storage import AudioStorage, generated_audio_key, manual
 def test_audio_keys_share_text_and_language_naming() -> None:
     text_id = uuid4()
 
-    assert generated_audio_key(text_id, "en") == f"audio/{text_id}/en.mp3"
+    signature = "a" * 64
+    assert generated_audio_key(text_id, "en", signature) == (
+        f"audio/generated/{text_id}/en/{signature}.mp3"
+    )
     assert manual_audio_key(text_id, "en") == f"audio/manual/{text_id}/en.mp3"
 
 

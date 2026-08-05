@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.routes.admin_audio_bundles import router as admin_audio_bundles_router
 from app.api.routes.admin_auth import router as admin_auth_router
 from app.api.routes.admin_automation import router as admin_automation_router
 from app.api.routes.admin_batches import router as admin_batches_router
@@ -19,6 +20,7 @@ from app.api.routes.public_voices import router as voices_router
 api_router = APIRouter()
 api_router.include_router(health_router)
 api_router.include_router(admin_auth_router)
+api_router.include_router(admin_audio_bundles_router)
 api_router.include_router(admin_batches_router)
 api_router.include_router(admin_automation_router)
 api_router.include_router(admin_content_router)

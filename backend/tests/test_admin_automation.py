@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.models.entities import AudioFile, Language, Text, Translation, Voice
@@ -222,8 +223,9 @@ def test_generate_audio_with_preferred_voice(client, db_session) -> None:
         .one()
     )
     assert audio.voice_id == "custom-voice"
-    assert audio.public_url == f"/media/audio/{text.id}/en.mp3"
-    audio_path = Path(get_settings().audio_storage_dir) / f"audio/{text.id}/en.mp3"
+    assert audio.recipe_hash
+    assert audio.public_url == f"/media/audio/generated/{text.id}/en/{audio.recipe_hash}.mp3"
+    audio_path = Path(get_settings().audio_storage_dir) / str(audio.r2_key)
     assert audio_path.read_bytes() == b"I am nothing."
 
     media_response = client.get(audio.public_url)
@@ -293,8 +295,12 @@ def test_manual_audio_upload_can_overwrite_and_delete_audio_independently(
     text = db_session.query(Text).filter(Text.point_id == ids["point"].id).one()
 
     generated = client.post(f"/api/v1/admin/audio/{text.id}/pt/generate", headers=headers)
-    generated_path = Path(get_settings().audio_storage_dir) / f"audio/{text.id}/pt.mp3"
     assert generated.status_code == 200
+    generated_audio = db_session.scalar(
+        select(AudioFile).where(AudioFile.text_id == text.id, AudioFile.lang == "pt")
+    )
+    assert generated_audio is not None
+    generated_path = Path(get_settings().audio_storage_dir) / str(generated_audio.r2_key)
     assert generated_path.exists()
 
     first = client.put(

@@ -56,6 +56,33 @@ export async function postCsv<T>(path: string, file: File, token: string): Promi
   return isEnvelope(payload) ? payload.data : payload;
 }
 
+export async function postFile<T>(path: string, file: File, token: string): Promise<T> {
+  const body = new FormData();
+  body.append('file', file);
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+    body
+  });
+  if (!response.ok) throw new ApiError(`Falha ao enviar pacote: ${path}`, response.status, path);
+  const payload = (await response.json()) as T;
+  return isEnvelope(payload) ? payload.data : payload;
+}
+
+export async function postBlob(path: string, payload: unknown, token: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/zip',
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw new ApiError(`Falha ao exportar pacote: ${path}`, response.status, path);
+  return response.blob();
+}
+
 export async function putMp3<T>(path: string, file: File, token: string): Promise<T> {
   const body = new FormData();
   body.append('file', file);

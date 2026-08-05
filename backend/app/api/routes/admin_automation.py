@@ -98,6 +98,9 @@ def serialize_audio_file(audio_file: AudioFile) -> dict[str, object]:
         "voice_id": audio_file.voice_id,
         "generated_at": (audio_file.generated_at.isoformat() if audio_file.generated_at else None),
         "manually_uploaded": audio_file.manually_uploaded,
+        "recipe_hash": audio_file.recipe_hash,
+        "content_hash": audio_file.content_hash,
+        "generation_spec": audio_file.generation_spec,
     }
 
 
@@ -405,6 +408,9 @@ async def upload_audio(
     audio_file.voice_id = None
     audio_file.manually_uploaded = True
     audio_file.generated_at = None
+    audio_file.recipe_hash = None
+    audio_file.content_hash = None
+    audio_file.generation_spec = None
     try:
         db.commit()
     except Exception:

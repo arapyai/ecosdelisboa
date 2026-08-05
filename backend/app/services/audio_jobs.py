@@ -10,16 +10,20 @@ from uuid import UUID
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
+from app.core.config import get_settings
 from app.models.entities import (
+    AudioFile,
     AudioGenerationJob,
     AudioGenerationJobItem,
     PronunciationDictionary,
     Text,
 )
 from app.models.enums import AudioJobItemStatus, AudioJobStatus
+from app.services.audio_recipes import build_generation_spec, recipe_hash, sha256_bytes
 from app.services.audio_storage import AudioStorage, generated_audio_key
 from app.services.elevenlabs import (
     ElevenLabsService,
+    GeneratedAudio,
     get_audio_source_text,
     resolve_voice_id,
     upsert_audio_file,
@@ -219,9 +223,38 @@ def _process_audio_job_item(
     pronunciation_dictionary = db.scalar(
         select(PronunciationDictionary).where(PronunciationDictionary.language_code == item.lang)
     )
-    if pronunciation_dictionary is None:
+    model_id = getattr(elevenlabs, "generation_model_id", get_settings().elevenlabs_model_id)
+    output_format = getattr(elevenlabs, "output_format", get_settings().elevenlabs_output_format)
+    spec = build_generation_spec(
+        source_text=source_text,
+        language=item.lang,
+        voice_id=voice_id,
+        model_id=model_id,
+        output_format=output_format,
+        pronunciation_dictionary=pronunciation_dictionary,
+    )
+    signature = recipe_hash(spec)
+    key = generated_audio_key(text.id, item.lang, signature)
+    cached = db.scalars(
+        select(AudioFile).where(
+            AudioFile.recipe_hash == signature,
+            AudioFile.manually_uploaded.is_(False),
+            AudioFile.r2_key.is_not(None),
+        )
+    ).first()
+    generated = None
+    if cached is not None and cached.r2_key and storage.has_audio(cached.r2_key):
+        cached_content = storage.read_audio(cached.r2_key)
+        cached_hash = sha256_bytes(cached_content)
+        if cached.content_hash == cached_hash:
+            generated = GeneratedAudio(
+                content=cached_content,
+                duration_s=cached.duration_s,
+                voice_id=voice_id,
+            )
+    if generated is None and pronunciation_dictionary is None:
         generated = elevenlabs.generate_audio(source_text, voice_id)
-    else:
+    elif generated is None:
         generated = elevenlabs.generate_audio(
             source_text,
             voice_id,
@@ -232,7 +265,6 @@ def _process_audio_job_item(
                 }
             ],
         )
-    key = generated_audio_key(text.id, item.lang)
     public_url = storage.upload_audio(key, generated.content)
     audio_file = upsert_audio_file(
         db,
@@ -242,6 +274,9 @@ def _process_audio_job_item(
         key,
         public_url,
         manually_uploaded=False,
+        recipe_hash=signature,
+        content_hash=sha256_bytes(generated.content),
+        generation_spec=spec,
     )
     if audio_file.manually_uploaded:
         storage.delete_audio(key)

@@ -3,6 +3,7 @@ import random
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request
 
 from sqlalchemy import select
@@ -38,6 +39,14 @@ class ElevenLabsService:
 
     def _model_id(self) -> str:
         return self.model_id or get_settings().elevenlabs_model_id
+
+    @property
+    def generation_model_id(self) -> str:
+        return self._model_id()
+
+    @property
+    def output_format(self) -> str:
+        return get_settings().elevenlabs_output_format
 
     def _request_json(
         self,
@@ -132,8 +141,9 @@ class ElevenLabsService:
         if pronunciation_dictionary_locators:
             payload["pronunciation_dictionary_locators"] = pronunciation_dictionary_locators
         body = json.dumps(payload).encode("utf-8")
+        query = urlencode({"output_format": self.output_format})
         request = Request(
-            f"{self._base_url()}/text-to-speech/{voice_id}",
+            f"{self._base_url()}/text-to-speech/{voice_id}?{query}",
             data=body,
             method="POST",
             headers={
@@ -209,6 +219,9 @@ def upsert_audio_file(
     storage_key: str,
     public_url: str,
     manually_uploaded: bool,
+    recipe_hash: str | None = None,
+    content_hash: str | None = None,
+    generation_spec: dict[str, object] | None = None,
 ) -> AudioFile:
     audio_file = db.scalar(
         select(AudioFile).where(AudioFile.text_id == text.id, AudioFile.lang == lang)
@@ -226,4 +239,7 @@ def upsert_audio_file(
     audio_file.voice_id = generated_audio.voice_id
     audio_file.generated_at = datetime.now(UTC)
     audio_file.manually_uploaded = manually_uploaded
+    audio_file.recipe_hash = recipe_hash
+    audio_file.content_hash = content_hash
+    audio_file.generation_spec = generation_spec
     return audio_file
