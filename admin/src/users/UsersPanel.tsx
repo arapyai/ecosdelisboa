@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useState } from 'react';
 import { redirectIfAuthError } from '../adminApi';
 import { autoSyncQueryOptions, client } from '../adminConfig';
-import { adminUserError, canDeleteAdmin, formatAdminCreatedAt } from './userModel';
+import { adminUserError, canDeleteAdmin, confirmsAdminEmail, formatAdminCreatedAt } from './userModel';
 
 type EditorMode = 'create' | 'edit' | 'password' | null;
 
@@ -28,6 +28,7 @@ export function UsersPanel({
   const [mode, setMode] = useState<EditorMode>(null);
   const [selected, setSelected] = useState<AdminManagedUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminManagedUser | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [draft, setDraft] = useState<UserDraft>(emptyDraft);
   const [error, setError] = useState('');
 
@@ -111,12 +112,14 @@ export function UsersPanel({
       client.delete<{ deleted: boolean }>(`/api/v1/admin/users/${user.id}`, token),
     onSuccess: async () => {
       setDeleteTarget(null);
+      setDeleteConfirmation('');
       await queryClient.invalidateQueries({ queryKey });
     },
     onError: (cause) => {
       if (redirectIfAuthError(cause, onAuthExpired)) return;
       setError(adminUserError(cause));
       setDeleteTarget(null);
+      setDeleteConfirmation('');
     }
   });
 
@@ -192,7 +195,10 @@ export function UsersPanel({
                         className="text-action delete-text-action"
                         disabled={actionsPending || !canDeleteAdmin(user, currentUser.id)}
                         title={user.id === currentUser.id ? 'Você não pode excluir a própria conta.' : undefined}
-                        onClick={() => setDeleteTarget(user)}
+                        onClick={() => {
+                          setDeleteTarget(user);
+                          setDeleteConfirmation('');
+                        }}
                       >
                         Excluir
                       </button>
@@ -281,9 +287,32 @@ export function UsersPanel({
             <p>
               A conta <strong>{deleteTarget.email}</strong> será removida permanentemente e perderá o acesso imediatamente.
             </p>
+            <label>
+              Digite o email para confirmar
+              <input
+                type="email"
+                value={deleteConfirmation}
+                autoComplete="off"
+                onChange={(event) => setDeleteConfirmation(event.target.value)}
+              />
+            </label>
             <div className="user-editor-actions">
-              <button type="button" className="secondary-action" onClick={() => setDeleteTarget(null)}>Cancelar</button>
-              <button type="button" className="danger" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(deleteTarget)}>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteConfirmation('');
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="danger"
+                disabled={deleteMutation.isPending || !confirmsAdminEmail(deleteTarget.email, deleteConfirmation)}
+                onClick={() => deleteMutation.mutate(deleteTarget)}
+              >
                 {deleteMutation.isPending ? 'Excluindo...' : 'Excluir permanentemente'}
               </button>
             </div>

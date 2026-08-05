@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiError, type AdminManagedUser } from '@ecosdelisboa/shared';
-import { adminUserError, canDeleteAdmin, formatAdminCreatedAt } from './users/userModel.ts';
+import { adminUserError, canDeleteAdmin, confirmsAdminEmail, formatAdminCreatedAt } from './users/userModel.ts';
 
 const user: AdminManagedUser = {
   id: 'user-1',
@@ -13,6 +13,12 @@ const user: AdminManagedUser = {
 test('prevents deleting the current administrator', () => {
   assert.equal(canDeleteAdmin(user, 'user-1'), false);
   assert.equal(canDeleteAdmin(user, 'user-2'), true);
+});
+
+test('requires the target email before confirming permanent deletion', () => {
+  assert.equal(confirmsAdminEmail('admin@example.com', 'admin@example.com'), true);
+  assert.equal(confirmsAdminEmail('admin@example.com', ' ADMIN@EXAMPLE.COM '), true);
+  assert.equal(confirmsAdminEmail('admin@example.com', 'another@example.com'), false);
 });
 
 test('formats creation timestamps for the Portuguese interface', () => {

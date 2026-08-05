@@ -14,6 +14,10 @@ export function canDeleteAdmin(user: AdminManagedUser, currentUserId: string) {
   return user.id !== currentUserId;
 }
 
+export function confirmsAdminEmail(email: string, confirmation: string) {
+  return confirmation.trim().toLowerCase() === email;
+}
+
 export function adminUserError(cause: unknown) {
   if (cause instanceof ApiError && cause.status === 409) {
     return 'Esta ação entra em conflito com outro usuário ou com as proteções de acesso.';
