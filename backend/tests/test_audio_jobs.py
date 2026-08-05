@@ -12,6 +12,7 @@ from app.models.entities import (
     Author,
     Language,
     Point,
+    PronunciationDictionary,
     Text,
     Voice,
 )
@@ -25,7 +26,7 @@ from app.services.audio_jobs import (
     stream_job_events,
 )
 from app.services.audio_storage import AudioStorage
-from app.services.elevenlabs import ElevenLabsService
+from app.services.elevenlabs import ElevenLabsService, GeneratedAudio
 from tests.test_api_public import seed_public_data
 
 
@@ -127,6 +128,53 @@ def test_partial_failure_keeps_successful_audio(db_session, tmp_path) -> None:
     )
     assert failed_item.status == AudioJobItemStatus.FAILED
     assert failed_item.error_message == "Approved translation required before audio generation"
+
+
+def test_audio_generation_applies_dictionary_for_item_language(db_session, tmp_path) -> None:
+    ids = seed_public_data(db_session)
+    text = db_session.query(Text).filter(Text.point_id == ids["point"].id).one()
+    db_session.add(
+        PronunciationDictionary(
+            language_code="pt",
+            elevenlabs_id="dictionary-pt",
+            version_id="version-7",
+            name="Lisboa por Outros — Portuguese",
+        )
+    )
+    db_session.commit()
+    job = create_audio_job(db_session, "admin@example.com", [(text.id, "pt")])
+    assert claim_next_audio_job(db_session) == job.id
+
+    class RecordingService:
+        locator = None
+
+        def generate_audio(
+            self,
+            source_text,
+            voice_id,
+            pronunciation_dictionary_locators=None,
+        ):
+            self.locator = pronunciation_dictionary_locators
+            return GeneratedAudio(
+                content=b"generated",
+                duration_s=None,
+                voice_id=voice_id,
+            )
+
+    service = RecordingService()
+    process_audio_job(
+        db_session,
+        job.id,
+        service,
+        AudioStorage(storage_dir=str(tmp_path / "media")),
+    )
+
+    assert service.locator == [
+        {
+            "pronunciation_dictionary_id": "dictionary-pt",
+            "version_id": "version-7",
+        }
+    ]
 
 
 def test_worker_stop_leaves_job_recoverable(db_session, tmp_path) -> None:

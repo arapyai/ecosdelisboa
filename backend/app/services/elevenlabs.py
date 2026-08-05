@@ -39,13 +39,26 @@ class ElevenLabsService:
     def _model_id(self) -> str:
         return self.model_id or get_settings().elevenlabs_model_id
 
-    def _request_json(self, path: str) -> dict[str, object]:
+    def _request_json(
+        self,
+        path: str,
+        *,
+        method: str = "GET",
+        payload: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         api_key = self._api_key()
         if not api_key:
             raise ValueError("ELEVENLABS_API_KEY is not configured")
+        data = json.dumps(payload).encode("utf-8") if payload is not None else None
         request = Request(
             f"{self._base_url()}{path}",
-            headers={"xi-api-key": api_key, "Accept": "application/json"},
+            data=data,
+            method=method,
+            headers={
+                "xi-api-key": api_key,
+                "Accept": "application/json",
+                **({"Content-Type": "application/json"} if data is not None else {}),
+            },
         )
         try:
             with open_url(request, timeout=get_settings().elevenlabs_timeout_s) as response:
@@ -80,12 +93,45 @@ class ElevenLabsService:
             if isinstance(voice, dict) and voice.get("voice_id") and voice.get("name")
         ]
 
-    def generate_audio(self, text: str, voice_id: str) -> GeneratedAudio:
+    def create_pronunciation_dictionary(self, name: str) -> dict[str, object]:
+        return self._request_json(
+            "/pronunciation-dictionaries/add-from-rules",
+            method="POST",
+            payload={
+                "name": name,
+                "description": "Managed by Lisboa por Outros",
+                "rules": [],
+            },
+        )
+
+    def get_pronunciation_dictionary(self, dictionary_id: str) -> dict[str, object]:
+        return self._request_json(f"/pronunciation-dictionaries/{dictionary_id}")
+
+    def set_pronunciation_dictionary_rules(
+        self,
+        dictionary_id: str,
+        rules: list[dict[str, str]],
+    ) -> dict[str, object]:
+        return self._request_json(
+            f"/pronunciation-dictionaries/{dictionary_id}/set-rules",
+            method="POST",
+            payload={"rules": rules},
+        )
+
+    def generate_audio(
+        self,
+        text: str,
+        voice_id: str,
+        pronunciation_dictionary_locators: list[dict[str, str]] | None = None,
+    ) -> GeneratedAudio:
         api_key = self._api_key()
         if not api_key:
             return GeneratedAudio(content=text.encode("utf-8"), duration_s=12.5, voice_id=voice_id)
 
-        body = json.dumps({"text": text, "model_id": self._model_id()}).encode("utf-8")
+        payload: dict[str, object] = {"text": text, "model_id": self._model_id()}
+        if pronunciation_dictionary_locators:
+            payload["pronunciation_dictionary_locators"] = pronunciation_dictionary_locators
+        body = json.dumps(payload).encode("utf-8")
         request = Request(
             f"{self._base_url()}/text-to-speech/{voice_id}",
             data=body,

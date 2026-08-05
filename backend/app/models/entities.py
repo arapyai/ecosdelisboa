@@ -91,6 +91,24 @@ class Language(CreatedAtMixin, Base):
     )
 
 
+class PronunciationDictionary(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "pronunciation_dictionaries"
+
+    language_code: Mapped[str] = mapped_column(
+        String(16),
+        ForeignKey("languages.code", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    elevenlabs_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    version_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    last_published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_published_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+
+
 class Voice(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "voices"
 

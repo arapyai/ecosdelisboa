@@ -10,7 +10,12 @@ from uuid import UUID
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
-from app.models.entities import AudioGenerationJob, AudioGenerationJobItem, Text
+from app.models.entities import (
+    AudioGenerationJob,
+    AudioGenerationJobItem,
+    PronunciationDictionary,
+    Text,
+)
 from app.models.enums import AudioJobItemStatus, AudioJobStatus
 from app.services.audio_storage import AudioStorage, generated_audio_key
 from app.services.elevenlabs import (
@@ -199,7 +204,22 @@ def _process_audio_job_item(
 
     voice_id = resolve_voice_id(db, text, item.lang, job.preferred_voice_id)
     source_text = get_audio_source_text(db, text, item.lang)
-    generated = elevenlabs.generate_audio(source_text, voice_id)
+    pronunciation_dictionary = db.scalar(
+        select(PronunciationDictionary).where(PronunciationDictionary.language_code == item.lang)
+    )
+    if pronunciation_dictionary is None:
+        generated = elevenlabs.generate_audio(source_text, voice_id)
+    else:
+        generated = elevenlabs.generate_audio(
+            source_text,
+            voice_id,
+            pronunciation_dictionary_locators=[
+                {
+                    "pronunciation_dictionary_id": pronunciation_dictionary.elevenlabs_id,
+                    "version_id": pronunciation_dictionary.version_id,
+                }
+            ],
+        )
     key = generated_audio_key(text.id, item.lang)
     public_url = storage.upload_audio(key, generated.content)
     audio_file = upsert_audio_file(
