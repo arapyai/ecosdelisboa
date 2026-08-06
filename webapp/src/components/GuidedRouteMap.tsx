@@ -1,9 +1,8 @@
 import type { PublicRoute, RouteSession } from '@ecosdelisboa/shared';
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap, type Marker } from 'maplibre-gl';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cityConfig } from '../config/city';
 import {
-  activeDestination,
   activeLeg,
   completedLegPositions,
   textSegments,
@@ -36,6 +35,8 @@ export function GuidedRouteMap({
   const markersRef = useRef<Marker[]>([]);
   const visitorMarkerRef = useRef<Marker | null>(null);
   const followModeRef = useRef(followMode);
+  const hasFitVisitorRef = useRef(false);
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     followModeRef.current = followMode;
@@ -50,6 +51,29 @@ export function GuidedRouteMap({
       zoom: 15
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    let initialized = false;
+    const stopInitializing = () => {
+      map.off('load', tryInitialize);
+      map.off('styledata', tryInitialize);
+      map.off('idle', tryInitialize);
+    };
+    const tryInitialize = () => {
+      if (initialized) return;
+      try {
+        setLineData(map, 'route-overview', emptyCollection(), { color: '#315b52', width: 4, opacity: 0.28 });
+        setLineData(map, 'route-completed', emptyCollection(), { color: '#315b52', width: 5, opacity: 0.5, dasharray: [1.2, 1.2] });
+        setLineData(map, 'route-active', emptyCollection(), { color: '#c45732', width: 7, opacity: 0.96 });
+        initialized = true;
+        stopInitializing();
+        setMapReady(true);
+      } catch {
+        // MapLibre can emit styledata before sources may safely be added.
+      }
+    };
+    map.on('load', tryInitialize);
+    map.on('styledata', tryInitialize);
+    map.on('idle', tryInitialize);
+    tryInitialize();
     const stopFollowing = () => {
       if (followModeRef.current) onFollowModeChange(false);
     };
@@ -58,6 +82,7 @@ export function GuidedRouteMap({
     return () => {
       markersRef.current.forEach((marker) => marker.remove());
       visitorMarkerRef.current?.remove();
+      stopInitializing();
       map.off('dragstart', stopFollowing);
       map.remove();
       mapRef.current = null;
@@ -66,72 +91,79 @@ export function GuidedRouteMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
-    const draw = () => {
-      const legs = route.legs ?? [];
-      const completed = new Set(completedLegPositions(route, session));
-      setLineData(map, 'route-overview', {
-        type: 'FeatureCollection',
-        features: legs.map((leg) => ({
+    if (!map || !mapReady) return;
+    const legs = route.legs ?? [];
+    const completed = new Set(completedLegPositions(route, session));
+    setLineData(map, 'route-overview', {
+      type: 'FeatureCollection',
+      features: legs.map((leg) => ({
+        type: 'Feature' as const,
+        properties: { position: leg.position },
+        geometry: leg.geometry
+      }))
+    }, { color: '#315b52', width: 4, opacity: 0.28 });
+    setLineData(map, 'route-completed', {
+      type: 'FeatureCollection',
+      features: legs
+        .filter((leg) => completed.has(leg.position))
+        .map((leg) => ({
           type: 'Feature' as const,
           properties: { position: leg.position },
           geometry: leg.geometry
         }))
-      }, { color: '#315b52', width: 4, opacity: 0.28 });
-      setLineData(map, 'route-completed', {
-        type: 'FeatureCollection',
-        features: legs
-          .filter((leg) => completed.has(leg.position))
-          .map((leg) => ({
-            type: 'Feature' as const,
-            properties: { position: leg.position },
-            geometry: leg.geometry
-          }))
-      }, { color: '#315b52', width: 5, opacity: 0.5, dasharray: [1.2, 1.2] });
-      const leg = activeLeg(route, session);
-      setLineData(map, 'route-active', leg ? {
-        type: 'FeatureCollection',
-        features: [{ type: 'Feature' as const, properties: {}, geometry: leg.geometry }]
-      } : emptyCollection(), { color: '#c45732', width: 7, opacity: 0.96 });
+    }, { color: '#315b52', width: 5, opacity: 0.5, dasharray: [1.2, 1.2] });
+    const leg = activeLeg(route, session);
+    setLineData(map, 'route-active', leg ? {
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature' as const, properties: {}, geometry: leg.geometry }]
+    } : emptyCollection(), { color: '#c45732', width: 7, opacity: 0.96 });
 
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
-      const texts = textSegments(route);
-      texts.forEach((segment, index) => {
-        const completedText = index < session.active_text_index;
-        const currentText = index === session.active_text_index;
-        const destinationIndex = session.phase === 'walking'
-          ? session.active_text_index + 1
-          : session.active_text_index;
-        const destinationText = index === destinationIndex;
-        const canInspect = session.phase === 'completed'
-          || completedText
-          || (currentText && session.phase !== 'going_to_first_text' && session.phase !== 'walking');
-        const element = document.createElement('button');
-        element.type = 'button';
-        element.className = [
-          'visitor-route-marker',
-          completedText ? 'completed' : '',
-          currentText ? 'current' : '',
-          destinationText ? 'destination' : '',
-          canInspect ? 'inspectable' : ''
-        ].filter(Boolean).join(' ');
-        element.textContent = String(index + 1);
-        element.title = `${segment.text.author.name} — ${segment.text.point.title_pt}`;
-        element.setAttribute('aria-label', element.title);
-        element.disabled = !canInspect;
-        if (canInspect) element.addEventListener('click', () => onTextSelect(index));
-        markersRef.current.push(
-          new maplibregl.Marker({ element })
-            .setLngLat([segment.text.point.lng, segment.text.point.lat])
-            .addTo(map)
-        );
-      });
-      if (!visitorMarkerRef.current) fitActiveContext(map, route, session, null);
-    };
-    if (map.loaded()) draw();
-    else map.once('load', draw);
-  }, [onTextSelect, route, session]);
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current = [];
+    const texts = textSegments(route);
+    texts.forEach((segment, index) => {
+      const completedText = index < session.active_text_index;
+      const currentText = index === session.active_text_index;
+      const destinationIndex = session.phase === 'walking'
+        ? session.active_text_index + 1
+        : session.active_text_index;
+      const destinationText = index === destinationIndex;
+      const canInspect = session.phase === 'completed'
+        || completedText
+        || (currentText && session.phase !== 'going_to_first_text' && session.phase !== 'walking');
+      const element = document.createElement('button');
+      element.type = 'button';
+      element.className = [
+        'visitor-route-marker',
+        completedText ? 'completed' : '',
+        currentText ? 'current' : '',
+        destinationText ? 'destination' : '',
+        canInspect ? 'inspectable' : ''
+      ].filter(Boolean).join(' ');
+      element.textContent = String(index + 1);
+      element.title = `${segment.text.author.name} — ${segment.text.point.title_pt}`;
+      element.setAttribute('aria-label', element.title);
+      element.disabled = !canInspect;
+      if (canInspect) element.addEventListener('click', () => onTextSelect(index));
+      markersRef.current.push(
+        new maplibregl.Marker({ element })
+          .setLngLat([segment.text.point.lng, segment.text.point.lat])
+          .addTo(map)
+      );
+    });
+    if (containerRef.current) {
+      containerRef.current.dataset.overviewLegCount = String(legs.length);
+      containerRef.current.dataset.activeLegPosition = leg && 'position' in leg
+        ? String(leg.position ?? 'approach')
+        : session.phase === 'going_to_first_text' && leg
+          ? 'approach'
+          : '';
+    }
+    if (followModeRef.current) {
+      const visitor = visitorMarkerRef.current?.getLngLat();
+      fitRouteOverview(map, route, visitor ? { lat: visitor.lat, lng: visitor.lng } : null);
+    }
+  }, [mapReady, onTextSelect, route, session]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -146,14 +178,16 @@ export function GuidedRouteMap({
     } else {
       visitorMarkerRef.current.setLngLat([location.lng, location.lat]);
     }
-    if (followMode) followVisitor(map, location);
-  }, [followMode, location]);
+    if (followMode && !hasFitVisitorRef.current) {
+      hasFitVisitorRef.current = true;
+      fitRouteOverview(map, route, location);
+    }
+  }, [followMode, location, route]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || recenterSignal === 0) return;
-    if (location) followVisitor(map, location);
-    else fitActiveContext(map, route, session, null);
+    fitRouteOverview(map, route, location);
   }, [location, recenterSignal, route, session]);
 
   return <div ref={containerRef} className="guided-route-map" aria-label="Navegação do percurso" />;
@@ -185,31 +219,18 @@ function setLineData(
   });
 }
 
-function followVisitor(map: MapLibreMap, location: VisitorLocation) {
-  map.easeTo({
-    center: [location.lng, location.lat],
-    zoom: Math.max(map.getZoom(), 17),
-    offset: [0, 105],
-    duration: 350
-  });
-}
-
-function fitActiveContext(
+function fitRouteOverview(
   map: MapLibreMap,
   route: PublicRoute,
-  session: RouteSession,
-  location: VisitorLocation | null
+  location: Pick<VisitorLocation, 'lat' | 'lng'> | null
 ) {
   const bounds = new maplibregl.LngLatBounds();
-  const destination = activeDestination(route, session);
-  const leg = activeLeg(route, session);
-  leg?.geometry.coordinates.forEach((coordinate) => bounds.extend(coordinate));
+  (route.legs ?? []).forEach((leg) => {
+    leg.geometry.coordinates.forEach((coordinate) => bounds.extend(coordinate));
+  });
+  textSegments(route).forEach((segment) => {
+    bounds.extend([segment.text.point.lng, segment.text.point.lat]);
+  });
   if (location) bounds.extend([location.lng, location.lat]);
-  if (destination) bounds.extend([destination.text.point.lng, destination.text.point.lat]);
-  if (bounds.isEmpty()) {
-    (route.legs ?? []).forEach((routeLeg) => {
-      routeLeg.geometry.coordinates.forEach((coordinate) => bounds.extend(coordinate));
-    });
-  }
-  if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 72, maxZoom: 17, duration: 350 });
+  if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: { top: 92, right: 64, bottom: 190, left: 64 }, maxZoom: 16, duration: 350 });
 }
