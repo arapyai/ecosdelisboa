@@ -9,7 +9,8 @@ import {
   LocateFixed,
   MapPinned,
   Navigation,
-  Pause,
+  Volume2,
+  VolumeX,
   X
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -20,6 +21,7 @@ import {
   activeLeg,
   advanceRouteSession,
   bridgesAfterActiveText,
+  bridgesBeforeFirstText,
   confirmArrival,
   distanceMeters,
   initialRouteSession,
@@ -38,6 +40,7 @@ import { GuidedRouteMap } from './GuidedRouteMap';
 interface Props { route: PublicRoute; lang: Lang; onClose: () => void; }
 
 type ApproachStatus = 'idle' | 'loading' | 'ready' | 'failed';
+const AUTO_AUDIO_STORAGE_KEY = 'ecos-route-auto-audio';
 
 export function GuidedRouteSession({ route, lang, onClose }: Props) {
   const [session, setSession] = useState<RouteSession>(() => {
@@ -52,6 +55,7 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
     session.approach_leg ? 'ready' : 'idle'
   );
   const [activeAudioId, setActiveAudioId] = useState('');
+  const [autoAudio, setAutoAudio] = useState(() => localStorage.getItem(AUTO_AUDIO_STORAGE_KEY) === 'true');
   const [sheetExpanded, setSheetExpanded] = useState(
     session.phase === 'arrived' || session.phase === 'listening'
   );
@@ -64,6 +68,8 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
   const [recenterSignal, setRecenterSignal] = useState(0);
   const approachRequestedRef = useRef(Boolean(session.approach_leg));
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioRequestRef = useRef(0);
+  const autoPlayedRef = useRef('');
 
   useEffect(() => {
     localStorage.setItem(routeSessionStorageKey(route.id), JSON.stringify(session));
@@ -71,7 +77,10 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
 
   useEffect(() => {
     if (session.phase !== 'going_to_first_text') setApproachStatus('idle');
-    if (session.phase === 'arrived' || session.phase === 'listening') {
+    if (session.phase === 'completed') {
+      setInspectedTextIndex(null);
+      setSheetExpanded(true);
+    } else if (session.phase === 'arrived' || session.phase === 'listening') {
       setInspectedTextIndex(session.active_text_index);
       setSheetExpanded(true);
     } else if (session.phase === 'walking') {
@@ -129,11 +138,16 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
       .catch(() => setApproachStatus('failed'));
   }, [location, route.id, session.approach_leg, session.phase]);
 
-  const texts = textSegments(route);
+  const texts = useMemo(() => textSegments(route), [route]);
   const destination = activeDestination(route, session);
   const leg = activeLeg(route, session);
   const inspectedText = inspectedTextIndex == null ? null : texts[inspectedTextIndex];
-  const bridges = bridgesAfterActiveText(route, session.active_text_index);
+  const bridges = useMemo(
+    () => session.phase === 'going_to_first_text'
+      ? bridgesBeforeFirstText(route)
+      : bridgesAfterActiveText(route, session.active_text_index),
+    [route, session.active_text_index, session.phase]
+  );
   const isWalking = session.phase === 'walking' || session.phase === 'going_to_first_text';
   const isAtText = session.phase === 'arrived' || session.phase === 'listening';
   const showTextContent = sheetExpanded && inspectedText !== null;
@@ -146,15 +160,12 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
     : undefined;
   const phaseLabel = useMemo(() => phaseTitle(session.phase, lang), [lang, session.phase]);
 
-  const playAudio = async (audio: PublicAudioFile | undefined, marksTextListening = false) => {
+  const playAudio = useCallback(async (audio: PublicAudioFile | undefined, marksTextListening = false) => {
     if (!audio?.public_url) return;
-    if (activeAudioId === audio.id && audioRef.current) {
-      audioRef.current.pause();
-      setActiveAudioId('');
-      return;
-    }
+    const requestId = ++audioRequestRef.current;
     if (audioRef.current) audioRef.current.pause();
     const player = new Audio(await offlinePlayableUrl(audio.public_url));
+    if (requestId !== audioRequestRef.current) return;
     audioRef.current = player;
     setActiveAudioId(audio.id);
     if (marksTextListening) {
@@ -164,16 +175,34 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
     void player.play().catch(() => setGeoMessage(lang === 'en'
       ? 'Audio could not be played.'
       : 'Não foi possível reproduzir o áudio.'));
-  };
+  }, [lang]);
 
-  const openExternalMap = () => {
-    if (!destination) return;
-    window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${destination.text.point.lat},${destination.text.point.lng}&travelmode=walking`,
-      '_blank',
-      'noopener,noreferrer'
-    );
-  };
+  const stopAudio = useCallback(() => {
+    audioRequestRef.current += 1;
+    audioRef.current?.pause();
+    setActiveAudioId('');
+  }, []);
+
+  useEffect(() => () => {
+    audioRequestRef.current += 1;
+    audioRef.current?.pause();
+  }, []);
+
+  useEffect(() => {
+    if (!autoAudio) return;
+    const textAudio = isAtText
+      ? audioForLang(texts[session.active_text_index]?.text.audio_files, lang)
+      : undefined;
+    const bridgeAudio = isWalking ? audioForLang(bridges[0]?.audio_files, lang) : undefined;
+    const audio = textAudio ?? bridgeAudio;
+    if (!audio?.public_url) return;
+    const key = textAudio
+      ? `text:${session.active_text_index}`
+      : `bridge:${session.phase}:${session.active_text_index}:${bridges[0]?.id}`;
+    if (autoPlayedRef.current === key) return;
+    autoPlayedRef.current = key;
+    void playAudio(audio, Boolean(textAudio));
+  }, [autoAudio, bridges, isAtText, isWalking, lang, playAudio, session.active_text_index, session.phase, texts]);
 
   const inspectText = useCallback((index: number) => {
     setInspectedTextIndex(index);
@@ -190,8 +219,14 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
   };
 
   const continueRoute = () => {
+    const isFinalText = session.active_text_index === texts.length - 1;
+    const closingAudio = isFinalText ? audioForLang(bridges[0]?.audio_files, lang) : undefined;
+    if (autoAudio && closingAudio?.public_url) {
+      autoPlayedRef.current = `bridge:completed:${session.active_text_index}:${bridges[0]?.id}`;
+      void playAudio(closingAudio);
+    }
     setInspectedTextIndex(null);
-    setSheetExpanded(false);
+    setSheetExpanded(isFinalText);
     setSession((current) => advanceRouteSession(route, current));
   };
 
@@ -216,6 +251,26 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
           <X size={20} />
         </button>
         <div><span>{phaseLabel}</span><strong>{route.title}</strong></div>
+        <button
+          type="button"
+          className={`guided-auto-audio${autoAudio ? ' active' : ''}`}
+          aria-pressed={autoAudio}
+          aria-label={lang === 'en' ? 'Automatic audio' : 'Áudio automático'}
+          onClick={() => {
+            const next = !autoAudio;
+            setAutoAudio(next);
+            localStorage.setItem(AUTO_AUDIO_STORAGE_KEY, String(next));
+            if (!next) {
+              autoPlayedRef.current = '';
+              stopAudio();
+            }
+          }}
+        >
+          {autoAudio ? <Volume2 size={17} /> : <VolumeX size={17} />}
+          <span>{activeAudioId
+            ? (lang === 'en' ? 'Playing' : 'Ouvindo')
+            : (lang === 'en' ? 'Auto audio' : 'Áudio auto')}</span>
+        </button>
         <small>{Math.min(session.active_text_index + 1, texts.length)}/{texts.length}</small>
         <button
           type="button"
@@ -267,23 +322,9 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
               <div className="guided-text-content">
                 <blockquote>{inspectedText.text.content}</blockquote>
                 {inspectedText.text.source_work ? <cite>{inspectedText.text.source_work}</cite> : null}
-                {displayedAudio?.public_url ? (
-                  <button
-                    type="button"
-                    className="guided-audio-button"
-                    onClick={() => void playAudio(
-                      displayedAudio,
-                      inspectedTextIndex === session.active_text_index && isAtText
-                    )}
-                  >
-                    {activeAudioId === displayedAudio.id ? <Pause size={19} /> : <Headphones size={19} />}
-                    {activeAudioId === displayedAudio.id
-                      ? (lang === 'en' ? 'Listening…' : 'Ouvindo…')
-                      : (lang === 'en' ? 'Listen to this text' : 'Ouvir este texto')}
-                  </button>
-                ) : <p className="guided-notice">{lang === 'en'
+                {!displayedAudio?.public_url ? <p className="guided-notice">{lang === 'en'
                   ? 'Audio is unavailable; you can read and continue.'
-                  : 'Áudio indisponível; você pode ler e continuar.'}</p>}
+                  : 'Áudio indisponível; você pode ler e continuar.'}</p> : null}
                 {inspectedTextIndex === session.active_text_index && isAtText ? (
                   <button type="button" className="guided-continue-button" onClick={continueRoute}>
                     {session.active_text_index === texts.length - 1
@@ -311,17 +352,6 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
                   {location ? <small><LocateFixed size={13} /> ±{Math.round(location.accuracy)} m</small> : null}
                 </div>
 
-                {sheetExpanded && bridges.length ? (
-                  <div className="walking-bridges">{bridges.map((bridge) => {
-                    const audio = audioForLang(bridge.audio_files, lang);
-                    return (
-                      <button type="button" key={bridge.id} disabled={!audio?.public_url} onClick={() => void playAudio(audio)}>
-                        <Headphones size={16} /> {bridge.content}
-                      </button>
-                    );
-                  })}</div>
-                ) : null}
-
                 {approachStatus === 'loading' ? <p className="guided-notice compact-status">{lang === 'en'
                   ? 'Calculating the walking route to the first text…'
                   : 'Calculando o caminho até o primeiro texto…'}</p> : null}
@@ -331,17 +361,6 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
                 {geoMessage ? <p className="guided-notice compact-status">{geoMessage}</p> : null}
 
                 <div className="guided-actions">
-                  {!sheetExpanded && bridges[0] ? (
-                    <button
-                      type="button"
-                      className="guided-bridge-compact secondary-route-action"
-                      disabled={!audioForLang(bridges[0].audio_files, lang)?.public_url}
-                      onClick={() => void playAudio(audioForLang(bridges[0].audio_files, lang))}
-                      aria-label={lang === 'en' ? 'Listen to transition' : 'Ouvir transição'}
-                    >
-                      <Headphones size={16} /><span>{lang === 'en' ? 'Transition' : 'Transição'}</span>
-                    </button>
-                  ) : null}
                   {isWalking ? (
                     <button type="button" onClick={confirmCurrentArrival}>
                       <Navigation size={17} /> {lang === 'en' ? 'I am here' : 'Cheguei'}
@@ -351,15 +370,11 @@ export function GuidedRouteSession({ route, lang, onClose }: Props) {
                       <Headphones size={17} /> {lang === 'en' ? 'Open text' : 'Abrir texto'}
                     </button>
                   )}
-                  {isWalking ? (
-                    <button type="button" className="secondary-route-action" onClick={openExternalMap}>
-                      <MapPinned size={17} /> {lang === 'en' ? 'Open in maps' : 'Abrir no mapa'}
-                    </button>
-                  ) : (
+                  {!isWalking ? (
                     <button type="button" className="secondary-route-action" onClick={continueRoute}>
                       <ChevronRight size={17} /> {lang === 'en' ? 'Continue' : 'Continuar'}
                     </button>
-                  )}
+                  ) : null}
                 </div>
               </>
             )}

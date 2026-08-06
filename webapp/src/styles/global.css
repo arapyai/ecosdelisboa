@@ -961,7 +961,7 @@ a {
 
 .route-primary-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 
@@ -1003,7 +1003,7 @@ a {
 
 .guided-route-session {
   position: fixed;
-  z-index: 20;
+  z-index: 1100;
   inset: 0;
   height: 100dvh;
   min-height: 620px;
@@ -1022,7 +1022,7 @@ a {
   left: 50%;
   display: grid;
   width: min(680px, calc(100% - 36px));
-  grid-template-columns: 42px 1fr auto 42px;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto 42px;
   align-items: center;
   gap: 12px;
   transform: translateX(-50%);
@@ -1035,6 +1035,9 @@ a {
 
 .guided-route-topbar button { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid var(--line); border-radius: 9px; background: transparent; color: var(--green); cursor: pointer; }
 .guided-route-topbar button.following { border-color: rgba(35,119,209,.32); background: rgba(35,119,209,.1); color: #2377d1; }
+.guided-route-topbar .guided-auto-audio { display: inline-flex; width: auto; gap: 6px; padding: 0 10px; }
+.guided-route-topbar .guided-auto-audio.active { border-color: rgba(196,87,50,.42); background: rgba(196,87,50,.1); color: var(--clay); }
+.guided-route-topbar .guided-auto-audio span { color: inherit; font-size: 10px; letter-spacing: .02em; white-space: nowrap; }
 .guided-route-topbar div { display: grid; }
 .guided-route-topbar span { color: var(--clay); font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
 .guided-route-topbar strong { color: var(--green); font-family: Georgia, serif; font-size: 18px; font-weight: 500; }
@@ -1108,9 +1111,8 @@ a {
 .guided-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 .guided-route-panel.collapsed .guided-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
 .guided-route-panel.collapsed .guided-actions button { min-height: 38px; padding: 0 14px; }
-.guided-actions button, .guided-audio-button, .guided-continue-button, .route-complete-state button { display: inline-flex; min-height: 46px; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--green); border-radius: 9px; background: var(--green); color: #fff; font-weight: 850; cursor: pointer; }
+.guided-actions button, .guided-continue-button, .route-complete-state button { display: inline-flex; min-height: 46px; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--green); border-radius: 9px; background: var(--green); color: #fff; font-weight: 850; cursor: pointer; }
 .guided-actions .secondary-route-action { border-color: var(--line); background: transparent; color: var(--green); }
-.guided-audio-button { width: 100%; margin-top: 18px; background: var(--clay); border-color: var(--clay); }
 .guided-continue-button { width: 100%; margin-top: 8px; }
 .guided-continue-button.secondary { border-color: var(--line); background: transparent; color: var(--green); }
 .guided-text-content { overflow: auto; }
@@ -1131,9 +1133,6 @@ a {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.walking-bridges { display: grid; gap: 6px; }
-.walking-bridges button { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; background: rgba(196,87,50,.07); padding: 10px; color: var(--ink); text-align: left; cursor: pointer; }
-.walking-bridges button:disabled { opacity: .55; cursor: default; }
 .visitor-location-marker { display: block; width: 19px; height: 19px; border: 4px solid #fff; border-radius: 50%; background: #2377d1; box-shadow: 0 0 0 9px rgba(35,119,209,.2); }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 .route-complete-state { display: grid; justify-items: center; padding: 22px 10px; text-align: center; }
@@ -1422,7 +1421,12 @@ a {
   .guided-route-topbar {
     top: 10px;
     width: calc(100% - 20px);
+    grid-template-columns: 42px minmax(0, 1fr) 42px auto 42px;
+    gap: 5px;
   }
+
+  .guided-route-topbar .guided-auto-audio { width: 42px; padding: 0; }
+  .guided-route-topbar .guided-auto-audio span { display: none; }
 
   .guided-route-panel {
     bottom: 10px;
@@ -1439,7 +1443,6 @@ a {
   }
 
   .guided-route-panel.collapsed .guided-actions button { padding: 0 10px; }
-  .guided-route-panel.collapsed .guided-bridge-compact span { display: none; }
   .guided-route-map .maplibregl-ctrl-top-right { top: 70px; right: 7px; }
 
   .guided-destination h1 { font-size: 28px; }

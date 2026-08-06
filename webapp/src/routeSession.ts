@@ -37,6 +37,16 @@ export function bridgesAfterActiveText(route: PublicRoute, activeTextIndex: numb
   );
 }
 
+export function bridgesBeforeFirstText(route: PublicRoute): PublicBridgeRouteSegment[] {
+  const segments = routeSegments(route);
+  const firstText = textSegments(route)[0];
+  if (!firstText) return [];
+  return segments.filter(
+    (segment): segment is PublicBridgeRouteSegment =>
+      segment.kind === 'bridge' && segment.position < firstText.position
+  );
+}
+
 export function initialRouteSession(route: PublicRoute, now = new Date()): RouteSession {
   return {
     route_id: route.id,

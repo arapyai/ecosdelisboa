@@ -7,25 +7,27 @@ async function prepareVisitor(page: Page, route = publicRoute) {
     localStorage.setItem('lisboa.language', 'pt');
     class MockAudio extends EventTarget {
       static playCalls = 0;
+      static sources: string[] = [];
       src: string;
       constructor(src: string) { super(); this.src = src; }
-      play() { MockAudio.playCalls += 1; this.dispatchEvent(new Event('play')); return Promise.resolve(); }
+      play() { MockAudio.playCalls += 1; MockAudio.sources.push(this.src); this.dispatchEvent(new Event('play')); return Promise.resolve(); }
       pause() { return undefined; }
     }
     Object.defineProperty(window, 'Audio', { value: MockAudio });
     Object.defineProperty(window, '__audioPlayCalls', { get: () => MockAudio.playCalls });
+    Object.defineProperty(window, '__audioSources', { get: () => MockAudio.sources });
   });
-  await page.route('**/demotiles.maplibre.org/style.json', (request) => request.fulfill({ json: mapStyle }));
+  await page.route(/.*\/style\.json.*/, (request) => request.fulfill({ json: mapStyle }));
   await page.route(`**/api/v1/routes/${route.id}/approach`, (request) => request.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
       data: {
-        geometry: { type: 'LineString', coordinates: [[-9.14, 38.7], [route.segments[0].text.point.lng, route.segments[0].text.point.lat]] },
+        geometry: { type: 'LineString', coordinates: [[-9.14, 38.7], [-9.13645, 38.70775]] },
         distance_m: 920,
         duration_s: 690,
         provider: 'stub',
-        destination_segment_id: route.segments[0].id
+        destination_segment_id: 'text-1-segment'
       },
       meta: {}
     })
@@ -42,23 +44,34 @@ async function prepareVisitor(page: Page, route = publicRoute) {
   await expect(page.getByRole('heading', { name: route.title })).toBeVisible();
 }
 
-test('visitor downloads, starts, listens, walks and completes the narrative', async ({ page }) => {
+test('initial route renders immediately and automatic audio follows the narrative', async ({ page }) => {
   await prepareVisitor(page);
-  await page.getByRole('button', { name: /Baixar percurso/ }).click();
-  await expect(page.getByText(/Disponível offline/)).toBeVisible();
+  await expect(page.locator('.route-discovery-map')).toHaveAttribute('data-rendered-route-id', publicRoute.id);
+  await expect(page.locator('.route-discovery-map')).toHaveAttribute('data-rendered-leg-count', '1');
+  await expect(page.getByRole('button', { name: /Baixar percurso/ })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'GPX' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'RSS' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Começar percurso' }).click();
   expect(await page.evaluate(() => (window as Window & { __audioPlayCalls?: number }).__audioPlayCalls)).toBe(0);
   await expect(page.getByText('Indo ao primeiro texto')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Abrir no mapa' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Áudio automático' }).click();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __audioSources?: string[] }).__audioSources?.at(-1))).toContain('/audio/intro.mp3');
   await page.getByRole('button', { name: 'Cheguei' }).click();
-  await page.getByRole('button', { name: 'Ouvir este texto' }).click();
-  await expect(page.getByRole('button', { name: 'Ouvindo…' })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __audioSources?: string[] }).__audioSources?.at(-1))).toContain('/audio/one.mp3');
+  await expect(page.getByRole('button', { name: 'Ouvir este texto' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Continuar percurso' }).click();
-  await page.getByRole('button', { name: 'Expandir informações' }).click();
-  await expect(page.getByRole('button', { name: /Entre na malha da Baixa/ })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __audioSources?: string[] }).__audioSources?.at(-1))).toContain('/audio/bridge.mp3');
+  await expect(page.locator('.guided-route-map')).toHaveAttribute('data-overview-leg-count', '1');
+  await expect(page.locator('.guided-route-map')).toHaveAttribute('data-active-leg-position', '0');
+  await expect(page.locator('.guided-route-panel')).toHaveClass(/collapsed/);
   await page.getByRole('button', { name: 'Cheguei' }).click();
-  await page.getByRole('button', { name: 'Ouvir este texto' }).click();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __audioSources?: string[] }).__audioSources?.at(-1))).toContain('/audio/two.mp3');
   await page.getByRole('button', { name: 'Concluir percurso' }).click();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __audioSources?: string[] }).__audioSources?.at(-1))).toContain('/audio/closing.mp3');
   await expect(page.getByText('Percurso concluído')).toBeVisible();
+  await expect(page.getByText('Você chegou ao fim desta história.')).toBeVisible();
+  await expect(page.locator('.guided-route-panel')).toHaveClass(/expanded/);
   const session = await page.evaluate(() => JSON.parse(localStorage.getItem('ecos-route-session:route-e2e') ?? '{}'));
   expect(session.phase).toBe('completed');
 });
@@ -83,17 +96,6 @@ test('accurate GPS calculates and persists the route to the first text', async (
   await expect(page.getByRole('button', { name: 'Cheguei' })).toBeVisible();
 });
 
-test('downloaded route remains available after the API network disappears', async ({ page }) => {
-  await prepareVisitor(page);
-  await page.getByRole('button', { name: /Baixar percurso/ }).click();
-  await expect(page.getByText(/Disponível offline/)).toBeVisible();
-  await page.unrouteAll({ behavior: 'wait' });
-  await page.route(/^http:\/\/localhost:8000\/api\//, (request) => request.abort('internetdisconnected'));
-  await page.reload();
-  await page.getByRole('button', { name: 'Percursos' }).click();
-  await expect(page.getByText(publicRoute.title).first()).toBeVisible();
-});
-
 test('manual arrival remains available with imprecise GPS and absent audio', async ({ page }) => {
   const noAudio = { ...publicRoute, segments: publicRoute.segments.map((segment) =>
     segment.kind === 'text' ? { ...segment, text: { ...segment.text, audio_files: [] } } : segment) };
@@ -108,6 +110,7 @@ test('manual arrival remains available with imprecise GPS and absent audio', asy
   });
   await prepareVisitor(page, noAudio);
   await page.getByRole('button', { name: 'Começar percurso' }).click();
+  await page.getByRole('button', { name: 'Áudio automático' }).click();
   await expect(page.getByText(/precisão do GPS está baixa/)).toBeVisible();
   await page.getByRole('button', { name: 'Cheguei' }).click();
   await expect(page.getByText(/Áudio indisponível/)).toBeVisible();
@@ -155,4 +158,6 @@ test('mobile walking keeps a full-screen map and a compact bottom sheet', async 
   expect(layout.panelCollapsed).toBe(true);
   expect(layout.panel?.height).toBeLessThanOrEqual(140);
   await expect(page.getByRole('button', { name: 'Cheguei' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Áudio automático' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Abrir no mapa' })).toHaveCount(0);
 });

@@ -1,10 +1,9 @@
 import { routeSegments, type PublicRoute } from '@ecosdelisboa/shared';
-import { Footprints, Headphones, MapIcon, Navigation, Timer } from 'lucide-react';
+import { Footprints, Headphones, Navigation, Timer } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { EmptyState, ErrorState } from '../components/AsyncState';
 import { GuidedRouteSession } from '../components/GuidedRouteSession';
-import { OfflineRouteButton } from '../components/OfflineRouteButton';
 import { RouteDiscoveryMap } from '../components/RouteDiscoveryMap';
 import { narrativeTextNumber, preserveSelectedRoute, routeAudioDuration, segmentHasAudio } from '../routeDiscoveryModel';
 import type { Lang } from '../types';
@@ -152,11 +151,6 @@ export function RoutesPage({ lang }: Props) {
                       <Navigation size={17} />
                       {lang === 'en' ? 'Start route' : 'Começar percurso'}
                     </button>
-                    <OfflineRouteButton route={detail} lang={lang} />
-                  </div>
-                  <div className="route-export-links">
-                    <a href={api.getRouteGpxUrl(detail.id, lang)}><MapIcon size={15} /> GPX</a>
-                    <a href={api.getRoutePodcastUrl(detail.id, lang)}><Headphones size={15} /> RSS</a>
                   </div>
                   <ol className="narrative-preview-list">
                     {segments.map((segment) =>

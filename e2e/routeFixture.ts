@@ -4,6 +4,7 @@ export const publicRoute = {
   is_published: true, routing_status: 'ready', estimated_distance_m: 180, estimated_duration_s: 150,
   text_count: 2, authors: ['Almeida Garrett', 'Fernando Pessoa / Bernardo Soares'],
   segments: [
+    { id: 'intro', position: 0, kind: 'bridge', content: 'Comece junto ao Tejo.', content_pt: 'Comece junto ao Tejo.', audio_files: [{ id: 'audio-intro', lang: 'pt', public_url: '/audio/intro.mp3', duration_s: 7 }] },
     { id: 'text-1-segment', position: 1, kind: 'text', text: {
       id: 'text-1', content: 'Primeiro texto junto ao rio.', content_pt: 'Primeiro texto junto ao rio.', content_type: 'prose', source_work: 'Viagens na Minha Terra',
       author: { id: 'author-1', name: 'Almeida Garrett' }, point: { id: 'point-1', title_pt: 'Terreiro do Paço', neighborhood: 'Baixa', lat: 38.70775, lng: -9.13645 },
@@ -14,7 +15,8 @@ export const publicRoute = {
       id: 'text-2', content: 'A rua contém o sentido de Lisboa.', content_pt: 'A rua contém o sentido de Lisboa.', content_type: 'prose', source_work: 'Livro do Desassossego',
       author: { id: 'author-2', name: 'Fernando Pessoa / Bernardo Soares' }, point: { id: 'point-2', title_pt: 'Rua dos Douradores', neighborhood: 'Baixa', lat: 38.709, lng: -9.137 },
       audio_files: [{ id: 'audio-2', lang: 'pt', public_url: '/audio/two.mp3', duration_s: 15 }]
-    } }
+    } },
+    { id: 'closing', position: 4, kind: 'bridge', content: 'A narrativa termina no Chiado.', content_pt: 'A narrativa termina no Chiado.', audio_files: [{ id: 'audio-closing', lang: 'pt', public_url: '/audio/closing.mp3', duration_s: 6 }] }
   ],
   legs: [{ id: 'leg-1', position: 0, from_segment_id: 'text-1-segment', to_segment_id: 'text-2-segment', geometry: { type: 'LineString', coordinates: [[-9.13645, 38.70775], [-9.137, 38.709]] }, waypoints: [], distance_m: 180, duration_s: 150, provider: 'openrouteservice' }]
 };

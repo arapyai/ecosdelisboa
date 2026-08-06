@@ -5,6 +5,7 @@ import {
   activeLeg,
   advanceRouteSession,
   bridgesAfterActiveText,
+  bridgesBeforeFirstText,
   completedLegPositions,
   confirmArrival,
   initialRouteSession,
@@ -47,6 +48,7 @@ test('moves through the explicit visitor phases without implicit audio playback'
   });
   assert.equal(session.approach_leg?.distance_m, 220);
   assert.equal(activeLeg(route, session)?.distance_m, 220);
+  assert.deepEqual(bridgesBeforeFirstText(route).map((bridge) => bridge.id), ['intro']);
   session = confirmArrival(route, session);
   assert.equal(session.phase, 'arrived');
   assert.equal(session.approach_leg, null);
