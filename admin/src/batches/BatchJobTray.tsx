@@ -3,6 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { redirectIfAuthError } from '../adminApi';
 import { client } from '../adminConfig';
+import {
+  addDismissedBatchId,
+  DISMISSED_BATCHES_STORAGE_KEY,
+  isDismissibleBatchStatus,
+  parseDismissedBatchIds
+} from './batchDismissal';
 
 const stageLabels: Record<ContentGenerationBatch['current_stage'], string> = {
   generating_translations: 'Gerando traduções',
@@ -19,14 +25,20 @@ export function BatchJobTray({ token, onAuthExpired, onReview }: {
 }) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
-  const [dismissedBatchId, setDismissedBatchId] = useState<string>();
+  const [dismissedBatchIds, setDismissedBatchIds] = useState<Set<string>>(() => {
+    try {
+      return new Set(parseDismissedBatchIds(window.localStorage.getItem(DISMISSED_BATCHES_STORAGE_KEY)));
+    } catch {
+      return new Set();
+    }
+  });
   const batchesQuery = useQuery({
     queryKey: ['generation-batches', token],
     queryFn: () => client.get<ContentGenerationBatch[]>('/api/v1/admin/automation/batches?active=false', token),
     refetchInterval: 1500,
     refetchOnWindowFocus: true
   });
-  const visibleBatches = (batchesQuery.data ?? []).filter((item) => item.id !== dismissedBatchId);
+  const visibleBatches = (batchesQuery.data ?? []).filter((item) => !dismissedBatchIds.has(item.id));
   const recentCompleted = visibleBatches.find((item) => (
     item.status === 'completed'
     && Date.now() - new Date(item.created_at).getTime() < 5 * 60 * 1000
@@ -52,6 +64,16 @@ export function BatchJobTray({ token, onAuthExpired, onReview }: {
     },
     onError: (cause) => redirectIfAuthError(cause, onAuthExpired)
   });
+
+  function dismissBatch(batchId: string) {
+    const ids = addDismissedBatchId(dismissedBatchIds, batchId);
+    try {
+      window.localStorage.setItem(DISMISSED_BATCHES_STORAGE_KEY, JSON.stringify(ids));
+    } catch {
+      // The tray still closes when browser storage is unavailable.
+    }
+    setDismissedBatchIds(new Set(ids));
+  }
 
   if (!batch) return null;
   const { progress } = batch;
@@ -95,8 +117,8 @@ export function BatchJobTray({ token, onAuthExpired, onReview }: {
             Tentar novamente
           </button>
         ) : null}
-        {batch.status === 'completed' ? (
-          <button type="button" className="secondary-action" onClick={() => setDismissedBatchId(batch.id)}>
+        {isDismissibleBatchStatus(batch.status) ? (
+          <button type="button" className="secondary-action" onClick={() => dismissBatch(batch.id)}>
             Fechar
           </button>
         ) : null}
