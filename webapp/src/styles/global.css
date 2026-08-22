@@ -610,6 +610,24 @@ a {
   line-height: 1.6;
 }
 
+.text-block .content-language-status {
+  width: fit-content;
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--green) 30%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--green) 8%, #fff);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.text-block .content-language-status.fallback {
+  border-color: color-mix(in srgb, var(--clay) 35%, var(--line));
+  background: color-mix(in srgb, var(--clay) 9%, #fff);
+  color: var(--clay);
+}
+
 .sheet-actions {
   display: none;
 }

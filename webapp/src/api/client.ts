@@ -73,18 +73,28 @@ function normalizeAuthor(author: PublicAuthorSummary | Author): Author {
 
 function normalizePoint(point: Point | PublicPointSummary | PublicPointDetail, lang?: Lang): Point {
   const backendPoint = point as PublicPointDetail;
-  const texts = backendPoint.texts?.map((text) => ({
-    id: text.id,
-    point_id: point.id,
-    author_id: text.author_id ?? text.author?.id,
-    author: text.author ? normalizeAuthor(text.author) : undefined,
-    content_pt: 'content_pt' in text ? text.content_pt : '',
-    content_en: lang === 'en' && 'content' in text ? text.content : undefined,
-    source_work: text.source_work,
-    source_year: text.source_year,
-    content_type: text.content_type,
-    audios: text.audio_files?.map(normalizeAudio).filter((audio) => audio.url) ?? []
-  }));
+  const texts = backendPoint.texts?.map((text) => {
+    const sourceLang = text.source_lang ?? 'pt';
+    const content = text.content ?? text.content_pt;
+    const contentLang = text.content_lang ?? (content === text.content_pt ? sourceLang : lang ?? sourceLang);
+    return {
+      id: text.id,
+      point_id: point.id,
+      author_id: text.author_id ?? text.author?.id,
+      author: text.author ? normalizeAuthor(text.author) : undefined,
+      content,
+      content_pt: text.content_pt,
+      content_en: lang === 'en' ? content : undefined,
+      content_lang: contentLang,
+      source_lang: sourceLang,
+      is_translation: text.is_translation ?? contentLang !== sourceLang,
+      is_fallback: text.is_fallback ?? Boolean(lang && lang !== sourceLang && contentLang !== lang),
+      source_work: text.source_work,
+      source_year: text.source_year,
+      content_type: text.content_type,
+      audios: text.audio_files?.map(normalizeAudio).filter((audio) => audio.url) ?? []
+    };
+  });
 
   const audios = backendPoint.texts?.flatMap((text) =>
     text.audio_files?.map(normalizeAudio).filter((audio) => audio.url) ?? []

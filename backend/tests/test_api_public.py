@@ -100,7 +100,27 @@ def test_get_point_returns_approved_translation_and_audio(client, db_session) ->
     assert response.status_code == 200
     text_payload = response.json()["data"]["texts"][0]
     assert text_payload["content"] == "I am nothing."
+    assert text_payload["content_lang"] == "en"
+    assert text_payload["source_lang"] == "pt"
+    assert text_payload["is_translation"] is True
+    assert text_payload["is_fallback"] is False
     assert text_payload["audio_files"][0]["lang"] == "en"
+
+
+def test_get_point_marks_source_fallback_when_translation_is_unavailable(
+    client, db_session
+) -> None:
+    ids = seed_public_data(db_session)
+
+    response = client.get(f"/api/v1/points/{ids['point'].id}", params={"lang": "fr"})
+
+    assert response.status_code == 200
+    text_payload = response.json()["data"]["texts"][0]
+    assert text_payload["content"] == "Nao sou nada."
+    assert text_payload["content_lang"] == "pt"
+    assert text_payload["source_lang"] == "pt"
+    assert text_payload["is_translation"] is False
+    assert text_payload["is_fallback"] is True
 
 
 def test_list_routes_returns_only_published_routes(client, db_session) -> None:

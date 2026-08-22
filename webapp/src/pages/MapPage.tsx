@@ -89,23 +89,43 @@ export function MapPage({ lang }: Props) {
     [pointsWithAuthors]
   );
 
-  async function selectPoint(point: Point) {
+  useEffect(() => {
+    const selectedId = selectedPoint?.id;
+    if (!selectedId) return;
+    let cancelled = false;
+    api
+      .getPoint(selectedId, lang)
+      .then((result) => {
+        if (cancelled) return;
+        setSelectedPoint((current) => {
+          if (!current || current.id !== selectedId) return current;
+          return {
+            ...current,
+            ...result.data,
+            author:
+              result.data.author ??
+              result.data.authors?.[0] ??
+              current.author ??
+              current.authors?.[0]
+          };
+        });
+        setSelectedTextId((current) =>
+          result.data.texts?.some((text) => text.id === current)
+            ? current
+            : result.data.texts?.[0]?.id ?? null
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setError('Não foi possível carregar o detalhe do ponto.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lang, selectedPoint?.id]);
+
+  function selectPoint(point: Point) {
     setSelectedPoint(point);
     setSelectedTextId(null);
-    try {
-      const result = await api.getPoint(point.id, lang);
-      const loadedPoint = {
-        ...point,
-        ...result.data,
-        author: result.data.author ?? result.data.authors?.[0] ?? point.author ?? point.authors?.[0] ?? authors.find((author) => author.id === point.author_id)
-      };
-      setSelectedPoint(loadedPoint);
-      if (loadedPoint.texts && loadedPoint.texts.length > 0) {
-        setSelectedTextId(loadedPoint.texts[0].id);
-      }
-    } catch {
-      setError('Não foi possível carregar o detalhe do ponto.');
-    }
   }
 
   function selectText(point: Point, textId: string) {
