@@ -22,6 +22,11 @@ export interface TextEntry {
   author?: Author;
   content_pt: string;
   content_en?: string | null;
+  content?: string;
+  content_lang?: Lang;
+  source_lang?: Lang;
+  is_translation?: boolean;
+  is_fallback?: boolean;
   source_work?: string | null;
   source_year?: number | null;
   content_type: ContentType;

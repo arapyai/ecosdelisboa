@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from math import asin, cos, radians, sin, sqrt
 from typing import Annotated
 from uuid import UUID
@@ -23,9 +24,24 @@ def haversine_distance_m(lat1: float, lng1: float, lat2: float, lng2: float) -> 
     return 2 * radius_m * asin(sqrt(a))
 
 
-def resolve_text_content(text: Text, lang: str, source_language: str) -> str:
+@dataclass(frozen=True)
+class ResolvedTextContent:
+    content: str
+    content_lang: str
+    source_lang: str
+    is_translation: bool
+    is_fallback: bool
+
+
+def resolve_text_content(text: Text, lang: str, source_language: str) -> ResolvedTextContent:
     if lang == source_language:
-        return text.content_pt
+        return ResolvedTextContent(
+            content=text.content_pt,
+            content_lang=source_language,
+            source_lang=source_language,
+            is_translation=False,
+            is_fallback=False,
+        )
 
     approved = next(
         (
@@ -35,7 +51,44 @@ def resolve_text_content(text: Text, lang: str, source_language: str) -> str:
         ),
         None,
     )
-    return approved.content if approved else text.content_pt
+    if approved is not None:
+        return ResolvedTextContent(
+            content=approved.content,
+            content_lang=lang,
+            source_lang=source_language,
+            is_translation=True,
+            is_fallback=False,
+        )
+    return ResolvedTextContent(
+        content=text.content_pt,
+        content_lang=source_language,
+        source_lang=source_language,
+        is_translation=False,
+        is_fallback=True,
+    )
+
+
+def serialize_text(text: Text, lang: str, source_language: str) -> dict[str, object]:
+    resolved = resolve_text_content(text, lang, source_language)
+    return {
+        "id": str(text.id),
+        "author_id": str(text.author_id),
+        "author": {
+            "id": str(text.author.id),
+            "name": text.author.name,
+            "photo_url": text.author.photo_url,
+        },
+        "content": resolved.content,
+        "content_pt": text.content_pt,
+        "content_lang": resolved.content_lang,
+        "source_lang": resolved.source_lang,
+        "is_translation": resolved.is_translation,
+        "is_fallback": resolved.is_fallback,
+        "source_work": text.source_work,
+        "source_year": text.source_year,
+        "content_type": text.content_type.value,
+        "audio_files": [serialize_audio_file(audio) for audio in text.audio_files],
+    }
 
 
 def serialize_point_summary(point: Point) -> dict[str, object]:
@@ -117,22 +170,7 @@ def get_point(
     payload = serialize_point_summary(point)
     payload["author"] = payload["authors"][0] if payload["authors"] else None
     payload["texts"] = [
-        {
-            "id": str(text.id),
-            "author_id": str(text.author_id),
-            "author": {
-                "id": str(text.author.id),
-                "name": text.author.name,
-                "photo_url": text.author.photo_url,
-            },
-            "content": resolve_text_content(text, selected_language, source_language),
-            "content_pt": text.content_pt,
-            "source_work": text.source_work,
-            "source_year": text.source_year,
-            "content_type": text.content_type.value,
-            "audio_files": [serialize_audio_file(audio) for audio in text.audio_files],
-        }
-        for text in point.texts
+        serialize_text(text, selected_language, source_language) for text in point.texts
     ]
     return envelope(payload, EnvelopeMeta(extra={"lang": selected_language}))
 

@@ -54,6 +54,10 @@ export interface PublicText {
   author?: Pick<PublicAuthorSummary, 'id' | 'name' | 'photo_url'>;
   content?: string;
   content_pt: string;
+  content_lang?: SupportedLanguage;
+  source_lang?: SupportedLanguage;
+  is_translation?: boolean;
+  is_fallback?: boolean;
   source_work?: string | null;
   source_year?: number | null;
   content_type: ContentType;
