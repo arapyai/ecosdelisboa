@@ -78,3 +78,42 @@ export function localized<T extends object>(item: T, field: string, lang: Lang) 
   const values = item as Record<string, unknown>;
   return (values[`${field}_${lang}`] as string | null | undefined) || (values[`${field}_pt`] as string | undefined) || '';
 }
+
+type ContentLanguageStatus = 'original' | 'translated' | 'fallback';
+
+const contentLanguageNotices: Record<string, Record<ContentLanguageStatus, string>> = {
+  pt: {
+    original: 'Texto original em português.',
+    translated: 'Tradução do texto original em português.',
+    fallback: 'Texto original em português — tradução indisponível neste idioma.'
+  },
+  en: {
+    original: 'Original text in Portuguese.',
+    translated: 'Translation of the original Portuguese text.',
+    fallback: 'Original text in Portuguese — translation unavailable in this language.'
+  },
+  es: {
+    original: 'Texto original en portugués.',
+    translated: 'Traducción del texto original en portugués.',
+    fallback: 'Texto original en portugués — traducción no disponible en este idioma.'
+  },
+  fr: {
+    original: 'Texte original en portugais.',
+    translated: 'Traduction du texte original en portugais.',
+    fallback: 'Texte original en portugais — traduction indisponible dans cette langue.'
+  },
+  de: {
+    original: 'Originaltext auf Portugiesisch.',
+    translated: 'Übersetzung des portugiesischen Originaltexts.',
+    fallback: 'Originaltext auf Portugiesisch — Übersetzung in dieser Sprache nicht verfügbar.'
+  },
+  zh: {
+    original: '葡萄牙语原文。',
+    translated: '葡萄牙语原文的译文。',
+    fallback: '当前显示葡萄牙语原文——此语言的译文尚不可用。'
+  }
+};
+
+export function contentLanguageNotice(lang: Lang, status: ContentLanguageStatus) {
+  return contentLanguageNotices[lang]?.[status] ?? contentLanguageNotices.pt[status];
+}
