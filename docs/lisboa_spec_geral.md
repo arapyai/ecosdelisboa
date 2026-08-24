@@ -79,7 +79,8 @@ Mais detalhes em `arquitetura.md`.
 - `translations`: conteúdo traduzido por texto e idioma;
 - `routes`: dados-fonte, publicação e estimativas de percurso;
 - `route_translations`: título e descrição por idioma;
-- `route_items`: pontos cadastrados ou waypoints livres ordenados;
+- `route_items`: segmentos narrativos ordenados de texto ou bridge;
+- `route_legs`: geometria, métricas e waypoints das caminhadas entre textos;
 - `languages`: idiomas ativos e identificação da língua-fonte;
 - `voices` e `voice_languages`: catálogo e pools de voz;
 - `audio_files`: um áudio por texto e idioma, gerado ou enviado manualmente;

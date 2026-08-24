@@ -20,6 +20,7 @@ from app.models.entities import (
     Voice,
 )
 from app.models.enums import ContentType, TranslationStatus
+from app.scripts.seed_narrative_routes import queue_missing_route_audio, seed_do_tejo_ao_chiado
 from app.services.languages import seed_language_catalog
 
 DEFAULT_CATALOG_PATH = Path(__file__).resolve().parents[3] / "docs" / "voice_language_seed.csv"
@@ -255,7 +256,15 @@ def seed() -> None:
         )
 
         get_or_create_route(session, [praca, chiado, alfama])
+        narrative_route = seed_do_tejo_ao_chiado(
+            session,
+            environment=get_settings().environment,
+        )
         session.commit()
+
+        # Provider work is deliberately queued only after the seed data transaction commits.
+        if narrative_route is not None:
+            queue_missing_route_audio(session, narrative_route)
 
     settings = get_settings()
     print("Seed dev concluido.")

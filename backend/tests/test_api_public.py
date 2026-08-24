@@ -12,6 +12,7 @@ from app.models.entities import (
     Voice,
 )
 from app.models.enums import ContentType, TranslationStatus
+from app.services.routing import DirectionsResult, RoutingError
 
 
 def seed_public_data(db_session):
@@ -142,6 +143,122 @@ def test_get_route_returns_point_and_waypoint_items(client, db_session) -> None:
     assert items[1]["waypoint"] == {"lat": 38.714, "lng": -9.14}
 
 
+def test_get_route_returns_text_led_segments_in_selected_language(client, db_session) -> None:
+    ids = seed_public_data(db_session)
+    text = ids["point"].texts[0]
+    route = Route(title_pt="Percurso narrativo", is_published=True)
+    route.items.append(RouteItem(position=1, kind="text", text=text))
+    db_session.add(route)
+    db_session.commit()
+
+    response = client.get(f"/api/v1/routes/{route.id}", params={"lang": "en"})
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["text_count"] == 1
+    assert payload["authors"] == ["Fernando Pessoa"]
+    assert payload["segments"][0]["kind"] == "text"
+    assert payload["segments"][0]["text"]["content"] == "I am nothing."
+    assert payload["segments"][0]["text"]["point"]["title_pt"] == "Tabacaria do Rossio"
+    assert payload["segments"][0]["text"]["audio_files"][0]["lang"] == "en"
+    assert payload["items"] == payload["segments"]
+    assert payload["items_deprecated"] is True
+
+
+def test_calculate_route_approach_returns_ephemeral_pedestrian_geometry(
+    client, db_session, monkeypatch
+) -> None:
+    ids = seed_public_data(db_session)
+    text = ids["point"].texts[0]
+    route = Route(title_pt="Percurso narrativo", is_published=True)
+    segment = RouteItem(position=1, kind="text", text=text)
+    route.items.append(segment)
+    db_session.add(route)
+    db_session.commit()
+
+    class StubProvider:
+        name = "stub"
+
+        def directions(self, coordinates):
+            assert coordinates == [(-9.15, 38.71), (text.point.lng, text.point.lat)]
+            return DirectionsResult(
+                geometry={"type": "LineString", "coordinates": coordinates},
+                distance_m=245.5,
+                duration_s=180,
+                provider="stub",
+            )
+
+    from app.api.routes import public_routes
+
+    monkeypatch.setattr(public_routes, "directions_provider_factory", StubProvider)
+    response = client.post(
+        f"/api/v1/routes/{route.id}/approach",
+        json={"lat": 38.71, "lng": -9.15},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "geometry": {
+            "type": "LineString",
+            "coordinates": [[-9.15, 38.71], [text.point.lng, text.point.lat]],
+        },
+        "distance_m": 245.5,
+        "duration_s": 180,
+        "provider": "stub",
+        "destination_segment_id": str(segment.id),
+    }
+
+
+def test_calculate_route_approach_validates_route_coordinates_and_provider(
+    client, db_session, monkeypatch
+) -> None:
+    ids = seed_public_data(db_session)
+    text = ids["point"].texts[0]
+    route = Route(title_pt="Percurso narrativo", is_published=True)
+    route.items.append(RouteItem(position=1, kind="text", text=text))
+    db_session.add(route)
+    db_session.commit()
+
+    invalid = client.post(
+        f"/api/v1/routes/{route.id}/approach",
+        json={"lat": 91, "lng": -9.15},
+    )
+    assert invalid.status_code == 422
+
+    class FailedProvider:
+        name = "failed"
+
+        def directions(self, coordinates):
+            raise RoutingError("timeout")
+
+    from app.api.routes import public_routes
+
+    monkeypatch.setattr(public_routes, "directions_provider_factory", FailedProvider)
+    failed = client.post(
+        f"/api/v1/routes/{route.id}/approach",
+        json={"lat": 38.71, "lng": -9.15},
+    )
+    assert failed.status_code == 503
+    assert failed.json()["detail"]["code"] == "routing_unavailable"
+
+    missing = client.post(
+        f"/api/v1/routes/{ids['route'].id}/approach",
+        json={"lat": 38.71, "lng": -9.15},
+    )
+    assert missing.status_code == 409
+    assert missing.json()["detail"]["code"] == "route_has_no_texts"
+
+    draft = Route(title_pt="Draft approach", is_published=False)
+    draft.items.append(RouteItem(position=1, kind="text", text=text))
+    db_session.add(draft)
+    db_session.commit()
+    unpublished = client.post(
+        f"/api/v1/routes/{draft.id}/approach",
+        json={"lat": 38.71, "lng": -9.15},
+    )
+    assert unpublished.status_code == 404
+
+
 def test_get_default_voice_returns_current_voice(client, db_session) -> None:
     seed_public_data(db_session)
 
@@ -196,9 +313,13 @@ def test_get_route_gpx_returns_xml_payload(client, db_session) -> None:
 def test_get_route_podcast_rss_returns_xml_payload(client, db_session) -> None:
     ids = seed_public_data(db_session)
 
-    response = client.get(f"/api/v1/routes/{ids['route'].id}/podcast.rss")
+    response = client.get(
+        f"/api/v1/routes/{ids['route'].id}/podcast.rss",
+        headers={"X-Forwarded-Proto": "https"},
+    )
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/rss+xml")
     assert "<rss" in response.text
     assert "Tabacaria do Rossio" in response.text
+    assert f"<link>https://testserver/api/v1/routes/{ids['route'].id}</link>" in response.text

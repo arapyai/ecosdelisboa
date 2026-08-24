@@ -13,6 +13,14 @@ def manual_audio_key(text_id: UUID, lang: str) -> str:
     return f"audio/manual/{text_id}/{lang}.mp3"
 
 
+def generated_route_bridge_audio_key(segment_id: UUID, lang: str, recipe_hash: str) -> str:
+    return f"audio/routes/generated/{segment_id}/{lang}/{recipe_hash}.mp3"
+
+
+def manual_route_bridge_audio_key(segment_id: UUID, lang: str) -> str:
+    return f"audio/routes/manual/{segment_id}/{lang}.mp3"
+
+
 @dataclass
 class AudioStorage:
     storage_dir: str = "media"

@@ -16,11 +16,23 @@ from app.models.entities import (
     AudioGenerationJob,
     AudioGenerationJobItem,
     PronunciationDictionary,
+    RouteItem,
+    RouteSegmentAudioFile,
     Text,
+    Voice,
 )
-from app.models.enums import AudioJobItemStatus, AudioJobStatus
+from app.models.enums import (
+    AudioJobItemStatus,
+    AudioJobStatus,
+    RouteSegmentKind,
+    TranslationStatus,
+)
 from app.services.audio_recipes import build_generation_spec, recipe_hash, sha256_bytes
-from app.services.audio_storage import AudioStorage, generated_audio_key
+from app.services.audio_storage import (
+    AudioStorage,
+    generated_audio_key,
+    generated_route_bridge_audio_key,
+)
 from app.services.elevenlabs import (
     ElevenLabsService,
     GeneratedAudio,
@@ -28,6 +40,7 @@ from app.services.elevenlabs import (
     resolve_voice_id,
     upsert_audio_file,
 )
+from app.services.languages import get_source_language
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +77,41 @@ def create_audio_job(
             AudioGenerationJobItem(
                 job_id=job.id,
                 text_id=text_id,
+                lang=lang,
+                status=AudioJobItemStatus.PENDING,
+            )
+        )
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def create_bridge_audio_job(
+    db: Session,
+    requested_by: str | None,
+    items: list[tuple[UUID, str]],
+    preferred_voice_id: str | None = None,
+    start_immediately: bool = False,
+) -> AudioGenerationJob:
+    initial_status = AudioJobStatus.RUNNING if start_immediately else AudioJobStatus.PENDING
+    job = AudioGenerationJob(
+        created_at=datetime.now(UTC),
+        requested_by=requested_by,
+        preferred_voice_id=preferred_voice_id,
+        status=initial_status,
+        total=len(items),
+        processed=0,
+        succeeded=0,
+        failed=0,
+        started_at=datetime.now(UTC) if start_immediately else None,
+    )
+    db.add(job)
+    db.flush()
+    for segment_id, lang in items:
+        db.add(
+            AudioGenerationJobItem(
+                job_id=job.id,
+                route_segment_id=segment_id,
                 lang=lang,
                 status=AudioJobItemStatus.PENDING,
             )
@@ -190,6 +238,10 @@ def _process_audio_job_item(
     elevenlabs: ElevenLabsService,
     storage: AudioStorage,
 ) -> bool:
+    if item.route_segment_id is not None:
+        return _process_bridge_audio_job_item(db, job, item, elevenlabs, storage)
+    if item.text_id is None:
+        raise ValueError("Audio job item has no content target")
     text = db.scalar(
         select(Text)
         .options(
@@ -282,6 +334,115 @@ def _process_audio_job_item(
         storage.delete_audio(key)
         return False
     return True
+
+
+def _process_bridge_audio_job_item(
+    db: Session,
+    job: AudioGenerationJob,
+    item: AudioGenerationJobItem,
+    elevenlabs: ElevenLabsService,
+    storage: AudioStorage,
+) -> bool:
+    segment = db.scalar(
+        select(RouteItem)
+        .options(selectinload(RouteItem.translations), selectinload(RouteItem.audio_files))
+        .where(RouteItem.id == item.route_segment_id)
+    )
+    if segment is None or segment.kind != RouteSegmentKind.BRIDGE.value:
+        raise ValueError("Route bridge not found")
+    existing_audio = next((audio for audio in segment.audio_files if audio.lang == item.lang), None)
+    if existing_audio is not None and existing_audio.manually_uploaded:
+        return False
+    if existing_audio is not None and job.policy == "missing_only":
+        return False
+
+    source_language = get_source_language(db).code
+    if item.lang == source_language:
+        source_text = segment.bridge_content_pt or ""
+    else:
+        translation = next(
+            (
+                candidate
+                for candidate in segment.translations
+                if candidate.lang == item.lang and candidate.status == TranslationStatus.APPROVED
+            ),
+            None,
+        )
+        if translation is None:
+            raise ValueError("Approved bridge translation required before audio generation")
+        source_text = translation.content
+    if not source_text.strip():
+        raise ValueError("Bridge content is empty")
+
+    voice_id = _resolve_curatorial_voice_id(db, item.lang, job.preferred_voice_id)
+    pronunciation_dictionary = db.scalar(
+        select(PronunciationDictionary).where(PronunciationDictionary.language_code == item.lang)
+    )
+    model_id = getattr(elevenlabs, "generation_model_id", get_settings().elevenlabs_model_id)
+    output_format = getattr(elevenlabs, "output_format", get_settings().elevenlabs_output_format)
+    spec = build_generation_spec(
+        source_text=source_text,
+        language=item.lang,
+        voice_id=voice_id,
+        model_id=model_id,
+        output_format=output_format,
+        pronunciation_dictionary=pronunciation_dictionary,
+    )
+    signature = recipe_hash(spec)
+    key = generated_route_bridge_audio_key(segment.id, item.lang, signature)
+    locators = None
+    if pronunciation_dictionary is not None:
+        locators = [
+            {
+                "pronunciation_dictionary_id": pronunciation_dictionary.elevenlabs_id,
+                "version_id": pronunciation_dictionary.version_id,
+            }
+        ]
+    generated = elevenlabs.generate_audio(
+        source_text,
+        voice_id,
+        pronunciation_dictionary_locators=locators,
+    )
+    public_url = storage.upload_audio(key, generated.content)
+    if existing_audio is None:
+        existing_audio = RouteSegmentAudioFile(segment_id=segment.id, lang=item.lang)
+        db.add(existing_audio)
+    if existing_audio.manually_uploaded:
+        storage.delete_audio(key)
+        return False
+    existing_audio.r2_key = key
+    existing_audio.public_url = public_url
+    existing_audio.duration_s = generated.duration_s
+    existing_audio.voice_id = generated.voice_id
+    existing_audio.generated_at = datetime.now(UTC)
+    existing_audio.manually_uploaded = False
+    return True
+
+
+def _resolve_curatorial_voice_id(
+    db: Session,
+    lang: str,
+    preferred_voice_id: str | None,
+) -> str:
+    if preferred_voice_id:
+        return preferred_voice_id
+    configured = get_settings().route_curatorial_voice_ids.get(lang)
+    if configured:
+        return configured
+    language_voice = db.scalar(
+        select(Voice).where(Voice.languages.any(code=lang)).order_by(Voice.name).limit(1)
+    )
+    if language_voice is not None:
+        return language_voice.elevenlabs_id
+    default_voice = db.scalar(
+        select(Voice).where(Voice.is_default.is_(True)).order_by(Voice.name).limit(1)
+    )
+    if default_voice is not None:
+        return default_voice.elevenlabs_id
+    fallback = get_settings().elevenlabs_default_voice_id
+    if fallback:
+        return fallback
+    raise ValueError(f"No curatorial voice configured for language '{lang}'")
 
 
 def _refresh_job_counts(db: Session, job: AudioGenerationJob) -> None:

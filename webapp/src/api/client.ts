@@ -5,9 +5,12 @@ import {
   type PublicDefaultVoice,
   type PublicPointDetail,
   type PublicPointSummary,
-  type PublicRoute
+  type PublicRoute,
+  type PublicRouteSegment
 } from '@ecosdelisboa/shared';
 import type { Author, DefaultVoice, Lang, Point, Route } from '../types';
+import { listOfflineRoutes, readOfflineRoute } from '../routeOffline';
+import { normalizeRouteAssets } from '../routeAssets';
 import { mockAuthors, mockPoints, mockRoutes, mockVoice } from './mock';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -105,33 +108,60 @@ function normalizePoint(point: Point | PublicPointSummary | PublicPointDetail, l
   };
 }
 
-function normalizeRoute(route: PublicRoute | Route): Route {
-  const backendRoute = route as PublicRoute;
-  return {
-    ...route,
-    distance_m: (route as Route).distance_m ?? backendRoute.estimated_distance_m,
-    duration_min:
-      (route as Route).duration_min ?? (backendRoute.estimated_duration_s ? Math.round(backendRoute.estimated_duration_s / 60) : undefined),
-    published: (route as Route).published ?? backendRoute.is_published,
-    points:
-      (route as Route).points ??
-      backendRoute.items?.map((item) => ({
+function legacyMockRoute(route: Route, lang: Lang): PublicRoute {
+  const segments: PublicRouteSegment[] = (route.points ?? []).map((item) => {
+    const text = item.point?.texts?.[0];
+    if (!item.point || !text || !text.author) {
+      return {
         id: item.id,
-        route_id: backendRoute.id,
-        point_id: item.point?.id,
-        point: item.point
-          ? {
-              id: item.point.id,
-              title_pt: item.point.title_pt,
-              lat: item.point.lat,
-              lng: item.point.lng
-            }
-          : undefined,
-        lat_override: item.waypoint?.lat,
-        lng_override: item.waypoint?.lng,
-        order_index: item.position,
-        transition_text_pt: item.transition_text_pt
-      }))
+        position: item.order_index,
+        kind: 'legacy' as const,
+        point: item.point,
+        waypoint:
+          item.lat_override != null && item.lng_override != null
+            ? { lat: item.lat_override, lng: item.lng_override }
+            : undefined
+      };
+    }
+    return {
+      id: item.id,
+      position: item.order_index,
+      kind: 'text' as const,
+      text: {
+        id: text.id,
+        content: lang === 'en' ? text.content_en || text.content_pt : text.content_pt,
+        content_pt: text.content_pt,
+        content_type: text.content_type,
+        source_work: text.source_work,
+        source_year: text.source_year,
+        author: text.author,
+        point: item.point,
+        audio_files: (text.audios ?? []).map((audio) => ({
+          id: audio.id,
+          lang: audio.lang,
+          public_url: audio.url,
+          duration_s: audio.duration_sec,
+          voice_id: audio.voice_id
+        }))
+      }
+    };
+  });
+  return {
+    id: route.id,
+    title_pt: route.title_pt,
+    description_pt: route.description_pt,
+    title: lang === 'en' ? route.title_en || route.title_pt : route.title_pt,
+    description:
+      lang === 'en' ? route.description_en || route.description_pt : route.description_pt,
+    cover_image_url: route.cover_image_url,
+    is_published: route.published,
+    estimated_distance_m: route.distance_m,
+    estimated_duration_s: route.duration_min ? route.duration_min * 60 : undefined,
+    text_count: segments.filter((segment) => segment.kind === 'text').length,
+    authors: [...new Set(segments.flatMap((segment) => (segment.kind === 'text' ? [segment.text.author.name] : [])))],
+    segments,
+    items: segments,
+    legs: []
   };
 }
 
@@ -175,20 +205,34 @@ export const api = {
       mockAuthors.find((author) => author.id === id) ?? mockAuthors[0]
     );
   },
-  getRoutes() {
-    return withMockFallback(() => client.get<PublicRoute[]>('/api/v1/routes').then((routes) => routes.map(normalizeRoute)), mockRoutes);
+  async getRoutes(lang: Lang) {
+    try {
+      return { data: (await client.listRoutes(lang)).map((route) => normalizeRouteAssets(route, API_BASE)), isMock: false };
+    } catch (cause) {
+      const offline = await listOfflineRoutes(lang);
+      if (offline.length) return { data: offline, isMock: false };
+      if (!ENABLE_MOCKS) throw cause;
+      return { data: mockRoutes.map((route) => legacyMockRoute(route, lang)), isMock: true };
+    }
   },
-  getRoute(id: string) {
-    return withMockFallback(
-      () => client.get<PublicRoute>(`/api/v1/routes/${id}`).then(normalizeRoute),
-      mockRoutes.find((route) => route.id === id) ?? mockRoutes[0]
-    );
+  async getRoute(id: string, lang: Lang) {
+    try {
+      return { data: normalizeRouteAssets(await client.getRoute(id, lang), API_BASE), isMock: false };
+    } catch (cause) {
+      const offline = await readOfflineRoute(id, lang);
+      if (offline) return { data: offline, isMock: false };
+      if (!ENABLE_MOCKS) throw cause;
+      return { data: legacyMockRoute(mockRoutes.find((route) => route.id === id) ?? mockRoutes[0], lang), isMock: true };
+    }
   },
-  getRouteGpxUrl(id: string) {
-    return `${API_BASE}/api/v1/routes/${id}/gpx`;
+  calculateRouteApproach(id: string, location: { lat: number; lng: number }) {
+    return client.calculateRouteApproach(id, location);
   },
-  getRoutePodcastUrl(id: string) {
-    return `${API_BASE}/api/v1/routes/${id}/podcast.rss`;
+  getRouteGpxUrl(id: string, lang: Lang) {
+    return `${API_BASE}/api/v1/routes/${id}/gpx?lang=${encodeURIComponent(lang)}`;
+  },
+  getRoutePodcastUrl(id: string, lang: Lang) {
+    return `${API_BASE}/api/v1/routes/${id}/podcast.rss?lang=${encodeURIComponent(lang)}`;
   },
   getDefaultVoice() {
     return withMockFallback(() => client.get<PublicDefaultVoice>('/api/v1/voices/default').then(normalizeVoice), mockVoice);

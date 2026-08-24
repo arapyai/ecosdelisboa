@@ -3,6 +3,8 @@ node_modules/
 **/node_modules/
 **/dist/
 **/storybook-static/
+test-results/
+playwright-report/
 **/.storybook-home/
 **/.expo/
 **/web-build/

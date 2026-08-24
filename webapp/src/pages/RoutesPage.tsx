@@ -1,37 +1,44 @@
-import { Footprints, Headphones, MapIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { routeSegments, type PublicRoute } from '@ecosdelisboa/shared';
+import { Footprints, Headphones, Navigation, Timer } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { EmptyState, ErrorState } from '../components/AsyncState';
-import { localized, t } from '../i18n/messages';
-import type { Lang, Route } from '../types';
+import { GuidedRouteSession } from '../components/GuidedRouteSession';
+import { RouteDiscoveryMap } from '../components/RouteDiscoveryMap';
+import { narrativeTextNumber, preserveSelectedRoute, routeAudioDuration, segmentHasAudio } from '../routeDiscoveryModel';
+import type { Lang } from '../types';
 
 interface Props {
   lang: Lang;
 }
 
 export function RoutesPage({ lang }: Props) {
-  const [routes, setRoutes] = useState<Route[]>([]);
-  const [selected, setSelected] = useState<Route | null>(null);
+  const [routes, setRoutes] = useState<PublicRoute[]>([]);
+  const [selectedId, setSelectedId] = useState<string>();
+  const [detail, setDetail] = useState<PublicRoute | null>(null);
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState('');
+  const [detailError, setDetailError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [activeRoute, setActiveRoute] = useState<PublicRoute | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError('');
     api
-      .getRoutes()
+      .getRoutes(lang)
       .then((result) => {
         if (cancelled) return;
         setRoutes(result.data);
-        setSelected(result.data[0] ?? null);
+        setSelectedId((current) => preserveSelectedRoute(result.data, current));
       })
       .catch(() => {
         if (cancelled) return;
         setRoutes([]);
-        setSelected(null);
-        setError('Não foi possível carregar os percursos.');
+        setSelectedId(undefined);
+        setError(lang === 'en' ? 'Routes could not be loaded.' : 'Não foi possível carregar os percursos.');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -39,59 +46,157 @@ export function RoutesPage({ lang }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [lang, reloadKey]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null);
+      return;
+    }
+    let cancelled = false;
+    setDetailLoading(true);
+    setDetailError('');
+    api
+      .getRoute(selectedId, lang)
+      .then((result) => {
+        if (!cancelled) setDetail(result.data);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDetail(null);
+          setDetailError(lang === 'en' ? 'Route details could not be loaded.' : 'Não foi possível carregar o detalhe.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lang, selectedId]);
+
+  const selectedSummary = routes.find((route) => route.id === selectedId) ?? null;
+  const segments = detail ? routeSegments(detail) : [];
+  const audioDuration = useMemo(() => (detail ? routeAudioDuration(detail, lang) : 0), [detail, lang]);
+
+  if (activeRoute) return <GuidedRouteSession route={activeRoute} lang={lang} onClose={() => setActiveRoute(null)} />;
 
   return (
-    <main className="routes-page">
-      <section>
-        <div className="section-heading">
-          <span>{t(lang, 'routeList')}</span>
-          <strong>{routes.length}</strong>
+    <main className="routes-discovery-page">
+      <header className="routes-hero">
+        <div>
+          <span>{lang === 'en' ? 'Literary walks' : 'Percursos literários'}</span>
+          <h1>{lang === 'en' ? 'Choose a story through Lisbon' : 'Escolha uma história por Lisboa'}</h1>
+          <p>
+            {lang === 'en'
+              ? 'Walk from text to text, listen at each place, and let the narrative guide the city.'
+              : 'Caminhe de texto em texto, ouça em cada lugar e deixe a narrativa conduzir a cidade.'}
+          </p>
         </div>
-        <div className="route-grid">
-          {error ? <ErrorState message={error} onRetry={() => setReloadKey((current) => current + 1)} /> : null}
-          {loading ? <EmptyState message="A carregar..." /> : null}
-          {!loading && !error && routes.length === 0 ? <EmptyState message={t(lang, 'empty')} /> : null}
-          {routes.map((route) => (
-            <button key={route.id} type="button" className="route-card" onClick={() => setSelected(route)}>
-              {route.cover_image_url ? <img src={route.cover_image_url} alt="" /> : null}
-              <span>{localized(route, 'title', lang)}</span>
-              <small>
-                {route.distance_m ? `${(route.distance_m / 1000).toFixed(1)} ${t(lang, 'distance')}` : ''}
-                {route.duration_min ? ` · ${route.duration_min} ${t(lang, 'duration')}` : ''}
-              </small>
-            </button>
-          ))}
-        </div>
-      </section>
-      {selected ? (
-        <aside className="route-detail">
-          <h2>{localized(selected, 'title', lang)}</h2>
-          <p>{localized(selected, 'description', lang)}</p>
-          <div className="route-actions">
-            <a href={api.getRouteGpxUrl(selected.id)}>
-              <MapIcon size={16} />
-              {t(lang, 'gpx')}
-            </a>
-            <a href={api.getRoutePodcastUrl(selected.id)}>
-              <Headphones size={16} />
-              {t(lang, 'podcast')}
-            </a>
-            <button type="button">
-              <Footprints size={16} />
-              {t(lang, 'guidedMode')}
-            </button>
-          </div>
-          <ol className="route-points">
-            {selected.points?.map((item) => (
-              <li key={item.id}>
-                <strong>{item.order_index}</strong>
-                <span>{item.point ? localized(item.point, 'title', lang) : `${item.lat_override}, ${item.lng_override}`}</span>
-              </li>
+        <strong>{routes.length}</strong>
+      </header>
+
+      {error ? <ErrorState message={error} onRetry={() => setReloadKey((current) => current + 1)} /> : null}
+      {loading ? <EmptyState message={lang === 'en' ? 'Loading routes…' : 'A carregar percursos…'} /> : null}
+      {!loading && !error && routes.length === 0 ? (
+        <EmptyState message={lang === 'en' ? 'No routes are available yet.' : 'Ainda não há percursos disponíveis.'} />
+      ) : null}
+
+      {!loading && routes.length ? (
+        <div className="route-discovery-layout">
+          <aside className="route-discovery-list" aria-label={lang === 'en' ? 'Available routes' : 'Percursos disponíveis'}>
+            {routes.map((route) => (
+              <button
+                type="button"
+                key={route.id}
+                className={`discovery-route-card${route.id === selectedId ? ' selected' : ''}`}
+                onClick={() => setSelectedId(route.id)}
+              >
+                {route.cover_image_url ? <img src={route.cover_image_url} alt="" /> : <div className="route-cover-placeholder" />}
+                <div>
+                  <span>{route.title}</span>
+                  <small>{route.authors?.join(' · ') || (lang === 'en' ? 'Lisbon authors' : 'Autores de Lisboa')}</small>
+                  <p>{route.description}</p>
+                  <div className="route-card-facts">
+                    <span><Footprints size={14} /> {formatDistance(route.estimated_distance_m)}</span>
+                    <span><Timer size={14} /> {formatDuration(route.estimated_duration_s, lang)}</span>
+                    <span><Headphones size={14} /> {route.text_count ?? 0} {lang === 'en' ? 'texts' : 'textos'}</span>
+                  </div>
+                </div>
+              </button>
             ))}
-          </ol>
-        </aside>
+          </aside>
+
+          <section className="route-discovery-stage">
+            <RouteDiscoveryMap route={detail ?? selectedSummary} />
+            <div className="route-detail-sheet">
+              {detailError ? <ErrorState message={detailError} onRetry={() => setSelectedId((id) => id)} /> : null}
+              {detailLoading ? <EmptyState message={lang === 'en' ? 'Opening the narrative…' : 'A abrir a narrativa…'} /> : null}
+              {detail && !detailLoading ? (
+                <>
+                  <div className="route-detail-heading">
+                    <div>
+                      <span>{detail.authors?.join(' · ')}</span>
+                      <h2>{detail.title}</h2>
+                    </div>
+                    <div className="route-detail-metrics">
+                      <strong>{formatDistance(detail.estimated_distance_m)}</strong>
+                      <span>{formatDuration(detail.estimated_duration_s, lang)}</span>
+                      {audioDuration ? <span>{Math.ceil(audioDuration / 60)} min {lang === 'en' ? 'audio' : 'de áudio'}</span> : null}
+                    </div>
+                  </div>
+                  <p className="route-description">{detail.description}</p>
+                  <div className="route-primary-actions">
+                    <button type="button" onClick={() => setActiveRoute(detail)}>
+                      <Navigation size={17} />
+                      {lang === 'en' ? 'Start route' : 'Começar percurso'}
+                    </button>
+                  </div>
+                  <ol className="narrative-preview-list">
+                    {segments.map((segment) =>
+                      segment.kind === 'text' ? (
+                        <li key={segment.id} className="text-preview-step">
+                          <strong>{narrativeTextNumber(segments, segment.id)}</strong>
+                          <div>
+                            <span>{segment.text.author.name}</span>
+                            <h3>{segment.text.source_work || excerpt(segment.text.content, 72)}</h3>
+                            <small>⌖ {segment.text.point.title_pt}{segment.text.point.neighborhood ? ` · ${segment.text.point.neighborhood}` : ''}</small>
+                          </div>
+                          {segmentHasAudio(segment, lang) ? <Headphones size={18} aria-label={lang === 'en' ? 'Audio available' : 'Áudio disponível'} /> : null}
+                        </li>
+                      ) : segment.kind === 'bridge' ? (
+                        <li key={segment.id} className="bridge-preview-step">
+                          <strong>↝</strong>
+                          <div>
+                            <span>{lang === 'en' ? 'Curatorial bridge' : 'Ponte curatorial'}</span>
+                            <p>{segment.content}</p>
+                          </div>
+                        </li>
+                      ) : null
+                    )}
+                  </ol>
+                </>
+              ) : null}
+            </div>
+          </section>
+        </div>
       ) : null}
     </main>
   );
+}
+
+function formatDistance(distance?: number | null) {
+  if (!distance) return '—';
+  return distance >= 1000 ? `${(distance / 1000).toFixed(1)} km` : `${Math.round(distance)} m`;
+}
+
+function formatDuration(duration: number | null | undefined, lang: Lang) {
+  if (!duration) return '—';
+  const minutes = Math.max(1, Math.round(duration / 60));
+  return `${minutes} ${lang === 'en' ? 'min walk' : 'min a pé'}`;
+}
+
+function excerpt(value: string, length: number) {
+  const compact = value.replace(/\s+/g, ' ').trim();
+  return compact.length > length ? `${compact.slice(0, length)}…` : compact;
 }
