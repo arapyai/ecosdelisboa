@@ -17,6 +17,6 @@
     "jsx": "react-jsx"
   },
   "include": ["src"],
-  "exclude": ["src/**/*.stories.tsx", "src/**/*.stories.mdx", ".storybook", "storybook-static"],
+  "exclude": ["src/**/*.stories.tsx", "src/**/*.stories.mdx", "src/**/*.test.ts", ".storybook", "storybook-static"],
   "references": []
 }
