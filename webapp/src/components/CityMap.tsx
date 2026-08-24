@@ -2,6 +2,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibregl from 'maplibre-gl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cityConfig } from '../config/city';
+import type { VisitorLocation } from '../lib/proximity';
 import type { Point } from '../types';
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
   onSelect: (point: Point) => void;
   selectedTextId?: string | null;
   onSelectText?: (point: Point, textId: string) => void;
+  userLocation?: VisitorLocation | null;
+  searchCenter?: [number, number];
 }
 
 interface ProjectedPoint {
@@ -80,11 +83,13 @@ function getPointClusters(points: Point[], map: maplibregl.Map): PointCluster[] 
   }));
 }
 
-export function CityMap({ points, selected, onSelect, selectedTextId, onSelectText }: Props) {
+export function CityMap({ points, selected, onSelect, selectedTextId, onSelectText, userLocation, searchCenter }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const userMarkerRef = useRef<maplibregl.Marker | null>(null);
   const lastFocusedPointIdRef = useRef<string | null>(null);
+  const lastSearchCenterRef = useRef<string>('');
   const [viewportVersion, setViewportVersion] = useState(0);
 
   useEffect(() => {
@@ -93,7 +98,7 @@ export function CityMap({ points, selected, onSelect, selectedTextId, onSelectTe
     mapRef.current = new maplibregl.Map({
       container: containerRef.current,
       style: cityConfig.map.styleUrl,
-      center: cityConfig.map.center,
+      center: searchCenter ?? cityConfig.map.center,
       zoom: cityConfig.map.zoom,
       attributionControl: false
     });
@@ -108,6 +113,34 @@ export function CityMap({ points, selected, onSelect, selectedTextId, onSelectTe
       mapRef.current?.off('zoomend', refreshLayout);
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || selected || !searchCenter) return;
+    const centerKey = searchCenter.join(':');
+    if (lastSearchCenterRef.current === centerKey) return;
+    lastSearchCenterRef.current = centerKey;
+    map.easeTo({ center: searchCenter, zoom: Math.max(map.getZoom(), 13), duration: 650 });
+  }, [searchCenter, selected]);
+
+  useEffect(() => {
+    userMarkerRef.current?.remove();
+    userMarkerRef.current = null;
+    if (!mapRef.current || !userLocation) return;
+
+    const element = document.createElement('div');
+    element.className = 'user-location-marker';
+    element.setAttribute('role', 'img');
+    element.setAttribute('aria-label', 'Sua localização');
+    element.title = 'Sua localização';
+    const marker = new maplibregl.Marker({ element })
+      .setLngLat([userLocation.lng, userLocation.lat])
+      .addTo(mapRef.current);
+    userMarkerRef.current = marker;
+    return () => {
+      marker.remove();
+    };
+  }, [userLocation]);
 
   const selectedById = useMemo(() => {
     if (!selected) return undefined;

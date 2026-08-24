@@ -1,12 +1,15 @@
-import { Filter, LocateFixed } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Bell, BellOff, Filter, LocateFixed, Navigation } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { EmptyState, ErrorState } from '../components/AsyncState';
 import { CityMap } from '../components/CityMap';
 // import { OfflineCache } from '../components/OfflineCache';
 import { PointSheet } from '../components/PointSheet';
 import { cityConfig } from '../config/city';
+import { useProximityNotifications } from '../hooks/useProximityNotifications';
+import { useVisitorLocation } from '../hooks/useVisitorLocation';
 import { localized, t } from '../i18n/messages';
+import { distanceMeters, proximityCopy } from '../lib/proximity';
 import type { Author, Lang, Point } from '../types';
 
 interface Props {
@@ -24,6 +27,9 @@ export function MapPage({ lang }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const initialPointIdRef = useRef(new URLSearchParams(window.location.search).get('point'));
+  const { currentLocation, searchLocation, status: locationStatus, retry } = useVisitorLocation();
+  const copy = proximityCopy(lang);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,8 +52,8 @@ export function MapPage({ lang }: Props) {
     setError('');
     api
       .getPoints({
-        lat: cityConfig.api.defaultLat,
-        lng: cityConfig.api.defaultLng,
+        lat: searchLocation.lat,
+        lng: searchLocation.lng,
         radius,
         lang,
         author_id: authorId
@@ -74,20 +80,32 @@ export function MapPage({ lang }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [authorId, lang, radius, reloadKey]);
+  }, [authorId, lang, radius, reloadKey, searchLocation.lat, searchLocation.lng]);
 
   const pointsWithAuthors = useMemo(
     () =>
       points.map((point) => ({
         ...point,
-        author: point.author ?? point.authors?.[0] ?? authors.find((author) => author.id === point.author_id)
-      })),
-    [authors, points]
+        author: point.author ?? point.authors?.[0] ?? authors.find((author) => author.id === point.author_id),
+        distance_m: currentLocation ? distanceMeters(currentLocation, point) : undefined
+      })).sort((left, right) => (left.distance_m ?? Number.POSITIVE_INFINITY) - (right.distance_m ?? Number.POSITIVE_INFINITY)),
+    [authors, currentLocation, points]
   );
   const neighborhoods = useMemo(
     () => Array.from(new Set(pointsWithAuthors.map((point) => point.neighborhood).filter(Boolean))),
     [pointsWithAuthors]
   );
+  const proximity = useProximityNotifications(currentLocation, pointsWithAuthors, lang);
+
+  useEffect(() => {
+    const initialPointId = initialPointIdRef.current;
+    if (!initialPointId) return;
+    const initialPoint = pointsWithAuthors.find((point) => point.id === initialPointId);
+    if (!initialPoint) return;
+    initialPointIdRef.current = null;
+    setSelectedPoint(initialPoint);
+    setSelectedTextId(null);
+  }, [pointsWithAuthors]);
 
   useEffect(() => {
     const selectedId = selectedPoint?.id;
@@ -141,6 +159,28 @@ export function MapPage({ lang }: Props) {
         </div>
         {isMock ? <p className="notice">{t(lang, 'mockData')}</p> : null}
         {error ? <ErrorState message={error} onRetry={() => setReloadKey((current) => current + 1)} /> : null}
+        <div className="location-controls">
+          <div className={`location-status ${locationStatus}`}>
+            <Navigation size={16} aria-hidden="true" />
+            <span>{copy.location[locationStatus]}</span>
+            {locationStatus === 'denied' || locationStatus === 'unavailable' ? (
+              <button type="button" onClick={retry}>{copy.retry}</button>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className={proximity.enabled ? 'proximity-toggle active' : 'proximity-toggle'}
+            onClick={() => void proximity.toggle()}
+            disabled={proximity.permission === 'denied'}
+          >
+            {proximity.enabled ? <Bell size={16} /> : <BellOff size={16} />}
+            {proximity.permission === 'denied'
+              ? copy.blocked
+              : proximity.enabled
+                ? copy.enabled
+                : copy.enable}
+          </button>
+        </div>
         <div className="filter-panel">
           <label>
             <Filter size={15} />
@@ -186,7 +226,10 @@ export function MapPage({ lang }: Props) {
               <LocateFixed size={16} />
               <span>
                 <strong>{localized(point, 'title', lang)}</strong>
-                <small>{point.author?.name}</small>
+                <small>
+                  {point.author?.name}
+                  {point.distance_m != null ? ` · ${formatPointDistance(point.distance_m)}` : ''}
+                </small>
               </span>
             </button>
           ))}
@@ -199,7 +242,28 @@ export function MapPage({ lang }: Props) {
           onSelect={selectPoint}
           selectedTextId={selectedTextId}
           onSelectText={selectText}
+          userLocation={currentLocation}
+          searchCenter={[searchLocation.lng, searchLocation.lat]}
         />
+        {proximity.notice ? (
+          <div className="proximity-notice" role="status">
+            <Bell size={18} aria-hidden="true" />
+            <div>
+              <strong>{copy.nearbyTitle}</strong>
+              <span>{copy.nearbyBody(localized(proximity.notice.point, 'title', lang))}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                selectPoint(proximity.notice!.point);
+                proximity.dismiss();
+              }}
+            >
+              {copy.openPoint}
+            </button>
+            <button type="button" className="dismiss" onClick={proximity.dismiss} aria-label={copy.dismiss}>×</button>
+          </div>
+        ) : null}
         <PointSheet
           point={selectedPoint}
           lang={lang}
@@ -212,4 +276,8 @@ export function MapPage({ lang }: Props) {
       </section>
     </main>
   );
+}
+
+function formatPointDistance(distanceM: number) {
+  return distanceM < 1000 ? `${Math.round(distanceM)} m` : `${(distanceM / 1000).toFixed(1)} km`;
 }
