@@ -32,6 +32,7 @@ class ReviewMapExportRequest(BaseModel):
     paper_size: str = Field(default="A2", pattern=r"^A[0-4]$")
     grid_columns: int = Field(default=2, ge=1, le=4)
     grid_rows: int = Field(default=2, ge=1, le=4)
+    excluded_review_codes: list[str] = Field(default_factory=list, max_length=500)
 
     @model_validator(mode="after")
     def validate_sheet_count(self):
@@ -40,12 +41,14 @@ class ReviewMapExportRequest(BaseModel):
         return self
 
 
-def _snapshot(db: Session):
+def _snapshot(db: Session, excluded_review_codes: list[str] | None = None):
     settings = get_settings()
     points = db.scalars(select(Point).order_by(Point.review_code, Point.created_at)).all()
+    excluded_codes = set(excluded_review_codes or ())
+    selected_points = [point for point in points if point.review_code not in excluded_codes]
     try:
         return build_snapshot(
-            list(points),
+            selected_points,
             center_lat=settings.review_map_center_lat,
             center_lng=settings.review_map_center_lng,
             outlier_radius_km=settings.review_map_outlier_radius_km,
@@ -125,7 +128,7 @@ def export_review_map(
     db: Annotated[Session, Depends(get_db)],
 ) -> FileResponse:
     settings = get_settings()
-    snapshot = _snapshot(db)
+    snapshot = _snapshot(db, payload.excluded_review_codes)
     layout = build_grid_layout(
         snapshot,
         paper_size=payload.paper_size,

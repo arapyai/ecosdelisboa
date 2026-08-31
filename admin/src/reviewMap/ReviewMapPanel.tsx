@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 import { fallbackUnlessAuth, postBlob, redirectIfAuthError } from '../adminApi';
 import { autoSyncQueryOptions, client } from '../adminConfig';
 import { mockPoints } from '../adminMocks';
+import { excludeReviewCode, restoreReviewCode } from './reviewMapSelection';
 
 export function ReviewMapPanel({
   token,
@@ -20,6 +21,7 @@ export function ReviewMapPanel({
   const [paperSize, setPaperSize] = useState<ReviewPaperSize>('A2');
   const [gridColumns, setGridColumns] = useState(2);
   const [gridRows, setGridRows] = useState(2);
+  const [excludedCodes, setExcludedCodes] = useState<string[]>([]);
   const [message, setMessage] = useState('');
   const preview = useQuery({
     queryKey: ['review-map-preview', token, paperSize, gridColumns, gridRows],
@@ -32,11 +34,34 @@ export function ReviewMapPanel({
         .catch((cause) => fallbackUnlessAuth(cause, mockPreview(), onAuthExpired)),
     ...autoSyncQueryOptions
   });
+  const points = preview.data?.points ?? [];
+  const pointCodes = useMemo(() => new Set(points.map((point) => point.review_code)), [points]);
+  const validExcludedCodes = useMemo(
+    () => excludedCodes.filter((code) => pointCodes.has(code)),
+    [excludedCodes, pointCodes]
+  );
+  const excludedSet = useMemo(() => new Set(validExcludedCodes), [validExcludedCodes]);
+  const excludedPoints = useMemo(
+    () => points.filter((point) => excludedSet.has(point.review_code)),
+    [excludedSet, points]
+  );
+  const visiblePoints = useMemo(
+    () => points.filter(
+      (point) => point.location_status === 'main' && !excludedSet.has(point.review_code)
+    ),
+    [excludedSet, points]
+  );
+  const includedCount = (preview.data?.total_points ?? 0) - validExcludedCodes.length;
   const download = useMutation({
     mutationFn: () =>
       postBlob(
         '/api/v1/admin/review-map/export',
-        { paper_size: paperSize, grid_columns: gridColumns, grid_rows: gridRows },
+        {
+          paper_size: paperSize,
+          grid_columns: gridColumns,
+          grid_rows: gridRows,
+          excluded_review_codes: validExcludedCodes
+        },
         token
       ),
     onSuccess: (blob) => {
@@ -54,14 +79,9 @@ export function ReviewMapPanel({
       }
     }
   });
-  const points = preview.data?.points ?? [];
-  const visiblePoints = useMemo(
-    () => points.filter((point) => point.location_status === 'main'),
-    [points]
-  );
   const sheetCount = gridColumns * gridRows;
   const paper = PAPER_DIMENSIONS[paperSize];
-  const canDownload = Boolean(preview.data?.total_points) && !download.isPending;
+  const canDownload = includedCount > 0 && !download.isPending;
 
   return (
     <section className="content-panel review-map-panel" aria-labelledby="review-map-title">
@@ -85,16 +105,22 @@ export function ReviewMapPanel({
         <div className="review-map-layout">
           <div className="review-map-preview-card">
             <div className="review-map-summary">
-              <strong>{preview.data.total_points}</strong>
+              <strong>{includedCount}</strong>
               <span>pontos no pacote</span>
-              <small>{preview.data.main_points} na área principal</small>
+              <small>
+                {validExcludedCodes.length > 0
+                  ? `${validExcludedCodes.length} removidos desta exportação`
+                  : `${preview.data.main_points} na área principal`}
+              </small>
             </div>
             <SchematicMap
               bounds={preview.data.bounds}
               points={visiblePoints}
               columns={gridColumns}
               rows={gridRows}
+              onExclude={(code) => setExcludedCodes((codes) => excludeReviewCode(codes, code))}
             />
+            <p className="review-map-instruction">Clique num marcador para removê-lo desta exportação.</p>
             <div className="review-map-legend">
               <span><i className="main" /> Área principal</span>
               <span><i className="outside" /> Fora da área</span>
@@ -153,6 +179,41 @@ export function ReviewMapPanel({
               <small>Sempre incluída, com as folhas em que cada código aparece.</small>
             </div>
 
+            <section className="review-map-removed" aria-labelledby="review-map-removed-title">
+              <div className="review-map-removed-heading">
+                <div>
+                  <span className="eyebrow">Seleção</span>
+                  <h4 id="review-map-removed-title">
+                    Pontos removidos <small>{excludedPoints.length}</small>
+                  </h4>
+                </div>
+                {excludedPoints.length > 0 ? (
+                  <button type="button" onClick={() => setExcludedCodes([])}>Restaurar todos</button>
+                ) : null}
+              </div>
+              {excludedPoints.length > 0 ? (
+                <ul>
+                  {excludedPoints.map((point) => (
+                    <li key={point.id}>
+                      <button
+                        type="button"
+                        onClick={() => setExcludedCodes(
+                          (codes) => restoreReviewCode(codes, point.review_code)
+                        )}
+                        aria-label={`Readicionar ${point.review_code} — ${point.title_pt}`}
+                      >
+                        <strong>{point.review_code}</strong>
+                        <span>{point.title_pt}</span>
+                        <i aria-hidden="true">+</i>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>Clique num ponto do mapa para colocá-lo aqui.</p>
+              )}
+            </section>
+
             {preview.data.warnings.length > 0 ? (
               <div className="review-map-warnings" role="status">
                 <strong>Atenção antes de imprimir</strong>
@@ -185,12 +246,14 @@ function SchematicMap({
   bounds,
   points,
   columns,
-  rows
+  rows,
+  onExclude
 }: {
   bounds: ReviewMapBounds;
   points: ReviewMapPoint[];
   columns: number;
   rows: number;
+  onExclude: (code: string) => void;
 }) {
   return (
     <div className="review-map-schematic" aria-label={`Prévia territorial com ${points.length} pontos`}>
@@ -206,14 +269,17 @@ function SchematicMap({
         const left = ((point.lng - bounds.west) / (bounds.east - bounds.west)) * 100;
         const top = ((bounds.north - point.lat) / (bounds.north - bounds.south)) * 100;
         return (
-          <span
+          <button
+            type="button"
             className="review-map-dot"
             key={point.id}
             style={{ left: `${Math.min(98, Math.max(2, left))}%`, top: `${Math.min(97, Math.max(3, top))}%` }}
             title={`${point.review_code} — ${point.title_pt}`}
+            aria-label={`Remover ${point.review_code} — ${point.title_pt}`}
+            onClick={() => onExclude(point.review_code)}
           >
             {point.review_code}
-          </span>
+          </button>
         );
       })}
     </div>

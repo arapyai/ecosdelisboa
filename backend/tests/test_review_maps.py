@@ -104,7 +104,12 @@ def test_export_builds_custom_grid_and_workbook_from_same_snapshot(
 
     response = client.post(
         "/api/v1/admin/review-map/export",
-        json={"paper_size": "A2", "grid_columns": 2, "grid_rows": 1},
+        json={
+            "paper_size": "A2",
+            "grid_columns": 2,
+            "grid_rows": 1,
+            "excluded_review_codes": ["P0002"],
+        },
         headers=headers,
     )
 
@@ -129,10 +134,25 @@ def test_export_builds_custom_grid_and_workbook_from_same_snapshot(
             if name.endswith(".xml")
         )
 
-    for code in ("P0001", "P0002"):
-        assert code in pdf_text
-        assert workbook_xml.count(code) == 1
+    assert "P0001" in pdf_text
+    assert workbook_xml.count("P0001") == 1
+    assert "P0002" not in pdf_text
+    assert "P0002" not in workbook_xml
     assert "Correto,Ajustar,Remover,Revisar" in workbook_xml
+
+
+def test_export_rejects_excluding_every_point(client, db_session) -> None:
+    headers = auth_header(client, db_session)
+    add_review_points(db_session)
+
+    response = client.post(
+        "/api/v1/admin/review-map/export",
+        json={"excluded_review_codes": ["P0001", "P0002"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert "Nenhum ponto" in response.json()["detail"]
 
 
 def test_export_requires_maptiler_key(client, db_session, monkeypatch) -> None:
