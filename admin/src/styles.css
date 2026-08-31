@@ -2033,40 +2033,6 @@ input[type='checkbox'] {
 }
 
 .status-pill.update {
-  .review-map-header {
-    display: grid;
-  }
-
-  .review-map-header button {
-    width: fit-content;
-  }
-
-  .review-map-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .review-map-schematic {
-    min-height: 360px;
-  }
-
-  .review-map-summary {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .review-map-summary small {
-    flex-basis: 100%;
-    margin-left: 0;
-  }
-
-  .review-map-config-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .review-map-config-grid label:first-child {
-    grid-column: 1 / -1;
-  }
-
   background: #dbe9f0;
   color: #315f7d;
 }
@@ -2842,6 +2808,46 @@ mark {
 
   .sidebar {
     position: static;
+  }
+
+  .review-map-header {
+    display: grid;
+  }
+
+  .review-map-header button {
+    width: fit-content;
+  }
+
+  .review-map-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .review-map-schematic {
+    min-height: 360px;
+  }
+
+  .review-map-summary {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .review-map-summary small {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .review-map-config-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .review-map-config-grid label:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .review-map-panel ~ .batch-job-tray {
+    position: static;
+    width: auto;
+    margin: 0 12px 12px;
   }
 
   .users-heading {
