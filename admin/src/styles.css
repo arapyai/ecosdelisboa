@@ -601,6 +601,13 @@ input[type='checkbox'] {
   gap: 22px;
 }
 
+.review-map-panel ~ .batch-job-tray {
+  position: static;
+  grid-column: 2;
+  width: auto;
+  margin: 0 24px 24px;
+}
+
 .review-map-header {
   display: flex;
   align-items: flex-start;
@@ -2845,7 +2852,7 @@ mark {
   }
 
   .review-map-panel ~ .batch-job-tray {
-    position: static;
+    grid-column: auto;
     width: auto;
     margin: 0 12px 12px;
   }
