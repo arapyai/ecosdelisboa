@@ -9,7 +9,11 @@ import { useMemo, useState } from 'react';
 import { fallbackUnlessAuth, postBlob, redirectIfAuthError } from '../adminApi';
 import { autoSyncQueryOptions, client } from '../adminConfig';
 import { mockPoints } from '../adminMocks';
-import { excludeReviewCode, restoreReviewCode } from './reviewMapSelection';
+import {
+  excludeReviewCode,
+  fitReviewMapBounds,
+  restoreReviewCode
+} from './reviewMapSelection';
 
 export function ReviewMapPanel({
   token,
@@ -81,6 +85,14 @@ export function ReviewMapPanel({
   });
   const sheetCount = gridColumns * gridRows;
   const paper = PAPER_DIMENSIONS[paperSize];
+  const displayBounds = useMemo(
+    () => fitReviewMapBounds(
+      visiblePoints,
+      paper.widthMm * gridColumns / (paper.heightMm * gridRows),
+      preview.data?.bounds ?? DEFAULT_BOUNDS
+    ),
+    [gridColumns, gridRows, paper.heightMm, paper.widthMm, preview.data?.bounds, visiblePoints]
+  );
   const canDownload = includedCount > 0 && !download.isPending;
 
   return (
@@ -114,13 +126,15 @@ export function ReviewMapPanel({
               </small>
             </div>
             <SchematicMap
-              bounds={preview.data.bounds}
+              bounds={displayBounds}
               points={visiblePoints}
               columns={gridColumns}
               rows={gridRows}
               onExclude={(code) => setExcludedCodes((codes) => excludeReviewCode(codes, code))}
             />
-            <p className="review-map-instruction">Clique num marcador para removê-lo desta exportação.</p>
+            <p className="review-map-instruction">
+              Clique num marcador para removê-lo. A prévia reenquadra os pontos restantes.
+            </p>
             <div className="review-map-legend">
               <span><i className="main" /> Área principal</span>
               <span><i className="outside" /> Fora da área</span>
@@ -287,6 +301,13 @@ function SchematicMap({
 }
 
 const GRID_OPTIONS = [1, 2, 3, 4] as const;
+
+const DEFAULT_BOUNDS: ReviewMapBounds = {
+  west: -9.2,
+  south: 38.68,
+  east: -9.08,
+  north: 38.78
+};
 
 const PAPER_DIMENSIONS: Record<ReviewPaperSize, { widthMm: number; heightMm: number }> = {
   A0: { widthMm: 1189, heightMm: 841 },
