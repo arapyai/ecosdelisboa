@@ -7,6 +7,14 @@ administrativos, importação CSV, edição multilíngue, mapas/geocoding e gest
 pronúncias. A existência de outros endpoints no backend não significa que a UI correspondente
 esteja pronta.
 
+## Mapa de revisão
+
+A seção **Mapa de revisão** consulta `/api/v1/admin/review-map/preview`, mostra todos os pontos
+com seus códigos permanentes e permite baixar o pacote gerado por
+`POST /api/v1/admin/review-map/export`. O usuário escolhe papel A0-A4 e uma grade de 1x1 a 4x4;
+o território completo é dividido entre as folhas e a planilha XLSX é sempre incluída. Alertas de
+coordenadas distantes ou inválidas permanecem visíveis antes do download.
+
 ## Gestão de usuários
 
 A seção **Usuários** é carregada apenas depois de `/api/v1/admin/auth/me` identificar o usuário

@@ -14,6 +14,7 @@ from app.models.entities import AdminUser, Author, Point, Route, RouteItem, Text
 from app.models.enums import ContentType, RouteRoutingStatus, RouteSegmentKind, TextOrigin
 from app.schemas.common import EnvelopeMeta, envelope
 from app.services.languages import get_source_language
+from app.services.point_codes import allocate_point_review_code
 from app.services.route_readiness import serialize_route_readiness
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-content"])
@@ -106,6 +107,7 @@ def serialize_point(point: Point) -> dict[str, object]:
         "neighborhood": point.neighborhood,
         "lat": point.lat,
         "lng": point.lng,
+        "review_code": point.review_code,
     }
 
 
@@ -331,7 +333,7 @@ def create_point(
     _: Annotated[AdminUser, Depends(get_current_admin)],
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, object]:
-    point = Point(**payload.model_dump())
+    point = Point(**payload.model_dump(), review_code=allocate_point_review_code(db))
     db.add(point)
     db.commit()
     db.refresh(point)

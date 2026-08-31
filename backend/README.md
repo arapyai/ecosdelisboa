@@ -42,6 +42,7 @@ Variaveis principais:
 - `AUDIO_STORAGE_DIR`, `AUDIO_PUBLIC_BASE_URL` e `AUDIO_UPLOAD_MAX_BYTES`
 - `ROUTING_PROVIDER`, `OPENROUTESERVICE_API_KEY`, timeout e retries de roteamento
 - `ROUTE_REQUIRED_LANGUAGES` e `ROUTE_CURATORIAL_VOICE_IDS`
+- `MAPTILER_API_KEY` e opções `REVIEW_MAP_*` para os mapas impressos de revisão
 
 ## Desenvolvimento
 
@@ -156,8 +157,17 @@ tests/
 - Vozes em `/api/v1/admin/voices/*`
 - Linguas e importacao do catalogo em `/api/v1/admin/languages/*`
 - Audio e jobs em `/api/v1/admin/audio/*`
+- Prévia e exportação do mapa de revisão em `/api/v1/admin/review-map/*`
 
 ## Fluxos implementados
+
+### Mapa de revisão
+- Cada ponto recebe um código permanente no formato `P0001`.
+- `GET /api/v1/admin/review-map/preview` informa cobertura, setores e alertas de coordenadas.
+- `POST /api/v1/admin/review-map/export` aceita papel A0-A4 e uma grade de 1x1 a 4x4, gerando
+  um PDF que cobre o território completo e uma planilha XLSX com a folha de cada ponto.
+- O mapa-base compõe tiles raster HiDPI do MapTiler; configure `MAPTILER_API_KEY` no backend.
+- Pontos além de `REVIEW_MAP_OUTLIER_RADIUS_KM` aparecem em apêndice, sem reduzir a escala de Lisboa.
 
 ### CSV
 - Preview de importacao antes de confirmar.

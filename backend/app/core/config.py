@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     routing_retry_backoff_s: float = Field(default=0.25, ge=0)
     route_curatorial_voice_ids: dict[str, str] = Field(default_factory=dict)
     route_required_languages: list[str] = Field(default_factory=lambda: ["pt", "en"])
+    maptiler_api_key: str | None = None
+    review_map_style_id: str = "dataviz-light"
+    review_map_center_lat: float = 38.7223
+    review_map_center_lng: float = -9.1393
+    review_map_outlier_radius_km: float = Field(default=30.0, gt=0)
+    review_map_dpi: int = Field(default=300, ge=72, le=300)
+    review_map_request_timeout_s: float = Field(default=30.0, gt=0)
     translation_llm_provider: str = "claude"
     translation_llm_model: str = "claude-sonnet-4-6"
     translation_llm_api_key: str | None = None

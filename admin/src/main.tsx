@@ -33,6 +33,7 @@ import { TextsPanel } from './texts/TextsPanel';
 import { UsersPanel } from './users/UsersPanel';
 import { ResourceFields } from './resources/ResourceFields';
 import { RouteEditor } from './routes/RouteEditor';
+import { ReviewMapPanel } from './reviewMap/ReviewMapPanel';
 import { columnsFor, draftFromItem, emptyDraft, formatCell, serializeDraft } from './resources/resourceModel';
 import type {
   Draft,
@@ -56,6 +57,7 @@ const sectionLabels: Record<Section, string> = {
   texts: resourceLabels.texts,
   routes: resourceLabels.routes,
   pronunciation: 'Pronúncias',
+  'review-map': 'Mapa de revisão',
   users: 'Usuários',
 };
 
@@ -185,6 +187,9 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
       {section === 'users' && me.data ? (
         <UsersPanel currentUser={me.data} token={token} onAuthExpired={onLogout} />
       ) : null}
+      {section === 'review-map' ? (
+        <ReviewMapPanel token={token} onAuthExpired={onLogout} />
+      ) : null}
       {section === 'texts' ? (
         <TextsPanel
           token={token}
@@ -197,7 +202,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
       {section === 'routes' ? (
         <RouteEditor token={token} onAuthExpired={onLogout} />
       ) : null}
-      {section !== 'csv' && section !== 'pronunciation' && section !== 'users' && section !== 'texts' && section !== 'routes' ? (
+      {section !== 'csv' && section !== 'pronunciation' && section !== 'review-map' && section !== 'users' && section !== 'texts' && section !== 'routes' ? (
         <ResourcePanel token={token} resource={section} onAuthExpired={onLogout} />
       ) : null}
       <BatchJobTray
