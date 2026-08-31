@@ -134,3 +134,30 @@ def test_deleting_author_removes_it(client, db_session) -> None:
 
     assert response.status_code == 200
     assert response.json()["data"]["deleted"] is True
+
+
+def test_point_review_codes_are_permanent_and_not_reused(client, db_session) -> None:
+    headers = auth_header(client, db_session)
+    payload = {
+        "title_pt": "Primeiro ponto",
+        "lat": 38.71,
+        "lng": -9.14,
+    }
+    first = client.post("/api/v1/admin/points", json=payload, headers=headers).json()["data"]
+    second = client.post(
+        "/api/v1/admin/points",
+        json={**payload, "title_pt": "Segundo ponto"},
+        headers=headers,
+    ).json()["data"]
+
+    assert first["review_code"] == "P0001"
+    assert second["review_code"] == "P0002"
+
+    client.delete(f"/api/v1/admin/points/{second['id']}", headers=headers)
+    third = client.post(
+        "/api/v1/admin/points",
+        json={**payload, "title_pt": "Terceiro ponto"},
+        headers=headers,
+    ).json()["data"]
+
+    assert third["review_code"] == "P0003"

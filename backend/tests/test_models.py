@@ -17,6 +17,7 @@ def test_expected_tables_exist() -> None:
         "authors",
         "languages",
         "points",
+        "point_review_code_counters",
         "pronunciation_dictionaries",
         "route_items",
         "route_legs",

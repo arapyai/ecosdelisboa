@@ -48,7 +48,9 @@ def test_csv_confirm_is_idempotent_by_author_and_title(client, db_session) -> No
     assert first.json()["data"]["created"] == 1
     assert second.json()["data"]["updated"] == 1
     assert second.json()["data"]["texts"]["reused"] == 1
-    assert len(db_session.query(Point).all()) == 1
+    points = db_session.query(Point).all()
+    assert len(points) == 1
+    assert points[0].review_code == "P0001"
 
 
 def test_csv_confirm_preserves_coordinates_when_existing_point_has_no_overrides(

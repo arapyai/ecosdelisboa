@@ -160,8 +160,16 @@ class Point(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lng: Mapped[float] = mapped_column(Float, nullable=False)
     geom: Mapped[str | None] = mapped_column(GeometryPoint4326(), nullable=True)
+    review_code: Mapped[str | None] = mapped_column(String(16), unique=True, nullable=True)
 
     texts: Mapped[list[Text]] = relationship(back_populates="point", cascade="all, delete-orphan")
+
+
+class PointReviewCodeCounter(Base):
+    __tablename__ = "point_review_code_counters"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    next_value: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class Text(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):

@@ -22,6 +22,7 @@ from app.models.entities import (
 from app.models.enums import ContentType, TranslationStatus
 from app.scripts.seed_narrative_routes import queue_missing_route_audio, seed_do_tejo_ao_chiado
 from app.services.languages import seed_language_catalog
+from app.services.point_codes import allocate_point_review_code
 
 DEFAULT_CATALOG_PATH = Path(__file__).resolve().parents[3] / "docs" / "voice_language_seed.csv"
 
@@ -101,6 +102,7 @@ def get_or_create_point(
             neighborhood=neighborhood,
             lat=lat,
             lng=lng,
+            review_code=allocate_point_review_code(session),
         )
         session.add(point)
     return point
